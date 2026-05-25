@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:skills.sh)",
+      "Bash(npx skills *)",
+      "Read(//usr/local/bin/**)",
+      "Read(//Users/CL/.nvm/versions/**)",
+      "Bash(brew --version)",
+      "Read(//Users/CL/.claude/skills/**)",
+      "Bash(bun --version)",
+      "Bash(bunx skills *)"
+    ]
+  }
+}
