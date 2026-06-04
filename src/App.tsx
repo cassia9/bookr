@@ -9,6 +9,9 @@ import ClientsPage from './pages/admin/ClientsPage'
 import ServicesPage from './pages/admin/ServicesPage'
 import DashboardPage from './pages/admin/DashboardPage'
 import SettingsPage from './pages/admin/SettingsPage'
+import InviteMemberPage from './pages/admin/InviteMemberPage'
+import MembersPage from './pages/admin/MembersPage'
+import AcceptInvitationPage from './pages/auth/AcceptInvitationPage'
 
 export default function App() {
   return (
@@ -16,6 +19,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
 
           <Route
             path="/admin"
@@ -31,6 +35,16 @@ export default function App() {
             <Route path="clients" element={<ClientsPage />} />
             <Route path="services" element={<ServicesPage />} />
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="members" element={
+              <ProtectedRoute adminOnly>
+                <MembersPage />
+              </ProtectedRoute>
+            } />
+            <Route path="invite-member" element={
+              <ProtectedRoute adminOnly>
+                <InviteMemberPage />
+              </ProtectedRoute>
+            } />
             <Route path="settings" element={
               <ProtectedRoute adminOnly>
                 <SettingsPage />

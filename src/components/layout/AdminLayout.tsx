@@ -13,6 +13,7 @@ const navItems = [
   { to: '/admin/clients', icon: Users, label: '客戶管理' },
   { to: '/admin/services', icon: Scissors, label: '課程管理' },
   { to: '/admin/dashboard', icon: BarChart2, label: '數據總覽' },
+  { to: '/admin/members', icon: Users, label: '成員管理', adminOnly: true },
   { to: '/admin/settings', icon: Settings, label: '設定', adminOnly: true },
 ]
 
