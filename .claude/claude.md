@@ -8,6 +8,88 @@
 
 ---
 
+## 🔒 代碼保護規則 (2026-06-04 更新 - 極其重要)
+
+### ⚠️ 背景：2026-06-04 代碼丟失事件
+
+**事件**: 系統 90% 的功能代碼被意外覆蓋成骨架  
+**原因**: 缺乏文件隔離和版本控制檢查點  
+**損失**: CalendarPage、GanttPage、ClientsPage 等完整實現代碼  
+**教訓**: 建立以下防護機制防止再次發生  
+
+### 規則 0️⃣：工作目錄隔離 (最高優先級)
+
+**Claude 必須在隔離環境工作，不直接修改主目錄**
+
+```
+隔離環境：
+/Users/CL/Documents/booking-system-ai-workspace/  ✅ 允許修改
+
+生產目錄：
+/Users/CL/Documents/預約系統/  ❌ 受保護，不直接修改
+```
+
+**直接修改生產目錄會被 pre-commit hook 攔截**
+
+### 規則 1️⃣：提交檢查點 (防止代碼丟失)
+
+**規則**：
+- ❌ 禁止：同時修改 5 個以上文件而不提交
+- ✅ 允許：修改 1-3 個相關文件，立即提交
+
+**提交頻率**：
+```
+完成 1 個 User Story        → 提交 1 次
+修復 1 個 bug              → 提交 1 次  
+完成 1 個單元測試          → 提交 1 次
+預期：2-4 小時提交一次
+```
+
+### 規則 2️⃣：敏感文件保護清單
+
+**🔴 CRITICAL (業務關鍵，修改前必須確認)**：
+- src/pages/admin/CalendarPage.tsx
+- src/pages/admin/GanttPage.tsx
+- src/pages/admin/BookingsPage.tsx
+- src/pages/admin/PractitionersPage.tsx
+- src/pages/booking/BookingPage.tsx
+- supabase/migrations/*
+
+**修改流程**:
+1. Read (確認現有代碼)
+2. 告訴用戶改動計劃 (等待確認)
+3. Edit 或 Write (執行改動)
+4. 立即提交 (git add & commit)
+
+### 規則 3️⃣：禁止操作
+
+```
+❌ 絕對禁止:
+  - 不經 Read 直接 Write 覆蓋敏感文件（>100 行）
+  - 批量刪除文件而不確認
+  - 同時修改 6 個或以上文件
+  - 生成骨架代碼到生產頁面
+```
+
+### 規則 4️⃣：故障恢復
+
+**如果代碼丟失，立即執行**:
+```bash
+# 查看歷史
+git log --oneline | head -20
+
+# 恢復單個文件
+git checkout HEAD~1 -- src/pages/admin/CalendarPage.tsx
+
+# 恢復整個目錄
+git checkout HEAD -- src/
+
+# 確認恢復
+git status
+```
+
+---
+
 ## 💡 重要工作流程規則
 
 ### 規則 1️⃣：Supabase SQL 執行流程
