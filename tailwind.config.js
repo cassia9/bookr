@@ -20,8 +20,8 @@ export default {
 
         // === 主色 (Primary - Black) ===
         primary: '#000000',
-        'primary-hover': '#1A1A1A',
-        'primary-active': '#333333',
+        'primary-hover': '#64748B',    // 灰藍色
+        'primary-active': '#475569',
         'primary-disabled': '#D1D1D6',
 
         // === 輔助色 (Accent - Beige) ===

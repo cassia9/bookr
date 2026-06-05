@@ -104,7 +104,7 @@ export default function PractitionerManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-100 flex flex-col">
       {/* 頂部標題欄 */}
       <div className="bg-white px-6 py-6 shadow-md border-b border-slate-200/50">
         <div className="flex items-center justify-between">
@@ -225,7 +225,7 @@ export default function PractitionerManagement() {
         </div>
 
         {/* 表格區域 */}
-        <div className="flex-1 overflow-auto bg-slate-50">
+        <div className="flex-1 overflow-auto bg-slate-100">
           <PractitionerTable
             searchTerm={searchTerm}
             filterStatus={filterStatus}
