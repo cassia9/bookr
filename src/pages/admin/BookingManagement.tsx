@@ -7,9 +7,6 @@ import GanttPage from './GanttPage'
 type ViewMode = 'calendar' | 'gantt'
 type CalendarView = 'month' | 'week' | 'day'
 
-type ViewMode = 'calendar' | 'gantt'
-type CalendarView = 'month' | 'week' | 'day'
-
 export default function BookingManagement() {
   const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [calendarView, setCalendarView] = useState<CalendarView>('week')
