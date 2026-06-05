@@ -161,7 +161,7 @@ export default function PractitionerTable({
 
   return (
     <div className="w-full h-full overflow-x-auto p-6">
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden border-0">
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200/50">
