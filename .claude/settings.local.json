@@ -8,7 +8,11 @@
       "Bash(brew --version)",
       "Read(//Users/CL/.claude/skills/**)",
       "Bash(bun --version)",
-      "Bash(bunx skills *)"
+      "Bash(bunx skills *)",
+      "Bash(tail -50 /tmp/dev-server.log 2>/dev/null || echo \"伺服器日誌未找到\")",
+      "Bash(xargs -I {} bash -c 'echo \"Commit: {}\"; git show {}:src/pages/admin/BookingsPage.tsx 2>/dev/null | grep -A 1 \"h1 className\" | head -2; echo \"---\"')",
+      "Bash(pkill -f \"bun run dev\")",
+      "Bash(bun install *)"
     ]
   }
 }

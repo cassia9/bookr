@@ -146,13 +146,13 @@ export default function BookingManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* 頂部標題欄 */}
-      <div className="bg-slate-900 border-b border-slate-800 px-6 py-4 shadow-sm">
+      <div className="bg-white border-b border-slate-200 px-6 py-6 shadow-md">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-50">預約管理</h1>
-            <p className="text-sm text-slate-400 mt-1">
+            <h1 className="text-4xl font-bold text-text-primary">預約管理</h1>
+            <p className="text-sm text-text-secondary mt-1">
               {viewMode === 'calendar' ? `行事曆 - ${calendarView === 'month' ? '月' : calendarView === 'week' ? '週' : '日'}視圖` : '甘特圖視圖'}
             </p>
           </div>
@@ -161,21 +161,21 @@ export default function BookingManagement() {
           <div className="flex items-center gap-4">
             <button
               onClick={handlePrevDate}
-              className="p-2 hover:bg-slate-800 rounded-lg transition text-slate-400 hover:text-slate-50"
+              className="p-2 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
               title="上一個"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
 
             <div className="text-center min-w-48">
-              <p className="text-lg font-semibold text-slate-50">
+              <p className="text-lg font-semibold text-text-primary">
                 {formatDate(currentDate)}
               </p>
             </div>
 
             <button
               onClick={handleNextDate}
-              className="p-2 hover:bg-slate-800 rounded-lg transition text-slate-400 hover:text-slate-50"
+              className="p-2 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
               title="下一個"
             >
               <ChevronRight className="w-5 h-5" />
@@ -183,7 +183,7 @@ export default function BookingManagement() {
 
             <button
               onClick={handleToday}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-primary-hover transition font-medium shadow-md hover:shadow-lg"
             >
               今天
             </button>
@@ -208,15 +208,15 @@ export default function BookingManagement() {
         {/* 右側主視圖 */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* 視圖切換 */}
-          <div className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center gap-2">
-            <div className="flex items-center bg-slate-800 rounded-lg p-1 gap-1">
+          <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-2 shadow-sm">
+            <div className="flex items-center bg-surface-secondary rounded-lg p-1 gap-1">
               <button
                 onClick={() => setViewMode('calendar')}
                 className={cn(
                   'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
                   viewMode === 'calendar'
-                    ? 'bg-slate-700 text-green-400 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-50'
+                    ? 'bg-black text-white shadow-sm'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-slate-100'
                 )}
               >
                 <Calendar className="inline-block w-4 h-4 mr-1.5" />
@@ -227,8 +227,8 @@ export default function BookingManagement() {
                 className={cn(
                   'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
                   viewMode === 'gantt'
-                    ? 'bg-slate-700 text-green-400 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-50'
+                    ? 'bg-black text-white shadow-sm'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-slate-100'
                 )}
               >
                 <LayoutGrid className="inline-block w-4 h-4 mr-1.5" />
@@ -238,7 +238,7 @@ export default function BookingManagement() {
 
             {/* 行事曆視圖模式切換（僅在行事曆模式顯示） */}
             {viewMode === 'calendar' && (
-              <div className="ml-auto flex items-center bg-slate-800 rounded-lg p-1 gap-1">
+              <div className="ml-auto flex items-center bg-surface-secondary rounded-lg p-1 gap-1">
                 {(['month', 'week', 'day'] as CalendarView[]).map(view => (
                   <button
                     key={view}
@@ -246,8 +246,8 @@ export default function BookingManagement() {
                     className={cn(
                       'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
                       calendarView === view
-                        ? 'bg-slate-700 text-green-400 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-50'
+                        ? 'bg-black text-white shadow-sm'
+                        : 'text-text-secondary hover:text-text-primary hover:bg-white'
                     )}
                   >
                     {view === 'month' ? '月' : view === 'week' ? '週' : '日'}
