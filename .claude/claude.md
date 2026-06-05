@@ -238,6 +238,57 @@ SELECT COUNT(*) FROM bookings;  -- 應該只返回該店的數據
 
 ---
 
+### 規則 9️⃣：頁面組件 Props 設計規範
+
+**容器組件與子組件的 props 通信**:
+
+當實現具有多個視圖模式的頁面時（如行事曆/甘特圖），應遵循以下規範：
+
+```typescript
+// 示例：容器組件 (BookingManagement.tsx)
+<CalendarPage
+  selectedPractitionerId={selectedPractitionerId}
+  defaultView={calendarView}
+  defaultDate={currentDate}
+/>
+
+<GanttPage
+  selectedPractitionerId={selectedPractitionerId}
+  defaultDate={currentDate}
+/>
+```
+
+**Props 命名規範**:
+- `selectedXxxId` - 用於選中狀態（如 `selectedPractitionerId`）
+- `defaultXxx` - 用於初始化狀態（如 `defaultView`, `defaultDate`）
+- `onXxxChange` - 用於回調事件（需要時）
+
+**子組件實現規範**:
+1. 定義 Props 接口，所有篩選相關 props 應為 `optional` (`?`)
+2. 在 `useState` 初始化時使用 props 提供的值，無則使用預設值
+3. 將相關 props 添加到 `useEffect` 依賴數組，確保資料重新載入
+4. 在 Supabase 查詢中根據 props 值動態構建 `.eq()` 篩選條件
+
+**篩選實現示例**:
+```typescript
+// 子組件中的篩選邏輯
+let query = supabase.from('bookings').select('*')
+
+// 如果選擇了特定篩選條件，則添加篩選
+if (selectedPractitionerId) {
+  query = query.eq('practitioner_id', selectedPractitionerId)
+}
+
+const { data, error } = await query.order('start_time', { ascending: true })
+```
+
+**目的**:
+- 使容器組件能夠動態控制子組件的顯示內容
+- 避免重複開發相同功能的多個版本
+- 便於在切換視圖模式時保持篩選狀態
+
+---
+
 ## 📋 現有資源清單
 
 ### 安全相關
