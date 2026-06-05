@@ -5,7 +5,8 @@
 ## 📂 目錄結構
 
 ### specifications/ - 功能規格文檔
-- `PRD_BOOKING_MANAGEMENT_UNIFIED.md` - 統一預約管理系統 PRD (最新)
+- `PRD_BOOKING_MANAGEMENT_UNIFIED.md` - 統一預約管理系統 PRD (✅ Phase 1-2 實施中)
+- `PRD_PRACTITIONER_MANAGEMENT.md` - 從業人員管理系統 PRD (📋 Draft)
 - `PRD_MEMBER_MANAGEMENT.md` - 成員管理系統 PRD
 
 ### design-guidelines/ - 設計規範
@@ -62,4 +63,4 @@ git log -p docs/specifications/PRD_BOOKING_MANAGEMENT_UNIFIED.md
 
 ---
 
-**最後更新**: 2026-06-04
+**最後更新**: 2026-06-05
