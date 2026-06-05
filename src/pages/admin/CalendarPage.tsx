@@ -26,9 +26,19 @@ interface Client {
 
 type ViewMode = 'month' | 'week' | 'day'
 
-export default function CalendarPage() {
-  const [view, setView] = useState<ViewMode>('week')
-  const [currentDate, setCurrentDate] = useState(new Date())
+interface CalendarPageProps {
+  selectedPractitionerId?: string | null
+  defaultView?: ViewMode
+  defaultDate?: Date
+}
+
+export default function CalendarPage({
+  selectedPractitionerId,
+  defaultView = 'week',
+  defaultDate,
+}: CalendarPageProps) {
+  const [view, setView] = useState<ViewMode>(defaultView)
+  const [currentDate, setCurrentDate] = useState(defaultDate || new Date())
   const [bookings, setBookings] = useState<Booking[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
@@ -38,12 +48,12 @@ export default function CalendarPage() {
   // 載入預約資料
   useEffect(() => {
     loadBookings()
-  }, [currentDate])
+  }, [currentDate, selectedPractitionerId])
 
   const loadBookings = async () => {
     setIsLoading(true)
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('bookings')
         .select(`
           id,
@@ -56,7 +66,13 @@ export default function CalendarPage() {
           status,
           notes
         `)
-        .order('start_time', { ascending: true })
+
+      // 如果選擇了特定從業人員，則篩選
+      if (selectedPractitionerId) {
+        query = query.eq('practitioner_id', selectedPractitionerId)
+      }
+
+      const { data, error } = await query.order('start_time', { ascending: true })
 
       if (error) throw error
       setBookings(data || [])

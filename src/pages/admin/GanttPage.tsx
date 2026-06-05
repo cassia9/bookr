@@ -39,25 +39,40 @@ const statusTextColorMap = {
 const HOUR_HEIGHT = 80
 const BUSINESS_HOURS = { start: 9, end: 20 }
 
-export default function GanttPage() {
+interface GanttPageProps {
+  selectedPractitionerId?: string | null
+  defaultDate?: Date
+}
+
+export default function GanttPage({
+  selectedPractitionerId,
+  defaultDate,
+}: GanttPageProps) {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [practitioners, setPractitioners] = useState<Practitioner[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState(defaultDate || new Date())
   const [hoveredBooking, setHoveredBooking] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
-  }, [selectedDate])
+  }, [selectedDate, selectedPractitionerId])
 
   const loadData = async () => {
     setIsLoading(true)
     try {
       // 取得從業人員列表
-      const { data: practitionersData, error: practError } = await supabase
+      let practQuery = supabase
         .from('practitioners')
         .select('id, name')
         .order('name', { ascending: true })
+
+      // 如果選擇了特定從業人員，則只顯示該人員
+      if (selectedPractitionerId) {
+        practQuery = practQuery.eq('id', selectedPractitionerId)
+      }
+
+      const { data: practitionersData, error: practError } = await practQuery
 
       if (practError) throw practError
       setPractitioners(practitionersData || [])
@@ -68,7 +83,7 @@ export default function GanttPage() {
       const endOfDay = new Date(selectedDate)
       endOfDay.setHours(23, 59, 59, 999)
 
-      const { data: bookingsData, error: bookError } = await supabase
+      let bookQuery = supabase
         .from('bookings')
         .select(`
           id,
@@ -85,7 +100,13 @@ export default function GanttPage() {
         .gte('booking_time', startOfDay.toISOString())
         .lt('booking_time', endOfDay.toISOString())
         .in('status', ['pending', 'confirmed', 'completed'])
-        .order('booking_time', { ascending: true })
+
+      // 如果選擇了特定從業人員，則篩選
+      if (selectedPractitionerId) {
+        bookQuery = bookQuery.eq('practitioner_id', selectedPractitionerId)
+      }
+
+      const { data: bookingsData, error: bookError } = await bookQuery.order('booking_time', { ascending: true })
 
       if (bookError) throw bookError
       setBookings(bookingsData || [])
