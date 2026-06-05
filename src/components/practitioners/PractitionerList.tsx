@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Search, Plus, Trash2, Calendar, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
+import { callPractitionersAPI } from '@/lib/practitioner-api'
 
 interface Practitioner {
   id: string
@@ -81,15 +82,7 @@ export default function PractitionerList({
 
   const handleDelete = async (id: string) => {
     try {
-      const { error } = await supabase.functions.invoke('practitioners-crud', {
-        body: { practitioner_id: id },
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        },
-      })
-
-      if (error) throw error
+      await callPractitionersAPI('delete', { practitioner_id: id })
       setDeleteConfirmId(null)
       if (selectedPractitionerId === id) {
         onSelectPractitioner(null)

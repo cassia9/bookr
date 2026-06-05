@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Plus, AlertCircle, Check, AlertTriangle } from 'lucide-react'
 import dayjs from 'dayjs'
 import { supabase } from '@/lib/supabase'
+import { callPractitionerLeavesAPI } from '@/lib/practitioner-api'
 
 interface PractitionerLeave {
   id: string
@@ -77,29 +78,12 @@ export default function PractitionerLeaveManager({
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke(
-        'practitioner-leaves',
-        {
-          body: {
-            action: 'create',
-            practitioner_id: practitionerId,
-            start_date: formData.start_date,
-            end_date: formData.end_date,
-            reason: formData.reason.trim() || undefined,
-          },
-          headers: {
-            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          },
-        }
-      )
-
-      if (error) {
-        if (error.message?.includes('overlap')) {
-          setWarning('此休假期間與其他休假重疊，但已保存')
-        } else {
-          throw error
-        }
-      }
+      await callPractitionerLeavesAPI('create', {
+        practitioner_id: practitionerId,
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        reason: formData.reason.trim() || undefined,
+      })
 
       setSuccess(true)
       setFormData({
@@ -114,7 +98,13 @@ export default function PractitionerLeaveManager({
       setTimeout(() => setSuccess(false), 2000)
     } catch (err) {
       console.error('Failed to add leave:', err)
-      setError(err instanceof Error ? err.message : '新增休假失敗')
+      const message = err instanceof Error ? err.message : '新增休假失敗'
+      if (message.includes('overlap')) {
+        setWarning('此休假期間與其他休假重疊，但已保存')
+        setSuccess(true)
+      } else {
+        setError(message)
+      }
     }
   }
 
@@ -122,17 +112,7 @@ export default function PractitionerLeaveManager({
     if (!confirm('確認刪除此休假記錄？')) return
 
     try {
-      const { error } = await supabase.functions.invoke(
-        'practitioner-leaves',
-        {
-          body: { leave_id: leaveId, action: 'delete' },
-          headers: {
-            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          },
-        }
-      )
-
-      if (error) throw error
+      await callPractitionerLeavesAPI('delete', { leave_id: leaveId })
       await loadLeaves()
     } catch (err) {
       console.error('Failed to delete leave:', err)

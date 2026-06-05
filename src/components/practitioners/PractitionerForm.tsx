@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, AlertCircle, Check } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { callPractitionersAPI } from '@/lib/practitioner-api'
 
 interface Service {
   id: string
@@ -142,36 +143,16 @@ export default function PractitionerForm({
       setLoading(true)
 
       if (practitionerId) {
-        // 編輯模式
-        const { error } = await supabase.functions.invoke(
-          'practitioners-crud',
-          {
-            body: {
-              practitioner_id: practitionerId,
-              service_ids: formData.service_ids,
-            },
-            headers: {
-              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-            },
-          }
-        )
-
-        if (error) throw error
+        // 編輯模式 - 更新課程指派
+        await callPractitionersAPI('update_services', {
+          practitioner_id: practitionerId,
+          service_ids: formData.service_ids,
+        })
         setSuccess(true)
         setTimeout(onSuccess, 1000)
       } else {
         // 新增模式
-        const { error } = await supabase.functions.invoke(
-          'practitioners-crud',
-          {
-            body: formData,
-            headers: {
-              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-            },
-          }
-        )
-
-        if (error) throw error
+        await callPractitionersAPI('create', formData)
         setSuccess(true)
         setTimeout(onSuccess, 1000)
       }
