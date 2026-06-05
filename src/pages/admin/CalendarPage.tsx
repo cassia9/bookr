@@ -390,6 +390,7 @@ export default function CalendarPage({
           )}
         </div>
       )}
+      </div>
 
       {/* 客戶詳情側邊抽屜 */}
       {showDrawer && (
