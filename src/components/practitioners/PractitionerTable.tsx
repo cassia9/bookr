@@ -135,7 +135,7 @@ export default function PractitionerTable({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-slate-400">載入中...</div>
+        <div className="text-text-secondary">載入中...</div>
       </div>
     )
   }
@@ -144,12 +144,12 @@ export default function PractitionerTable({
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <p className="text-slate-400 mb-2">
+          <p className="text-text-secondary mb-2">
             {searchTerm || filterStatus !== 'all'
               ? '未找到相符的老師'
               : '暫無老師'}
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-text-secondary/70">
             {!searchTerm && filterStatus === 'all'
               ? '點擊「新增老師」開始添加'
               : '調整搜尋或篩選條件'}

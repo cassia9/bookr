@@ -106,32 +106,32 @@ export default function PractitionerManagement() {
   return (
     <div className="min-h-screen bg-surface flex flex-col">
       {/* 頂部標題欄 */}
-      <div className="bg-white border-b border-border px-6 py-4 shadow-sm">
+      <div className="bg-white border-b border-border px-6 py-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-text-primary">從業人員管理</h1>
-            <p className="text-sm text-text-secondary mt-1">管理老師、課程指派和休假時間</p>
+            <h1 className="text-4xl font-bold text-text-primary">從業人員管理</h1>
+            <p className="text-sm text-text-secondary mt-2">管理老師、課程指派和休假時間</p>
           </div>
 
           {/* 操作按鈕 */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => {}}
-              className="p-2 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
+              className="p-2.5 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
               title="篩選"
             >
               <Filter className="w-5 h-5" />
             </button>
             <button
               onClick={() => {}}
-              className="p-2 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
+              className="p-2.5 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
               title="匯出"
             >
               <Download className="w-5 h-5" />
             </button>
             <button
               onClick={handleAddPractitioner}
-              className="flex items-center gap-2 px-4 py-2 bg-black hover:bg-primary-hover text-white rounded-lg transition font-medium text-sm shadow-sm"
+              className="flex items-center gap-2 px-4 py-2.5 bg-black hover:bg-primary-hover text-white rounded-lg transition font-medium text-sm shadow-md hover:shadow-lg active:scale-95"
             >
               <Plus className="w-4 h-4" />
               新增老師
@@ -143,18 +143,18 @@ export default function PractitionerManagement() {
       {/* 主內容 */}
       <div className="flex-1 overflow-hidden flex flex-col">
         {/* 統計卡片 */}
-        <div className="px-6 py-4 border-b border-border bg-white">
+        <div className="px-6 py-6 border-b border-border bg-white">
           {isLoadingStats ? (
             <div className="grid grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (
                 <div
                   key={i}
-                  className="h-20 bg-surface rounded-lg animate-pulse"
+                  className="h-24 bg-surface rounded-lg animate-pulse"
                 />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-4 gap-6">
               <StatsCard
                 label="總數"
                 value={stats.total}
@@ -184,7 +184,7 @@ export default function PractitionerManagement() {
         </div>
 
         {/* 搜尋和篩選 */}
-        <div className="px-6 py-4 border-b border-border space-y-3 bg-white">
+        <div className="px-6 py-5 border-b border-border space-y-3 bg-white">
           <div className="flex gap-3">
             {/* 搜尋框 */}
             <div className="flex-1 relative">
@@ -194,7 +194,7 @@ export default function PractitionerManagement() {
                 placeholder="搜尋老師名字或課程..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-border bg-white rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-black focus:border-black"
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-border bg-white rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition"
               />
             </div>
 
@@ -204,7 +204,7 @@ export default function PractitionerManagement() {
               onChange={(e) =>
                 setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')
               }
-              className="px-3 py-2 text-sm border border-border bg-white rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-black"
+              className="px-4 py-2.5 text-sm border border-border bg-white rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition"
             >
               <option value="all">全部狀態</option>
               <option value="active">活躍</option>
@@ -214,11 +214,13 @@ export default function PractitionerManagement() {
 
           {/* 篩選指示 */}
           {(searchTerm || filterStatus !== 'all') && (
-            <p className="text-xs text-text-secondary">
-              {searchTerm && `搜尋: "${searchTerm}"`}
-              {searchTerm && filterStatus !== 'all' && ' • '}
-              {filterStatus !== 'all' && `篩選: ${filterStatus === 'active' ? '活躍' : '停用'}`}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-text-secondary">
+                {searchTerm && `搜尋: "${searchTerm}"`}
+                {searchTerm && filterStatus !== 'all' && ' • '}
+                {filterStatus !== 'all' && `篩選: ${filterStatus === 'active' ? '活躍' : '停用'}`}
+              </p>
+            </div>
           )}
         </div>
 

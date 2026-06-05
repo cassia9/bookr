@@ -56,21 +56,22 @@ export default function StatsCard({
   return (
     <div
       className={cn(
-        'bg-white border rounded-lg p-4 space-y-2 shadow-sm',
-        config.bg,
+        'bg-white border rounded-lg p-5 space-y-3 shadow-sm hover:shadow-md transition',
         config.border
       )}
     >
-      <p className={cn('text-xs font-medium', config.label)}>{label}</p>
+      <div className={cn('inline-block px-2.5 py-1 rounded-md text-xs font-semibold', config.bg, config.label)}>
+        {label}
+      </div>
       <div className="flex items-end justify-between">
-        <p className="text-3xl font-bold text-text-primary">{value}</p>
+        <p className="text-4xl font-bold text-text-primary">{value}</p>
         {trend && (
           <div
             className={cn(
               'text-xs font-semibold flex items-center gap-1',
               trend.direction === 'up'
-                ? 'text-green-400'
-                : 'text-red-400'
+                ? 'text-success'
+                : 'text-danger'
             )}
           >
             {trend.direction === 'up' ? '↑' : '↓'} {Math.abs(trend.value)}%
@@ -78,7 +79,7 @@ export default function StatsCard({
         )}
       </div>
       {subtitle && (
-        <p className="text-xs text-slate-400">{subtitle}</p>
+        <p className="text-xs text-text-secondary">{subtitle}</p>
       )}
     </div>
   )

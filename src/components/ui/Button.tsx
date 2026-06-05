@@ -22,10 +22,10 @@ export default function Button({
         'disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100',
         size === 'sm' && 'px-3 py-1.5 text-xs',
         size === 'md' && 'px-4 py-2.5 text-sm',
-        variant === 'primary' && 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-200',
-        variant === 'secondary' && 'bg-slate-100 text-slate-700 hover:bg-slate-200 shadow-sm',
-        variant === 'danger' && 'bg-red-500 text-white hover:bg-red-600 shadow-md shadow-red-200',
-        variant === 'ghost' && 'text-slate-600 hover:bg-slate-100',
+        variant === 'primary' && 'bg-black text-white hover:bg-primary-hover shadow-md shadow-black/10 hover:shadow-lg hover:shadow-black/15',
+        variant === 'secondary' && 'bg-surface-secondary text-text-primary hover:bg-border border border-border shadow-sm',
+        variant === 'danger' && 'bg-danger text-white hover:bg-danger/90 shadow-md shadow-danger/20',
+        variant === 'ghost' && 'text-text-secondary hover:bg-surface-secondary',
         className,
       )}
       {...props}
