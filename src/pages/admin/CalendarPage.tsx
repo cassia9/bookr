@@ -411,9 +411,10 @@ export default function CalendarPage({
               <X size={20} />
             </button>
           </div>
+        </div>
 
-          {selectedBooking && (
-            <div className="space-y-6">
+        {selectedBooking && (
+          <div className="p-6 space-y-6">
               {/* 預約資訊 */}
               <div>
                 <h3 className="font-semibold text-slate-900 mb-3">預約資訊</h3>
@@ -503,10 +504,9 @@ export default function CalendarPage({
                     {selectedBooking.notes}
                   </p>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
