@@ -504,9 +504,9 @@ export default function CalendarPage({
                     {selectedBooking.notes}
                   </p>
                 </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
       </div>
     </div>
   )
