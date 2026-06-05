@@ -1,20 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { ChevronLeft, ChevronRight, Calendar, LayoutGrid } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
 import CalendarPage from './CalendarPage'
 import GanttPage from './GanttPage'
-import PractitionerList from '@/components/practitioners/PractitionerList'
-import PractitionerForm from '@/components/practitioners/PractitionerForm'
-import PractitionerLeaveManager from '@/components/practitioners/PractitionerLeaveManager'
 
-interface Practitioner {
-  id: string
-  name: string
-  color_hex: string
-  bookingCount?: number
-  status?: 'available' | 'busy' | 'no_bookings'
-}
+type ViewMode = 'calendar' | 'gantt'
+type CalendarView = 'month' | 'week' | 'day'
 
 type ViewMode = 'calendar' | 'gantt'
 type CalendarView = 'month' | 'week' | 'day'
@@ -23,68 +14,7 @@ export default function BookingManagement() {
   const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [calendarView, setCalendarView] = useState<CalendarView>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [practitioners, setPractitioners] = useState<Practitioner[]>([])
-  const [isLoadingPractitioners, setIsLoadingPractitioners] = useState(true)
-  const [selectedPractitionerId, setSelectedPractitionerId] = useState<string | null>(null)
-  const [showPractitionerForm, setShowPractitionerForm] = useState(false)
-  const [editingPractitionerId, setEditingPractitionerId] = useState<string | null>(null)
-  const [showLeaveManager, setShowLeaveManager] = useState(false)
-  const [leaveManagerPractitionerId, setLeaveManagerPractitionerId] = useState<string | null>(null)
 
-  // 載入從業人員
-  useEffect(() => {
-    loadPractitioners()
-  }, [currentDate])
-
-  const loadPractitioners = async () => {
-    setIsLoadingPractitioners(true)
-    try {
-      const { data, error } = await supabase
-        .from('practitioners')
-        .select('id, name, color_hex')
-        .is('deleted_at', null)
-        .order('name', { ascending: true })
-
-      if (error) throw error
-
-      // 計算每位從業人員的預約狀況
-      const practitionersWithStatus = await Promise.all(
-        (data || []).map(async (practitioner) => {
-          // 計算今日預約數
-          const today = new Date()
-          today.setHours(0, 0, 0, 0)
-          const tomorrow = new Date(today)
-          tomorrow.setDate(tomorrow.getDate() + 1)
-
-          const { count } = await supabase
-            .from('bookings')
-            .select('id', { count: 'exact', head: 0 })
-            .eq('practitioner_id', practitioner.id)
-            .gte('booking_time', today.toISOString())
-            .lt('booking_time', tomorrow.toISOString())
-            .in('status', ['pending', 'confirmed'])
-
-          const bookingCount = count || 0
-          let status: Practitioner['status'] = 'no_bookings'
-          if (bookingCount > 0) {
-            status = bookingCount >= 2 ? 'busy' : 'available'
-          }
-
-          return {
-            ...practitioner,
-            bookingCount,
-            status,
-          }
-        })
-      )
-
-      setPractitioners(practitionersWithStatus)
-    } catch (error) {
-      console.error('Failed to load practitioners:', error)
-    } finally {
-      setIsLoadingPractitioners(false)
-    }
-  }
 
   const handlePrevDate = () => {
     const newDate = new Date(currentDate)
@@ -124,26 +54,6 @@ export default function BookingManagement() {
   }
 
 
-  const handleAddPractitioner = () => {
-    setEditingPractitionerId(null)
-    setShowPractitionerForm(true)
-  }
-
-  const handleEditPractitioner = (id: string) => {
-    setEditingPractitionerId(id)
-    setShowPractitionerForm(true)
-  }
-
-  const handleManageLeaves = (id: string) => {
-    setLeaveManagerPractitionerId(id)
-    setShowLeaveManager(true)
-  }
-
-  const handleFormSuccess = () => {
-    setShowPractitionerForm(false)
-    setEditingPractitionerId(null)
-    loadPractitioners()
-  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -192,21 +102,7 @@ export default function BookingManagement() {
       </div>
 
       {/* 主容器 */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* 左側面板：從業人員管理 */}
-        <PractitionerList
-          selectedPractitionerId={selectedPractitionerId}
-          onSelectPractitioner={setSelectedPractitionerId}
-          onAddPractitioner={handleAddPractitioner}
-          onEditPractitioner={handleEditPractitioner}
-          onDeletePractitioner={() => {
-            loadPractitioners()
-          }}
-          onManageLeaves={handleManageLeaves}
-        />
-
-        {/* 右側主視圖 */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden">
           {/* 視圖切換 */}
           <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-2 shadow-sm">
             <div className="flex items-center bg-surface-secondary rounded-lg p-1 gap-1">
@@ -261,48 +157,17 @@ export default function BookingManagement() {
           <div className="flex-1 overflow-hidden">
             {viewMode === 'calendar' ? (
               <CalendarPage
-                key={`calendar-${selectedPractitionerId}`}
-                selectedPractitionerId={selectedPractitionerId}
                 defaultView={calendarView}
                 defaultDate={currentDate}
               />
             ) : (
               <GanttPage
-                key={`gantt-${selectedPractitionerId}`}
-                selectedPractitionerId={selectedPractitionerId}
                 defaultDate={currentDate}
               />
             )}
           </div>
-        </div>
       </div>
 
-      {/* 新增/編輯從業人員 Form */}
-      {showPractitionerForm && (
-        <PractitionerForm
-          practitionerId={editingPractitionerId || undefined}
-          onSuccess={handleFormSuccess}
-          onCancel={() => {
-            setShowPractitionerForm(false)
-            setEditingPractitionerId(null)
-          }}
-        />
-      )}
-
-      {/* 休假管理 Modal */}
-      {showLeaveManager && leaveManagerPractitionerId && (
-        <PractitionerLeaveManager
-          practitionerId={leaveManagerPractitionerId}
-          practitionerName={
-            practitioners.find((p) => p.id === leaveManagerPractitionerId)
-              ?.name || ''
-          }
-          onClose={() => {
-            setShowLeaveManager(false)
-            setLeaveManagerPractitionerId(null)
-          }}
-        />
-      )}
     </div>
   )
 }
