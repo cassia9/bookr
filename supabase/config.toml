@@ -1,0 +1,14 @@
+# Supabase 項目配置
+project_id = "xfdpcjpjpczqyuqzdqmr"
+
+[api]
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+port = 54322
+major_version = 15
+
+[storage]
+file_size_limit = 52428800
