@@ -166,15 +166,15 @@ export default function PractitionerForm({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-slate-900 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-800">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-border">
         {/* 標題欄 */}
-        <div className="sticky top-0 bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-50">
+        <div className="sticky top-0 bg-white border-b border-border px-6 py-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-text-primary">
             {practitionerId ? '編輯老師' : '新增老師'}
           </h2>
           <button
             onClick={onCancel}
-            className="p-2 hover:bg-slate-800 rounded-lg transition text-slate-400 hover:text-slate-50"
+            className="p-2 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
           >
             <X className="w-5 h-5" />
           </button>
@@ -184,17 +184,17 @@ export default function PractitionerForm({
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {/* 錯誤提示 */}
           {error && (
-            <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-4 flex gap-3">
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-50">{error}</p>
+            <div className="bg-danger-light border border-danger rounded-lg p-4 flex gap-3">
+              <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-danger">{error}</p>
             </div>
           )}
 
           {/* 成功提示 */}
           {success && (
-            <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-4 flex gap-3">
-              <Check className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-green-50">
+            <div className="bg-success-light border border-success rounded-lg p-4 flex gap-3">
+              <Check className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-success">
                 {practitionerId ? '更新成功！' : '新增成功！'}
               </p>
             </div>
@@ -202,8 +202,8 @@ export default function PractitionerForm({
 
           {/* 老師名字 */}
           <div>
-            <label className="block text-sm font-medium text-slate-50 mb-2">
-              老師名字 <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-text-primary mb-2">
+              老師名字 <span className="text-danger">*</span>
             </label>
             <input
               type="text"
@@ -212,14 +212,14 @@ export default function PractitionerForm({
                 setFormData({ ...formData, name: e.target.value })
               }
               placeholder="例：林老師"
-              className="w-full h-10 px-3 border border-slate-700 bg-slate-800 rounded-lg text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              className="w-full h-10 px-3 border border-border bg-white rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-black focus:border-black"
             />
           </div>
 
           {/* 顏色選擇 */}
           <div>
-            <label className="block text-sm font-medium text-slate-50 mb-3">
-              識別顏色 <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-text-primary mb-3">
+              識別顏色 <span className="text-danger">*</span>
             </label>
             <div className="grid grid-cols-4 gap-3">
               {PRACTITIONER_COLORS.map((color) => (
@@ -237,7 +237,7 @@ export default function PractitionerForm({
                       backgroundColor: color.hex,
                       borderColor:
                         formData.color_hex === color.hex
-                          ? '#F8FAFC'
+                          ? '#000000'
                           : 'transparent',
                       opacity: formData.color_hex === color.hex ? 1 : 0.7,
                     }}
@@ -247,7 +247,7 @@ export default function PractitionerForm({
                       <Check className="w-5 h-5 text-white drop-shadow-lg" />
                     </div>
                   )}
-                  <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-800 text-xs text-slate-50 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                  <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-surface text-xs text-text-primary rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none border border-border">
                     {color.name}
                   </div>
                 </button>
@@ -257,29 +257,29 @@ export default function PractitionerForm({
 
           {/* 課程指派 */}
           <div>
-            <label className="block text-sm font-medium text-slate-50 mb-3">
-              可預約課程 <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-text-primary mb-3">
+              可預約課程 <span className="text-danger">*</span>
             </label>
             {isLoadingServices ? (
-              <div className="text-sm text-slate-400">載入課程中...</div>
+              <div className="text-sm text-text-secondary">載入課程中...</div>
             ) : services.length === 0 ? (
-              <div className="text-sm text-slate-400">
+              <div className="text-sm text-text-secondary">
                 暫無可用課程，請先建立課程
               </div>
             ) : (
-              <div className="space-y-2 bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+              <div className="space-y-2 bg-surface-secondary p-4 rounded-lg border border-border">
                 {services.map((service) => (
                   <label
                     key={service.id}
-                    className="flex items-center gap-3 cursor-pointer hover:bg-slate-700/50 p-2 rounded transition"
+                    className="flex items-center gap-3 cursor-pointer hover:bg-border p-2 rounded transition"
                   >
                     <input
                       type="checkbox"
                       checked={formData.service_ids.includes(service.id)}
                       onChange={() => handleServiceToggle(service.id)}
-                      className="w-5 h-5 border-2 border-slate-600 bg-slate-800 rounded accent-green-500 cursor-pointer"
+                      className="w-5 h-5 border-2 border-border bg-white rounded accent-black cursor-pointer"
                     />
-                    <span className="text-sm text-slate-50 font-medium">
+                    <span className="text-sm text-text-primary font-medium">
                       {service.name}
                     </span>
                   </label>
@@ -290,7 +290,7 @@ export default function PractitionerForm({
 
           {/* 簡介 (可選) */}
           <div>
-            <label className="block text-sm font-medium text-slate-50 mb-2">
+            <label className="block text-sm font-medium text-text-primary mb-2">
               簡介 (可選)
             </label>
             <textarea
@@ -300,24 +300,24 @@ export default function PractitionerForm({
               }
               placeholder="例：擅長運動傷害、肌筋膜放鬆..."
               rows={3}
-              className="w-full px-3 py-2 border border-slate-700 bg-slate-800 rounded-lg text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
+              className="w-full px-3 py-2 border border-border bg-white rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-black focus:border-black resize-none"
             />
           </div>
 
           {/* 按鈕 */}
-          <div className="flex gap-3 pt-4 border-t border-slate-800">
+          <div className="flex gap-3 pt-4 border-t border-border">
             <button
               type="button"
               onClick={onCancel}
               disabled={loading}
-              className="flex-1 h-10 px-4 border border-slate-700 bg-slate-800 text-slate-50 rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium"
+              className="flex-1 h-10 px-4 border border-border bg-surface-secondary text-text-primary rounded-lg hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed transition font-medium"
             >
               取消
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 h-10 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium shadow-sm hover:shadow-md"
+              className="flex-1 h-10 px-4 bg-black text-white rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition font-medium shadow-sm hover:shadow-md"
             >
               {loading
                 ? '保存中...'
