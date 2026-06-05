@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
-  CalendarDays, LayoutGrid, Users, Scissors, BarChart2,
+  CalendarDays, LayoutGrid, Users, UserCheck, Scissors, BarChart2,
   Settings, LogOut, Menu, X
 } from 'lucide-react'
 import { useState } from 'react'
@@ -9,6 +9,7 @@ import { cn } from '../../lib/cn'
 
 const navItems = [
   { to: '/admin/bookings', icon: CalendarDays, label: '預約管理' },
+  { to: '/admin/practitioners', icon: UserCheck, label: '從業人員管理' },
   { to: '/admin/clients', icon: Users, label: '客戶管理' },
   { to: '/admin/services', icon: Scissors, label: '課程管理' },
   { to: '/admin/dashboard', icon: BarChart2, label: '數據總覽' },
