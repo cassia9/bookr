@@ -3,8 +3,7 @@ import { AuthProvider } from './lib/auth'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import AdminLayout from './components/layout/AdminLayout'
 import LoginPage from './pages/LoginPage'
-import CalendarPage from './pages/admin/CalendarPage'
-import GanttPage from './pages/admin/GanttPage'
+import BookingManagement from './pages/admin/BookingManagement'
 import ClientsPage from './pages/admin/ClientsPage'
 import ServicesPage from './pages/admin/ServicesPage'
 import DashboardPage from './pages/admin/DashboardPage'
@@ -29,9 +28,11 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="calendar" replace />} />
-            <Route path="calendar" element={<CalendarPage />} />
-            <Route path="gantt" element={<GanttPage />} />
+            <Route index element={<Navigate to="bookings" replace />} />
+            <Route path="bookings" element={<BookingManagement />} />
+            {/* 舊路由重定向 */}
+            <Route path="calendar" element={<Navigate to="/admin/bookings" replace />} />
+            <Route path="gantt" element={<Navigate to="/admin/bookings" replace />} />
             <Route path="clients" element={<ClientsPage />} />
             <Route path="services" element={<ServicesPage />} />
             <Route path="dashboard" element={<DashboardPage />} />

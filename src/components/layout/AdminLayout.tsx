@@ -8,8 +8,7 @@ import { useAuth } from '../../lib/auth'
 import { cn } from '../../lib/cn'
 
 const navItems = [
-  { to: '/admin/calendar', icon: CalendarDays, label: '行事曆' },
-  { to: '/admin/gantt', icon: LayoutGrid, label: '甘特圖' },
+  { to: '/admin/bookings', icon: CalendarDays, label: '預約管理' },
   { to: '/admin/clients', icon: Users, label: '客戶管理' },
   { to: '/admin/services', icon: Scissors, label: '課程管理' },
   { to: '/admin/dashboard', icon: BarChart2, label: '數據總覽' },
