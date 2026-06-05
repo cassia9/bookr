@@ -36,6 +36,7 @@ export default function BookingManagement() {
       const { data, error } = await supabase
         .from('practitioners')
         .select('id, name')
+        .is('deleted_at', null)
         .order('name', { ascending: true })
 
       if (error) throw error

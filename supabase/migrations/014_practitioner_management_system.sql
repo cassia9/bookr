@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS practitioner_services (
     FOREIGN KEY (practitioner_id) REFERENCES practitioners(id) ON DELETE CASCADE,
 
   CONSTRAINT fk_practitioner_services_service
-    FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+    FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE RESTRICT,
 
   -- 唯一性約束：防止重複指派同一課程
   CONSTRAINT uk_practitioner_services_unique
@@ -110,7 +110,17 @@ CREATE INDEX idx_practitioner_services_practitioner_id ON practitioner_services(
 CREATE INDEX idx_practitioner_services_service_id ON practitioner_services(service_id);
 
 -- ============================================================
--- 4. RLS (Row Level Security) 政策
+-- 4. 輔助函數
+-- ============================================================
+
+-- 取得當前用戶的店家 ID（優化 RLS 性能）
+CREATE OR REPLACE FUNCTION get_current_store_id()
+RETURNS UUID AS $$
+  SELECT store_id FROM members WHERE user_id = auth.uid() LIMIT 1
+$$ LANGUAGE SQL STABLE;
+
+-- ============================================================
+-- 5. RLS (Row Level Security) 政策
 -- ============================================================
 
 -- 啟用 RLS
@@ -126,7 +136,7 @@ CREATE POLICY admin_manage_practitioners ON practitioners
   FOR ALL
   USING (
     -- 檢查當前用戶是否為該店的管理員
-    store_id = (SELECT store_id FROM members WHERE user_id = auth.uid() LIMIT 1)
+    store_id = get_current_store_id()
     AND EXISTS (
       SELECT 1 FROM members
       WHERE user_id = auth.uid()
@@ -134,7 +144,7 @@ CREATE POLICY admin_manage_practitioners ON practitioners
     )
   )
   WITH CHECK (
-    store_id = (SELECT store_id FROM members WHERE user_id = auth.uid() LIMIT 1)
+    store_id = get_current_store_id()
     AND EXISTS (
       SELECT 1 FROM members
       WHERE user_id = auth.uid()
@@ -148,7 +158,7 @@ CREATE POLICY member_read_practitioners ON practitioners
   FOR SELECT
   USING (
     -- 店家隔離：只能看到自己店家的老師
-    store_id = (SELECT store_id FROM members WHERE user_id = auth.uid() LIMIT 1)
+    store_id = get_current_store_id()
     AND deleted_at IS NULL  -- 不顯示軟刪除的老師
   );
 
@@ -161,7 +171,7 @@ CREATE POLICY admin_manage_practitioner_leaves ON practitioner_leaves
   USING (
     -- 檢查當前用戶是否為該老師所屬店的管理員
     (SELECT store_id FROM practitioners WHERE id = practitioner_id) =
-    (SELECT store_id FROM members WHERE user_id = auth.uid() LIMIT 1)
+    get_current_store_id()
     AND EXISTS (
       SELECT 1 FROM members
       WHERE user_id = auth.uid()
@@ -170,7 +180,7 @@ CREATE POLICY admin_manage_practitioner_leaves ON practitioner_leaves
   )
   WITH CHECK (
     (SELECT store_id FROM practitioners WHERE id = practitioner_id) =
-    (SELECT store_id FROM members WHERE user_id = auth.uid() LIMIT 1)
+    get_current_store_id()
     AND EXISTS (
       SELECT 1 FROM members
       WHERE user_id = auth.uid()
@@ -179,13 +189,13 @@ CREATE POLICY admin_manage_practitioner_leaves ON practitioner_leaves
   );
 
 -- 政策 2: member_read_practitioner_leaves
--- 成員可以查看該店老師的休假
+-- 成員可以查看該店老師的休假（不包含已刪除老師）
 CREATE POLICY member_read_practitioner_leaves ON practitioner_leaves
   FOR SELECT
   USING (
-    -- 店家隔離
-    (SELECT store_id FROM practitioners WHERE id = practitioner_id) =
-    (SELECT store_id FROM members WHERE user_id = auth.uid() LIMIT 1)
+    -- 店家隔離 + 軟刪除檢查
+    (SELECT store_id FROM practitioners WHERE id = practitioner_id) = get_current_store_id()
+    AND (SELECT deleted_at FROM practitioners WHERE id = practitioner_id) IS NULL
   );
 
 -- ---- PRACTITIONER_SERVICES 表 RLS 政策 ----
@@ -197,7 +207,7 @@ CREATE POLICY admin_manage_practitioner_services ON practitioner_services
   USING (
     -- 檢查當前用戶是否為該老師所屬店的管理員
     (SELECT store_id FROM practitioners WHERE id = practitioner_id) =
-    (SELECT store_id FROM members WHERE user_id = auth.uid() LIMIT 1)
+    get_current_store_id()
     AND EXISTS (
       SELECT 1 FROM members
       WHERE user_id = auth.uid()
@@ -206,7 +216,7 @@ CREATE POLICY admin_manage_practitioner_services ON practitioner_services
   )
   WITH CHECK (
     (SELECT store_id FROM practitioners WHERE id = practitioner_id) =
-    (SELECT store_id FROM members WHERE user_id = auth.uid() LIMIT 1)
+    get_current_store_id()
     AND EXISTS (
       SELECT 1 FROM members
       WHERE user_id = auth.uid()
@@ -215,17 +225,39 @@ CREATE POLICY admin_manage_practitioner_services ON practitioner_services
   );
 
 -- 政策 2: member_read_practitioner_services
--- 成員可以查看該店老師的課程指派
+-- 成員可以查看該店老師的課程指派（不包含已刪除老師）
 CREATE POLICY member_read_practitioner_services ON practitioner_services
   FOR SELECT
   USING (
-    -- 店家隔離
-    (SELECT store_id FROM practitioners WHERE id = practitioner_id) =
-    (SELECT store_id FROM members WHERE user_id = auth.uid() LIMIT 1)
+    -- 店家隔離 + 軟刪除檢查
+    (SELECT store_id FROM practitioners WHERE id = practitioner_id) = get_current_store_id()
+    AND (SELECT deleted_at FROM practitioners WHERE id = practitioner_id) IS NULL
   );
 
 -- ============================================================
--- 5. 觸發器：自動更新 updated_at 時間戳
+-- 6. 觸發器函數：確保老師至少有一個課程指派
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION ensure_min_one_service()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- 檢查刪除後該老師是否仍有課程指派
+  IF (SELECT COUNT(*) FROM practitioner_services
+      WHERE practitioner_id = OLD.practitioner_id) = 0 THEN
+    RAISE EXCEPTION 'Practitioner must have at least one service assigned';
+  END IF;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 為 practitioner_services 刪除操作建立觸發器
+CREATE TRIGGER trigger_ensure_min_service
+BEFORE DELETE ON practitioner_services
+FOR EACH ROW
+EXECUTE FUNCTION ensure_min_one_service();
+
+-- ============================================================
+-- 7. 觸發器：自動更新 updated_at 時間戳
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION update_practitioners_timestamp()
@@ -247,7 +279,7 @@ FOR EACH ROW
 EXECUTE FUNCTION update_practitioners_timestamp();
 
 -- ============================================================
--- 6. 審計日誌（可選，用於追蹤變更）
+-- 8. 審計日誌（可選，用於追蹤變更）
 -- ============================================================
 
 -- 建立審計表（如果尚未存在）

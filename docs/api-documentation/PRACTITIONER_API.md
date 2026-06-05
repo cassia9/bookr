@@ -192,11 +192,13 @@
 **回應 (204 No Content)**：
 - 無返回體
 
-**注意**：
-- 執行軟刪除（標記 `deleted_at` 時間戳）
-- 不會從資料庫物理刪除記錄
-- 已刪除的老師不會出現在 GET 列表中
-- 如果有未完成的預約，返回 409 Conflict
+**軟刪除政策**：
+- ✅ 執行軟刪除（標記 `deleted_at` 時間戳）
+- ✅ 不會從資料庫物理刪除記錄
+- ✅ 已刪除的老師不會出現在任何 GET 列表中
+- ✅ 已刪除老師的休假和課程指派也不再可見（通過 RLS 政策）
+- ✅ 管理員無法通過普通 API 恢復已刪除的老師
+- ⚠️ 如果有未完成的預約，返回 409 Conflict
 
 **錯誤**：
 ```json
@@ -346,15 +348,24 @@
 
 ### 授權規則
 
-| 端點 | 管理員 | 成員 | 未授權 |
-|------|--------|------|--------|
-| POST /api/practitioners | ✅ | ❌ | ❌ |
-| GET /api/practitioners | ✅ | ✅ | ❌ |
-| GET /api/practitioners/:id | ✅ | ✅ | ❌ |
-| PUT /api/practitioners/:id | ✅ | ❌ | ❌ |
-| DELETE /api/practitioners/:id | ✅ | ❌ | ❌ |
-| GET/PUT /api/practitioners/:id/services | ✅ (PUT) / ✅ (GET) | ❌ (PUT) / ✅ (GET) | ❌ |
-| GET/POST/PUT/DELETE /api/practitioners/:id/leaves | ✅ | ❌ | ❌ |
+| 端點 | 管理員 | 成員 | 說明 |
+|------|--------|------|------|
+| POST /api/practitioners | ✅ | ❌ | 新增老師限管理員 |
+| GET /api/practitioners | ✅ | ✅ | 列表（不含已刪除老師） |
+| GET /api/practitioners/:id | ✅ | ✅ | 詳情（不含已刪除老師） |
+| PUT /api/practitioners/:id | ✅ | ❌ | 編輯限管理員 |
+| DELETE /api/practitioners/:id | ✅ | ❌ | 刪除限管理員（軟刪除） |
+| GET /api/practitioners/:id/services | ✅ | ✅ | 只能讀取未刪除老師 |
+| PUT /api/practitioners/:id/services | ✅ | ❌ | 更新課程指派限管理員 |
+| GET /api/practitioners/:id/leaves | ✅ | ✅ | 只能讀取未刪除老師的休假 |
+| POST /api/practitioners/:id/leaves | ✅ | ❌ | 新增休假限管理員 |
+| PUT /api/practitioners/:id/leaves/:leaveId | ✅ | ❌ | 編輯休假限管理員 |
+| DELETE /api/practitioners/:id/leaves/:leaveId | ✅ | ❌ | 刪除休假限管理員 |
+
+### 店家隔離
+所有操作均受店家隔離保護（通過 RLS 政策）：
+- 成員只能存取自己店家的資料
+- 不同店家的數據完全隔離
 
 ---
 
@@ -431,11 +442,43 @@ SELECT EXISTS (
 
 ---
 
+## ⚠️ 級聯刪除與軟刪除政策
+
+### 課程刪除時的行為
+
+當課程被刪除時：
+- **不會自動刪除** `practitioner_services` 記錄
+- 原因：防止無聲數據丟失，需要明確恢復流程
+- **解決方案**：需要在課程管理系統中實施以下邏輯：
+
+```sql
+-- 課程被刪除前，應該：
+1. 檢查是否有老師指派了該課程
+2. 強制移除所有 practitioner_services 記錄
+3. 記錄審計日誌
+4. 通知管理員需要重新指派這些老師
+
+-- 或者改為軟刪除課程（推薦）
+UPDATE services SET is_active = false WHERE id = ?
+```
+
+### 老師軟刪除時的行為
+
+當老師被刪除（軟刪除）時：
+- `deleted_at` 被標記
+- 相關休假和課程指派仍存在於資料庫
+- 但所有 RLS 政策會排除已刪除老師的數據
+- 成員無法看到已刪除老師的任何相關信息
+
+---
+
 ## 📝 實施檢查清單
 
 - [ ] 遷移文件已執行（Migration 014）
-- [ ] RLS 政策已啟用
+- [ ] RLS 政策已啟用，包含軟刪除檢查
+- [ ] `get_current_store_id()` 函數已建立
 - [ ] 審計觸發器已建立
+- [ ] 最少課程指派觸發器已建立
 - [ ] API 端點已實施
 - [ ] 輸入驗證已完成
 - [ ] 錯誤處理已完成

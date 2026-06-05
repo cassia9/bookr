@@ -62,7 +62,7 @@ export default function CalendarPage({
           service_name: services!inner(name),
           start_time,
           end_time,
-          practitioner_name: practitioners!inner(full_name),
+          practitioner_name: practitioners!inner(name),
           status,
           notes
         `)
