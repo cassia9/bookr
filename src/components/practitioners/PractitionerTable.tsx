@@ -161,10 +161,10 @@ export default function PractitionerTable({
 
   return (
     <div className="w-full h-full overflow-x-auto p-6">
-      <div className="bg-white rounded-xl shadow-md overflow-hidden">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-slate-50 border-b border-border/50">
+            <tr className="bg-slate-50 border-b border-slate-200/50">
             <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
               名字
             </th>
@@ -189,7 +189,7 @@ export default function PractitionerTable({
           {filteredPractitioners.map((practitioner) => (
             <tr
               key={practitioner.id}
-              className="border-b border-border/30 hover:bg-slate-50 transition-colors group relative"
+              className="border-b border-slate-200/30 hover:bg-slate-50 transition-colors group relative"
             >
               {/* 名字 */}
               <td className="px-6 py-4 text-sm text-text-primary font-medium">
@@ -200,7 +200,7 @@ export default function PractitionerTable({
               <td className="px-6 py-4 text-sm">
                 <div className="flex items-center gap-2">
                   <div
-                    className="w-5 h-5 rounded border border-border shadow-sm"
+                    className="w-5 h-5 rounded border border-slate-200 shadow-sm"
                     style={{ backgroundColor: practitioner.color_hex }}
                     title={practitioner.color_hex}
                   />
@@ -232,7 +232,7 @@ export default function PractitionerTable({
                     活躍
                   </span>
                 ) : (
-                  <span className="inline-block px-2 py-1 bg-surface-secondary border border-border rounded text-xs text-text-secondary">
+                  <span className="inline-block px-2 py-1 bg-surface-secondary border border-slate-200 rounded text-xs text-text-secondary">
                     停用
                   </span>
                 )}
@@ -254,7 +254,7 @@ export default function PractitionerTable({
 
                   {/* 下拉菜單 */}
                   {openMenuId === practitioner.id && (
-                    <div className="absolute right-0 mt-1 w-48 bg-white border border-border rounded-lg shadow-xl z-20">
+                    <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-20">
                       <button
                         onClick={() => {
                           onEdit(practitioner.id)
@@ -285,7 +285,7 @@ export default function PractitionerTable({
                         <Eye className="w-4 h-4" />
                         查看預約
                       </button>
-                      <div className="border-t border-border my-1" />
+                      <div className="border-t border-slate-200 my-1" />
                       {deleteConfirmId === practitioner.id ? (
                         <>
                           <button

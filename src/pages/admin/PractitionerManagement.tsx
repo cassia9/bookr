@@ -106,7 +106,7 @@ export default function PractitionerManagement() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* 頂部標題欄 */}
-      <div className="bg-white px-6 py-6 shadow-sm border-b border-border/50">
+      <div className="bg-white px-6 py-6 shadow-md border-b border-slate-200/50">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold text-text-primary">從業人員管理</h1>
@@ -143,7 +143,7 @@ export default function PractitionerManagement() {
       {/* 主內容 */}
       <div className="flex-1 overflow-hidden flex flex-col">
         {/* 統計卡片 */}
-        <div className="px-6 py-8 bg-white shadow-sm border-b border-border/50">
+        <div className="px-6 py-8 bg-white shadow-md border-b border-slate-200/50">
           {isLoadingStats ? (
             <div className="grid grid-cols-4 gap-6">
               {[1, 2, 3, 4].map((i) => (
@@ -184,7 +184,7 @@ export default function PractitionerManagement() {
         </div>
 
         {/* 搜尋和篩選 */}
-        <div className="px-6 py-5 border-b border-border/50 space-y-3 bg-white shadow-xs">
+        <div className="px-6 py-5 border-b border-slate-200/50 space-y-3 bg-white shadow-xs">
           <div className="flex gap-3">
             {/* 搜尋框 */}
             <div className="flex-1 relative">
@@ -194,7 +194,7 @@ export default function PractitionerManagement() {
                 placeholder="搜尋老師名字或課程..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-sm border border-border bg-white rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition"
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 bg-white rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition"
               />
             </div>
 
@@ -204,7 +204,7 @@ export default function PractitionerManagement() {
               onChange={(e) =>
                 setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')
               }
-              className="px-4 py-2.5 text-sm border border-border bg-white rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition"
+              className="px-4 py-2.5 text-sm border border-slate-200 bg-white rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition"
             >
               <option value="all">全部狀態</option>
               <option value="active">活躍</option>

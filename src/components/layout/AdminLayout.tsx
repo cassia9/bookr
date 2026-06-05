@@ -47,7 +47,7 @@ export default function AdminLayout() {
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         {/* Logo */}
-        <div className="h-16 flex items-center px-5 border-b border-divider">
+        <div className="h-16 flex items-center px-5 border-b border-slate-200">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
               <span className="text-white text-sm">✦</span>
@@ -83,7 +83,7 @@ export default function AdminLayout() {
         </nav>
 
         {/* User info */}
-        <div className="p-3 border-t border-divider">
+        <div className="p-3 border-t border-slate-200">
           <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
             <div className="w-8 h-8 bg-accent-lightest rounded-full flex items-center justify-center shrink-0">
               <span className="text-accent text-xs font-semibold">

@@ -45,7 +45,7 @@ export default function StatsCard({
     },
     gray: {
       bg: 'bg-surface-secondary',
-      border: 'border-border',
+      border: 'border-slate-200',
       label: 'text-text-secondary',
       value: 'text-text-primary',
     },
@@ -56,8 +56,8 @@ export default function StatsCard({
   return (
     <div
       className={cn(
-        'bg-white rounded-xl p-6 space-y-3 shadow-md hover:shadow-lg transition-all duration-200',
-        'border border-border/50'
+        'bg-white rounded-xl p-6 space-y-3 shadow-lg hover:shadow-xl transition-all duration-200',
+        'border border-slate-200'
       )}
     >
       <div className={cn('inline-block px-2.5 py-1 rounded-md text-xs font-semibold', config.bg, config.label)}>
