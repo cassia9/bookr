@@ -160,10 +160,11 @@ export default function PractitionerTable({
   }
 
   return (
-    <div className="w-full h-full overflow-x-auto">
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-surface-secondary border-b border-border">
+    <div className="w-full h-full overflow-x-auto p-6">
+      <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-slate-50 border-b border-border/50">
             <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
               名字
             </th>
@@ -188,7 +189,7 @@ export default function PractitionerTable({
           {filteredPractitioners.map((practitioner) => (
             <tr
               key={practitioner.id}
-              className="border-b border-border hover:bg-surface-secondary transition group relative"
+              className="border-b border-border/30 hover:bg-slate-50 transition-colors group relative"
             >
               {/* 名字 */}
               <td className="px-6 py-4 text-sm text-text-primary font-medium">
@@ -321,7 +322,8 @@ export default function PractitionerTable({
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   )
 }

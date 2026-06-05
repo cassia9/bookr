@@ -104,9 +104,9 @@ export default function PractitionerManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* 頂部標題欄 */}
-      <div className="bg-white border-b border-border px-6 py-6 shadow-sm">
+      <div className="bg-white px-6 py-6 shadow-sm border-b border-border/50">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold text-text-primary">從業人員管理</h1>
@@ -143,13 +143,13 @@ export default function PractitionerManagement() {
       {/* 主內容 */}
       <div className="flex-1 overflow-hidden flex flex-col">
         {/* 統計卡片 */}
-        <div className="px-6 py-6 border-b border-border bg-white">
+        <div className="px-6 py-8 bg-white shadow-sm border-b border-border/50">
           {isLoadingStats ? (
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-4 gap-6">
               {[1, 2, 3, 4].map((i) => (
                 <div
                   key={i}
-                  className="h-24 bg-surface rounded-lg animate-pulse"
+                  className="h-24 bg-slate-100 rounded-xl animate-pulse"
                 />
               ))}
             </div>
@@ -184,7 +184,7 @@ export default function PractitionerManagement() {
         </div>
 
         {/* 搜尋和篩選 */}
-        <div className="px-6 py-5 border-b border-border space-y-3 bg-white">
+        <div className="px-6 py-5 border-b border-border/50 space-y-3 bg-white shadow-xs">
           <div className="flex gap-3">
             {/* 搜尋框 */}
             <div className="flex-1 relative">
@@ -225,7 +225,7 @@ export default function PractitionerManagement() {
         </div>
 
         {/* 表格區域 */}
-        <div className="flex-1 overflow-auto bg-white">
+        <div className="flex-1 overflow-auto bg-slate-50">
           <PractitionerTable
             searchTerm={searchTerm}
             filterStatus={filterStatus}

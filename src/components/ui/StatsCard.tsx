@@ -56,8 +56,8 @@ export default function StatsCard({
   return (
     <div
       className={cn(
-        'bg-white border rounded-lg p-5 space-y-3 shadow-sm hover:shadow-md transition',
-        config.border
+        'bg-white rounded-xl p-6 space-y-3 shadow-md hover:shadow-lg transition-all duration-200',
+        'border border-border/50'
       )}
     >
       <div className={cn('inline-block px-2.5 py-1 rounded-md text-xs font-semibold', config.bg, config.label)}>
