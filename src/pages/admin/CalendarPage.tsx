@@ -141,10 +141,10 @@ export default function CalendarPage({
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      confirmed: 'bg-green-100 border-green-300 text-green-900',
-      pending: 'bg-yellow-100 border-yellow-300 text-yellow-900',
-      completed: 'bg-blue-100 border-blue-300 text-blue-900',
-      cancelled: 'bg-red-100 border-red-300 text-red-900',
+      confirmed: 'bg-success-light text-success border-l-success',
+      pending: 'bg-warning-light text-warning border-l-warning',
+      completed: 'bg-info-light text-info border-l-info',
+      cancelled: 'bg-slate-100 text-slate-400 border-l-slate-300',
     }
     return colors[status] || colors.pending
   }
@@ -156,77 +156,96 @@ export default function CalendarPage({
   })
 
   return (
-    <div className="p-6 space-y-6">
-      {/* 標題和視圖切換 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Calendar size={24} className="text-indigo-600" />
+    <div className="flex flex-col h-full bg-slate-50">
+      {/* 頂部控制欄 */}
+      <div className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">行事曆</h1>
-            <p className="text-sm text-slate-500 mt-1">{monthName}</p>
+            <h2 className="text-lg font-semibold text-text-primary">
+              {view === 'month' ? monthName : currentDate.toLocaleDateString('zh-TW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </h2>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}
-            className="px-3 py-2 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            ←
-          </button>
-          <button
-            onClick={() => setCurrentDate(new Date())}
-            className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg font-medium text-sm hover:bg-indigo-100"
-          >
-            今天
-          </button>
-          <button
-            onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}
-            className="px-3 py-2 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            →
-          </button>
-        </div>
-
-        <div className="flex items-center bg-slate-100 rounded-lg p-1 gap-1">
-          {(['month', 'week', 'day'] as ViewMode[]).map((v) => (
+          {/* 日期導航 */}
+          <div className="flex items-center gap-3">
             <button
-              key={v}
-              onClick={() => setView(v)}
-              className={cn(
-                'px-4 py-2 rounded-md text-sm font-medium transition-colors',
-                view === v
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              )}
+              onClick={() => {
+                const newDate = new Date(currentDate)
+                if (view === 'month') newDate.setMonth(newDate.getMonth() - 1)
+                else if (view === 'week') newDate.setDate(newDate.getDate() - 7)
+                else newDate.setDate(newDate.getDate() - 1)
+                setCurrentDate(newDate)
+              }}
+              className="p-2 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
+              title="上一個"
             >
-              {v === 'month' ? '月' : v === 'week' ? '週' : '日'}
+              ←
             </button>
-          ))}
+
+            <button
+              onClick={() => setCurrentDate(new Date())}
+              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-primary-hover shadow-md hover:shadow-lg transition font-medium text-sm"
+            >
+              今天
+            </button>
+
+            <button
+              onClick={() => {
+                const newDate = new Date(currentDate)
+                if (view === 'month') newDate.setMonth(newDate.getMonth() + 1)
+                else if (view === 'week') newDate.setDate(newDate.getDate() + 7)
+                else newDate.setDate(newDate.getDate() + 1)
+                setCurrentDate(newDate)
+              }}
+              className="p-2 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
+              title="下一個"
+            >
+              →
+            </button>
+          </div>
+
+          {/* 視圖切換 */}
+          <div className="flex items-center bg-surface-secondary rounded-lg p-1 gap-1">
+            {(['month', 'week', 'day'] as ViewMode[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={cn(
+                  'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                  view === v
+                    ? 'bg-black text-white shadow-sm'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-white'
+                )}
+              >
+                {v === 'month' ? '月' : v === 'week' ? '週' : '日'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* 行事曆視圖 */}
-      {isLoading ? (
-        <div className="flex justify-center items-center h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+      {/* 行事曆內容區 */}
+      <div className="flex-1 overflow-auto p-6">
+        {isLoading ? (
+          <div className="flex justify-center items-center h-96">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-lg border-0">
           {view === 'month' ? (
             // 月視圖：日期網格
-            <div>
-              <div className="grid grid-cols-7 gap-2 mb-4">
+            <div className="p-6">
+              <div className="grid grid-cols-7 gap-3 mb-4">
                 {['日', '一', '二', '三', '四', '五', '六'].map((day) => (
                   <div
                     key={day}
-                    className="text-center text-xs font-semibold text-slate-500 py-2"
+                    className="text-center text-xs font-semibold text-text-secondary py-2"
                   >
                     {day}
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-7 gap-3">
                 {datesForView.map((date, idx) => {
                   const dayBookings = bookings.filter((b) =>
                     isDateInRange(b.start_time, date)
@@ -235,36 +254,31 @@ export default function CalendarPage({
                     <div
                       key={idx}
                       className={cn(
-                        'min-h-32 p-2 rounded-lg border',
+                        'min-h-24 p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md',
                         date.getMonth() === currentDate.getMonth()
-                          ? 'bg-white border-slate-200'
+                          ? 'bg-white border-slate-200 hover:border-slate-300'
                           : 'bg-slate-50 border-slate-100'
                       )}
                     >
-                      <div className="text-xs font-semibold text-slate-600 mb-2">
+                      <div className="text-sm font-semibold text-text-primary mb-2">
                         {date.getDate()}
                       </div>
                       <div className="space-y-1">
-                        {dayBookings.slice(0, 2).map((booking) => (
+                        {dayBookings.slice(0, 3).map((booking) => (
                           <button
                             key={booking.id}
                             onClick={() => handleSelectBooking(booking)}
                             className={cn(
-                              'w-full text-xs p-1 rounded border-l-2 cursor-pointer hover:shadow-md transition-shadow',
+                              'w-full text-xs px-2 py-1 rounded-md font-medium truncate transition-shadow hover:shadow-sm border-l-2',
                               getStatusColor(booking.status)
                             )}
                           >
-                            <div className="font-medium truncate">
-                              {booking.client_name}
-                            </div>
-                            <div className="text-xs opacity-75">
-                              {booking.service_name}
-                            </div>
+                            {booking.client_name}
                           </button>
                         ))}
-                        {dayBookings.length > 2 && (
-                          <div className="text-xs text-slate-500 font-medium">
-                            +{dayBookings.length - 2} 更多
+                        {dayBookings.length > 3 && (
+                          <div className="text-xs text-text-secondary px-2 py-1 font-medium">
+                            +{dayBookings.length - 3} more
                           </div>
                         )}
                       </div>
@@ -275,117 +289,97 @@ export default function CalendarPage({
             </div>
           ) : view === 'week' ? (
             // 週視圖：時間軸
-            <div className="space-y-2">
-              <div className="grid grid-cols-8 gap-2">
-                <div className="text-xs font-semibold text-slate-500">時間</div>
-                {datesForView.map((date) => (
-                  <div key={date.toISOString()} className="text-center">
-                    <div className="text-xs font-semibold text-slate-700">
-                      {date.toLocaleDateString('zh-TW', {
-                        weekday: 'short',
-                        month: 'numeric',
-                        day: 'numeric',
-                      })}
+            <div className="p-6 space-y-0 overflow-x-auto">
+              <div className="flex gap-0 mb-4 sticky top-0 bg-white z-20">
+                <div className="w-24 flex-shrink-0 text-xs font-semibold text-text-secondary py-3 pr-4 border-r border-slate-100">時間</div>
+                <div className="flex gap-0">
+                  {datesForView.map((date) => (
+                    <div key={date.toISOString()} className="flex-1 min-w-32 text-center px-3 py-3 border-r border-slate-100">
+                      <div className="text-xs font-semibold text-text-primary">
+                        {date.toLocaleDateString('zh-TW', { weekday: 'short', month: 'numeric', day: 'numeric' })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
               {Array.from({ length: 12 }, (_, i) => 9 + i).map((hour) => (
-                <div key={hour} className="grid grid-cols-8 gap-2 items-start border-t pt-2">
-                  <div className="text-xs font-medium text-slate-500">{hour}:00</div>
-                  {datesForView.map((date) => {
-                    const hourBookings = bookings.filter((b) => {
-                      const bDate = new Date(b.start_time)
+                <div key={hour} className="flex gap-0 items-start border-b border-slate-100 min-h-20">
+                  <div className="w-24 flex-shrink-0 text-xs font-medium text-text-secondary py-3 pr-4 border-r border-slate-100 text-right">{hour}:00</div>
+                  <div className="flex gap-0 flex-1">
+                    {datesForView.map((date) => {
+                      const hourBookings = bookings.filter((b) => {
+                        const bDate = new Date(b.start_time)
+                        return isDateInRange(b.start_time, date) && bDate.getHours() === hour
+                      })
                       return (
-                        isDateInRange(b.start_time, date) &&
-                        bDate.getHours() === hour
-                      )
-                    })
-                    return (
-                      <div key={date.toISOString()} className="space-y-1">
-                        {hourBookings.map((booking) => (
-                          <button
-                            key={booking.id}
-                            onClick={() => handleSelectBooking(booking)}
-                            className={cn(
-                              'w-full text-xs p-1 rounded border-l-2 cursor-pointer hover:shadow-md transition-shadow',
-                              getStatusColor(booking.status)
-                            )}
-                          >
-                            <div className="font-medium truncate">
+                        <div key={date.toISOString()} className="flex-1 min-w-32 px-2 py-2 border-r border-slate-100 space-y-1">
+                          {hourBookings.map((booking) => (
+                            <button
+                              key={booking.id}
+                              onClick={() => handleSelectBooking(booking)}
+                              className={cn(
+                                'w-full text-xs px-2 py-1.5 rounded-md font-medium truncate border-l-2 cursor-pointer hover:shadow-md transition-all',
+                                getStatusColor(booking.status)
+                              )}
+                            >
                               {booking.client_name}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )
-                  })}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
             // 日視圖：詳細時間軸
-            <div className="space-y-4">
-              <div className="text-lg font-bold text-slate-900">
-                {currentDate.toLocaleDateString('zh-TW', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
+            <div className="p-6 space-y-4">
+              <div className="text-2xl font-bold text-text-primary">
+                {currentDate.toLocaleDateString('zh-TW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </div>
               <div className="space-y-3">
                 {bookings
                   .filter((b) => isDateInRange(b.start_time, currentDate))
-                  .sort(
-                    (a, b) =>
-                      new Date(a.start_time).getTime() -
-                      new Date(b.start_time).getTime()
-                  )
+                  .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
                   .map((booking) => (
                     <button
                       key={booking.id}
                       onClick={() => handleSelectBooking(booking)}
                       className={cn(
-                        'w-full text-left p-4 rounded-lg border-l-4 cursor-pointer hover:shadow-md transition-shadow',
+                        'w-full text-left p-4 rounded-lg border-l-4 cursor-pointer hover:shadow-md transition-all',
                         getStatusColor(booking.status)
                       )}
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between mb-3">
                         <div>
-                          <h3 className="font-semibold text-lg">
+                          <h3 className="font-semibold text-base text-text-primary">
                             {booking.client_name}
                           </h3>
-                          <p className="text-sm opacity-75 mt-1">
+                          <p className="text-sm text-text-secondary mt-1">
                             {booking.service_name}
                           </p>
                         </div>
-                        <span className="text-xs font-medium px-2 py-1 bg-white rounded">
-                          {booking.status === 'confirmed'
-                            ? '已確認'
-                            : booking.status === 'pending'
-                            ? '待確認'
-                            : booking.status === 'completed'
-                            ? '已完成'
-                            : '已取消'}
+                        <span className={cn(
+                          'text-xs font-semibold px-2 py-1 rounded-md whitespace-nowrap',
+                          booking.status === 'confirmed' ? 'bg-success-light text-success' :
+                          booking.status === 'pending' ? 'bg-warning-light text-warning' :
+                          booking.status === 'completed' ? 'bg-info-light text-info' :
+                          'bg-slate-100 text-slate-400'
+                        )}>
+                          {booking.status === 'confirmed' ? '已確認' :
+                           booking.status === 'pending' ? '待確認' :
+                           booking.status === 'completed' ? '已完成' : '已取消'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-4 mt-3 text-sm opacity-75">
-                        <div className="flex items-center gap-1">
-                          <Clock size={14} />
-                          {new Date(booking.start_time).toLocaleTimeString(
-                            'zh-TW',
-                            { hour: '2-digit', minute: '2-digit' }
-                          )}{' '}
-                          -{' '}
-                          {new Date(booking.end_time).toLocaleTimeString('zh-TW', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                      <div className="flex items-center gap-4 text-sm text-text-secondary">
+                        <div className="flex items-center gap-2">
+                          <Clock size={16} />
+                          {new Date(booking.start_time).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })} - {new Date(booking.end_time).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
                         </div>
-                        <div className="flex items-center gap-1">
-                          <MapPin size={14} />
+                        <div className="flex items-center gap-2">
+                          <MapPin size={16} />
                           {booking.practitioner_name}
                         </div>
                       </div>
@@ -399,20 +393,20 @@ export default function CalendarPage({
 
       {/* 客戶詳情側邊抽屜 */}
       {showDrawer && (
-        <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowDrawer(false)} />
+        <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm" onClick={() => setShowDrawer(false)} />
       )}
       <div
         className={cn(
-          'fixed inset-y-0 right-0 w-96 bg-white shadow-xl transition-transform duration-300 z-50 overflow-y-auto',
+          'fixed inset-y-0 right-0 w-96 bg-white shadow-2xl transition-transform duration-300 z-50 overflow-y-auto',
           showDrawer ? 'translate-x-0' : 'translate-x-full'
         )}
       >
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-slate-900">預約詳情</h2>
+        <div className="p-6 border-b border-slate-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-text-primary">預約詳情</h2>
             <button
               onClick={() => setShowDrawer(false)}
-              className="p-2 hover:bg-slate-100 rounded-lg"
+              className="p-2 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
             >
               <X size={20} />
             </button>
