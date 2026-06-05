@@ -189,7 +189,7 @@ export default function PractitionerTable({
           {filteredPractitioners.map((practitioner) => (
             <tr
               key={practitioner.id}
-              className="border-b border-slate-200/30 hover:bg-slate-200 transition-colors group relative"
+              className="border-b border-slate-200/30 hover:bg-slate-100 transition-colors group relative"
             >
               {/* 名字 */}
               <td className="px-6 py-4 text-sm text-text-primary font-medium">

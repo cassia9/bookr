@@ -118,7 +118,7 @@ export default function AdminLayout() {
           <span className="ml-3 font-semibold text-text-primary">預約管理系統</span>
         </header>
 
-        <main className="flex-1 overflow-auto bg-slate-100">
+        <main className="flex-1 overflow-auto bg-slate-50">
           <Outlet />
         </main>
       </div>
