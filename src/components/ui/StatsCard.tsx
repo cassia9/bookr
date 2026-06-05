@@ -20,34 +20,34 @@ export default function StatsCard({
 }: StatsCardProps) {
   const colorConfig = {
     blue: {
-      bg: 'bg-blue-900/30',
-      border: 'border-blue-700/50',
-      label: 'text-blue-400',
-      value: 'text-blue-50',
+      bg: 'bg-info-light',
+      border: 'border-info',
+      label: 'text-info',
+      value: 'text-text-primary',
     },
     green: {
-      bg: 'bg-green-900/30',
-      border: 'border-green-700/50',
-      label: 'text-green-400',
-      value: 'text-green-50',
+      bg: 'bg-success-light',
+      border: 'border-success',
+      label: 'text-success',
+      value: 'text-text-primary',
     },
     red: {
-      bg: 'bg-red-900/30',
-      border: 'border-red-700/50',
-      label: 'text-red-400',
-      value: 'text-red-50',
+      bg: 'bg-danger-light',
+      border: 'border-danger',
+      label: 'text-danger',
+      value: 'text-text-primary',
     },
     amber: {
-      bg: 'bg-amber-900/30',
-      border: 'border-amber-700/50',
-      label: 'text-amber-400',
-      value: 'text-amber-50',
+      bg: 'bg-warning-light',
+      border: 'border-warning',
+      label: 'text-warning',
+      value: 'text-text-primary',
     },
     gray: {
-      bg: 'bg-gray-900/30',
-      border: 'border-gray-700/50',
-      label: 'text-gray-400',
-      value: 'text-gray-50',
+      bg: 'bg-surface-secondary',
+      border: 'border-border',
+      label: 'text-text-secondary',
+      value: 'text-text-primary',
     },
   }
 
@@ -56,14 +56,14 @@ export default function StatsCard({
   return (
     <div
       className={cn(
-        'bg-slate-800 border rounded-lg p-4 space-y-2',
+        'bg-white border rounded-lg p-4 space-y-2 shadow-sm',
         config.bg,
         config.border
       )}
     >
       <p className={cn('text-xs font-medium', config.label)}>{label}</p>
       <div className="flex items-end justify-between">
-        <p className="text-3xl font-bold text-slate-50">{value}</p>
+        <p className="text-3xl font-bold text-text-primary">{value}</p>
         {trend && (
           <div
             className={cn(

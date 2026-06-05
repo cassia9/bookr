@@ -163,23 +163,23 @@ export default function PractitionerTable({
     <div className="w-full h-full overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="bg-slate-800 border-b border-slate-700">
-            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-50">
+          <tr className="bg-surface-secondary border-b border-border">
+            <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
               名字
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-50">
+            <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
               識別色
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-50">
+            <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
               課程
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-50">
+            <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
               預約數
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-50">
+            <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
               狀態
             </th>
-            <th className="px-6 py-3 text-right text-xs font-semibold text-slate-50">
+            <th className="px-6 py-3 text-right text-xs font-semibold text-text-primary">
               操作
             </th>
           </tr>
@@ -188,10 +188,10 @@ export default function PractitionerTable({
           {filteredPractitioners.map((practitioner) => (
             <tr
               key={practitioner.id}
-              className="border-b border-slate-800 hover:bg-slate-800/50 transition group relative"
+              className="border-b border-border hover:bg-surface-secondary transition group relative"
             >
               {/* 名字 */}
-              <td className="px-6 py-4 text-sm text-slate-50 font-medium">
+              <td className="px-6 py-4 text-sm text-text-primary font-medium">
                 {practitioner.name}
               </td>
 
@@ -199,39 +199,39 @@ export default function PractitionerTable({
               <td className="px-6 py-4 text-sm">
                 <div className="flex items-center gap-2">
                   <div
-                    className="w-5 h-5 rounded border border-slate-700 shadow-sm"
+                    className="w-5 h-5 rounded border border-border shadow-sm"
                     style={{ backgroundColor: practitioner.color_hex }}
                     title={practitioner.color_hex}
                   />
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-text-secondary">
                     {practitioner.color_hex}
                   </span>
                 </div>
               </td>
 
               {/* 課程數 */}
-              <td className="px-6 py-4 text-sm text-slate-50">
-                <span className="inline-block px-2 py-1 bg-blue-900/30 border border-blue-700/50 rounded text-xs">
+              <td className="px-6 py-4 text-sm text-text-primary">
+                <span className="inline-block px-2 py-1 bg-info-light border border-info rounded text-xs text-info">
                   {practitioner.serviceCount || 0} 個課程
                 </span>
               </td>
 
               {/* 預約數 */}
-              <td className="px-6 py-4 text-sm text-slate-50">
+              <td className="px-6 py-4 text-sm text-text-primary">
                 <span className="font-semibold">
                   {practitioner.bookingCount || 0}
                 </span>
-                <span className="text-xs text-slate-400 ml-1">場預約</span>
+                <span className="text-xs text-text-secondary ml-1">場預約</span>
               </td>
 
               {/* 狀態 */}
               <td className="px-6 py-4 text-sm">
                 {practitioner.is_active ? (
-                  <span className="inline-block px-2 py-1 bg-green-900/30 border border-green-700/50 rounded text-xs text-green-50">
+                  <span className="inline-block px-2 py-1 bg-success-light border border-success rounded text-xs text-success">
                     活躍
                   </span>
                 ) : (
-                  <span className="inline-block px-2 py-1 bg-gray-900/30 border border-gray-700/50 rounded text-xs text-gray-50">
+                  <span className="inline-block px-2 py-1 bg-surface-secondary border border-border rounded text-xs text-text-secondary">
                     停用
                   </span>
                 )}
@@ -246,20 +246,20 @@ export default function PractitionerTable({
                         openMenuId === practitioner.id ? null : practitioner.id
                       )
                     }
-                    className="p-1 hover:bg-slate-700 rounded transition text-slate-400 hover:text-slate-50"
+                    className="p-1 hover:bg-surface-secondary rounded transition text-text-secondary hover:text-text-primary"
                   >
                     <MoreVertical className="w-4 h-4" />
                   </button>
 
                   {/* 下拉菜單 */}
                   {openMenuId === practitioner.id && (
-                    <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20">
+                    <div className="absolute right-0 mt-1 w-48 bg-white border border-border rounded-lg shadow-xl z-20">
                       <button
                         onClick={() => {
                           onEdit(practitioner.id)
                           setOpenMenuId(null)
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-50 hover:bg-slate-700 flex items-center gap-2"
+                        className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary flex items-center gap-2"
                       >
                         <Edit2 className="w-4 h-4" />
                         編輯
@@ -269,7 +269,7 @@ export default function PractitionerTable({
                           onManageLeaves(practitioner.id)
                           setOpenMenuId(null)
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-50 hover:bg-slate-700 flex items-center gap-2"
+                        className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary flex items-center gap-2"
                       >
                         <Calendar className="w-4 h-4" />
                         管理休假
@@ -279,17 +279,17 @@ export default function PractitionerTable({
                           // 導航到該老師的預約
                           window.location.href = `/admin/bookings?practitioner=${practitioner.id}`
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-50 hover:bg-slate-700 flex items-center gap-2"
+                        className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary flex items-center gap-2"
                       >
                         <Eye className="w-4 h-4" />
                         查看預約
                       </button>
-                      <div className="border-t border-slate-700 my-1" />
+                      <div className="border-t border-border my-1" />
                       {deleteConfirmId === practitioner.id ? (
                         <>
                           <button
                             onClick={() => setDeleteConfirmId(null)}
-                            className="w-full text-left px-4 py-2 text-xs text-slate-400 hover:text-slate-50"
+                            className="w-full text-left px-4 py-2 text-xs text-text-secondary hover:text-text-primary"
                           >
                             取消刪除
                           </button>
@@ -297,7 +297,7 @@ export default function PractitionerTable({
                             onClick={() =>
                               handleDelete(practitioner.id)
                             }
-                            className="w-full text-left px-4 py-2 text-xs bg-red-900/30 text-red-300 hover:bg-red-900/50 flex items-center gap-2"
+                            className="w-full text-left px-4 py-2 text-xs bg-danger-light text-danger hover:bg-danger/20 flex items-center gap-2"
                           >
                             <Trash2 className="w-3 h-3" />
                             確認刪除
@@ -308,7 +308,7 @@ export default function PractitionerTable({
                           onClick={() =>
                             setDeleteConfirmId(practitioner.id)
                           }
-                          className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-900/20 flex items-center gap-2"
+                          className="w-full text-left px-4 py-2 text-sm text-danger hover:bg-danger-light flex items-center gap-2"
                         >
                           <Trash2 className="w-4 h-4" />
                           刪除

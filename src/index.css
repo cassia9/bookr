@@ -1,7 +1,12 @@
+@import "./styles/design-tokens.css";
 @import "tailwindcss";
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  background-color: white;
 }
 
 body {
@@ -10,8 +15,8 @@ body {
     'PingFang TC', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f8fafc;
-  color: #1e293b;
+  background-color: white;
+  color: var(--color-text-primary);
 }
 
 #root {

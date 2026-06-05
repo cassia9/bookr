@@ -1,0 +1,74 @@
+/* ===================================================================
+   Design System v2.0 - CSS Design Tokens
+   Apple 簡約風格 × 淺色系主題
+   =================================================================== */
+
+:root {
+  /* === 中性色 (Neutrals) === */
+  --color-white: #FFFFFF;
+  --color-surface: #F9F9F9;
+  --color-surface-secondary: #F0F0F0;
+  --color-border: #E5E5E5;
+  --color-divider: #D1D1D6;
+  --color-disabled: #ADADB0;
+  --color-text-secondary: #8A8A8E;
+  --color-text-primary: #424245;
+  --color-black: #000000;
+
+  /* === 主色 (Primary - Black) === */
+  --color-primary: #000000;
+  --color-primary-hover: #1A1A1A;
+  --color-primary-active: #333333;
+  --color-primary-disabled: #D1D1D6;
+
+  /* === 輔助色 (Accent - Beige) === */
+  --color-accent: #D4A574;
+  --color-accent-hover: #C89660;
+  --color-accent-light: #EDD5C0;
+  --color-accent-lightest: #F5EAE0;
+
+  /* === 語義色 (Semantic) === */
+  --color-success: #34C759;
+  --color-success-light: #D1EFCC;
+  --color-warning: #FF9500;
+  --color-warning-light: #FFE5CC;
+  --color-danger: #FF3B30;
+  --color-danger-light: #FFD1CC;
+  --color-info: #0084FF;
+  --color-info-light: #CCE5FF;
+
+  /* === 間距令牌 === */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+  --spacing-3xl: 48px;
+  --spacing-4xl: 64px;
+
+  /* === 圓角令牌 === */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* === 動畫令牌 === */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 350ms;
+
+  --easing-ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-ease-in: cubic-bezier(0.4, 0, 0.6, 1);
+  --easing-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* === 陰影令牌 === */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --shadow-base: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}

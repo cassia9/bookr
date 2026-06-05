@@ -30,7 +30,7 @@ export default function AdminLayout() {
   const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin)
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-screen bg-white">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -41,22 +41,22 @@ export default function AdminLayout() {
 
       {/* Sidebar */}
       <aside className={cn(
-        'fixed inset-y-0 left-0 z-30 w-60 bg-white border-r border-slate-200',
+        'fixed inset-y-0 left-0 z-30 w-60 bg-surface border-r border-border',
         'flex flex-col transition-transform duration-200',
         'lg:static lg:translate-x-0',
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         {/* Logo */}
-        <div className="h-16 flex items-center px-5 border-b border-slate-100">
+        <div className="h-16 flex items-center px-5 border-b border-divider">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
               <span className="text-white text-sm">✦</span>
             </div>
-            <span className="font-semibold text-slate-900 text-sm">預約管理系統</span>
+            <span className="font-semibold text-text-primary text-sm">預約管理系統</span>
           </div>
           <button
             onClick={() => setSidebarOpen(false)}
-            className="ml-auto lg:hidden text-slate-400 hover:text-slate-600"
+            className="ml-auto lg:hidden text-text-secondary hover:text-text-primary"
           >
             <X size={18} />
           </button>
@@ -72,8 +72,8 @@ export default function AdminLayout() {
               className={({ isActive }) => cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                 isActive
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  ? 'bg-accent-lightest text-black'
+                  : 'text-text-secondary hover:bg-surface-secondary hover:text-text-primary'
               )}
             >
               <Icon size={17} />
@@ -83,21 +83,21 @@ export default function AdminLayout() {
         </nav>
 
         {/* User info */}
-        <div className="p-3 border-t border-slate-100">
+        <div className="p-3 border-t border-divider">
           <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
-            <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center shrink-0">
-              <span className="text-indigo-700 text-xs font-semibold">
+            <div className="w-8 h-8 bg-accent-lightest rounded-full flex items-center justify-center shrink-0">
+              <span className="text-accent text-xs font-semibold">
                 {profile?.full_name?.[0] ?? '?'}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">{profile?.full_name}</p>
-              <p className="text-xs text-slate-500">{isAdmin ? '管理員' : '一般成員'}</p>
+              <p className="text-sm font-medium text-text-primary truncate">{profile?.full_name}</p>
+              <p className="text-xs text-text-secondary">{isAdmin ? '管理員' : '一般成員'}</p>
             </div>
             <button
               onClick={handleSignOut}
               title="登出"
-              className="text-slate-400 hover:text-slate-600 transition-colors"
+              className="text-text-secondary hover:text-text-primary transition-colors"
             >
               <LogOut size={16} />
             </button>
@@ -108,17 +108,17 @@ export default function AdminLayout() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar (mobile) */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center px-4 lg:hidden">
+        <header className="h-16 bg-white border-b border-border flex items-center px-4 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-slate-500 hover:text-slate-700"
+            className="text-text-secondary hover:text-text-primary"
           >
             <Menu size={20} />
           </button>
-          <span className="ml-3 font-semibold text-slate-900">預約管理系統</span>
+          <span className="ml-3 font-semibold text-text-primary">預約管理系統</span>
         </header>
 
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto bg-surface">
           <Outlet />
         </main>
       </div>
