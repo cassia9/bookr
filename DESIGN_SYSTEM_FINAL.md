@@ -170,13 +170,13 @@ className="bg-danger text-white hover:bg-danger/90
 ```tsx
 className="px-4 py-2.5 border border-slate-200 
            bg-white rounded-lg text-text-primary
-           focus:outline-none focus:ring-1 focus:ring-black 
+           focus:outline-none focus:ring-0 
            focus:border-black transition"
 ```
 
 **狀態**:
-- 預設: 邊框 slate-200
-- Focus: 黑色邊框 + 黑色細環 (ring-1)
+- 預設: 邊框 1px slate-200
+- Focus: 邊框 1px 黑色 (只改顏色,粗細不變)
 - Placeholder: text-text-secondary
 
 ### 選擇框 (Select)
@@ -184,13 +184,13 @@ className="px-4 py-2.5 border border-slate-200
 ```tsx
 className="px-4 py-2.5 border border-slate-200 
            bg-white rounded-lg text-text-primary
-           focus:outline-none focus:ring-1 focus:ring-black 
+           focus:outline-none focus:ring-0 
            focus:border-black transition"
 ```
 
 **特殊設定**:
-- Focus ring: ring-1 (細線,與邊框同厚)
-- 邊框顏色: slate-200 (淺灰)
+- Focus: 邊框改黑色 (ring-0,只改顏色)
+- 邊框粗細: 始終 1px (不變)
 
 ### 卡片 (Card)
 
@@ -275,8 +275,8 @@ active:scale-95              /* 按下縮小 */
 ```
 Input/Select Focus:
   outline: 無
-  ring: 1px 黑色 (細線)
-  border-color: 黑色
+  ring: 無 (ring-0)
+  border: 1px 黑色 (只改顏色,不改粗細)
   
 Hover:
   shadow: 提升
