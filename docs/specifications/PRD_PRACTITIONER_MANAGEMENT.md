@@ -73,8 +73,9 @@
    - 快速操作按鈕（編輯、刪除、休假設定）
 
 2. **從業人員表單**（新增/編輯）
-   - 基本資訊：姓名、聯絡方式、資格認證
-   - 可選欄位：個人簡介、照片
+   - 基本資訊：**姓名**（必填）
+   - 可被預約的課程：多選課程清單（與課程管理聯動）
+   - 可選欄位：聯絡電話、EMAIL、個人簡介、照片
 
 3. **休假時間管理**
    - 日曆式介面選擇休假日期範圍
@@ -92,36 +93,55 @@
 
 **驗收準則**：
 - [ ] 點擊「新增老師」按鈕打開表單
-- [ ] 表單包含欄位：姓名（必填）、聯絡電話、EMAIL、個人簡介、照片
-- [ ] 驗證姓名不能為空，電話格式正確
+- [ ] 表單包含欄位：
+  - 姓名（必填）
+  - 可被預約的課程（必填，至少選一個）
+  - 聯絡電話、EMAIL、個人簡介、照片（可選）
+- [ ] 課程清單動態從課程管理模組載入
+- [ ] 可多選課程，已選課程需視覺化標示
+- [ ] 驗證：姓名非空、至少選一個課程
 - [ ] 提交後立即在列表中顯示新增的從業人員
 - [ ] 新增成功後顯示「新增成功」提示訊息
 
 **技術需求**：
-- 後端 API：`POST /api/practitioners`
-- Supabase：新增至 `practitioners` 表
+- 後端 API：
+  - `POST /api/practitioners` - 建立記錄
+  - `POST /api/practitioners/:id/services` - 關聯課程
+- Supabase：
+  - 新增至 `practitioners` 表
+  - 新增至 `practitioner_services` 多對多表
 - RLS：管理員可新增任何記錄
+- 課程聯動：載入課程列表需調用課程管理 API
 
 ---
 
 ### US-2: 編輯從業人員資訊
 
 **使用者故事**：
-身為管理員，我想編輯從業人員的基本資訊（如聯絡方式、認證狀況），以保持資料最新。
+身為管理員，我想編輯從業人員的基本資訊及其可被預約的課程，以保持資料最新和課程指派。
 
 **驗收準則**：
 - [ ] 點擊列表中從業人員的「編輯」按鈕打開編輯表單
-- [ ] 表單預填現有資訊
+- [ ] 表單預填現有資訊：
+  - 姓名、聯絡方式、簡介、照片
+  - **已指派的課程需被勾選顯示**
 - [ ] 可修改所有欄位（除 ID 外）
-- [ ] 提交後立即更新列表顯示
-- [ ] 預約頁面同步顯示更新後的名稱
+- [ ] 課程清單動態載入，可新增或移除課程指派
+- [ ] 至少保持一個課程被指派
+- [ ] 提交後立即更新列表和預約頁面
+- [ ] 預約頁面同步顯示更新後的名稱和可被預約的課程
 - [ ] 編輯成功後顯示「更新成功」提示訊息
 
 **技術需求**：
-- 後端 API：`PUT /api/practitioners/:id`
-- Supabase：更新至 `practitioners` 表
+- 後端 API：
+  - `PUT /api/practitioners/:id` - 更新基本資訊
+  - `GET /api/practitioners/:id/services` - 取得已指派課程
+  - `PUT /api/practitioners/:id/services` - 更新課程指派
+- Supabase：
+  - 更新 `practitioners` 表
+  - 更新 `practitioner_services` 多對多表（刪除舊關聯、新增新關聯）
 - RLS：管理員可編輯任何記錄
-- 實時更新：CalendarPage 和 GanttPage 應反映名稱變更
+- 實時更新：CalendarPage 和 GanttPage 應反映名稱和課程變更
 
 ---
 
@@ -188,6 +208,55 @@
 
 ---
 
+### US-6: 管理老師可被預約的課程
+
+**使用者故事**：
+身為管理員，我想為每位老師指派其可以提供的課程，確保客人只能預約該老師提供的課程。
+
+**驗收準則**：
+- [ ] 在編輯老師資訊時，可看到「可被預約的課程」選項
+- [ ] 課程清單從課程管理模組自動載入（已上架的課程）
+- [ ] 支援多選課程，用勾選框表示
+- [ ] 已指派的課程需視覺化標示（勾選）
+- [ ] 可新增或移除課程指派（無需跳轉）
+- [ ] 至少需指派一個課程
+- [ ] 修改課程指派後，預約頁面的課程選單自動更新
+- [ ] 客人預約時，只能選擇該老師被指派的課程
+- [ ] 儲存成功後顯示「課程指派已更新」提示訊息
+
+**使用者流程**：
+```
+管理員點擊老師「編輯」
+  ↓
+編輯表單打開，顯示「可被預約的課程」區塊
+  ↓
+課程列表動態載入（只顯示已上架課程）
+  ↓
+管理員勾選/取消勾選課程
+  ↓
+點擊「保存」
+  ↓
+後端更新 practitioner_services 表
+  ↓
+預約頁面實時反映（課程選單變更）
+  ↓
+顯示「課程指派已更新」提示
+```
+
+**技術需求**：
+- 後端 API：
+  - `GET /api/services?status=active` - 取得已上架課程
+  - `GET /api/practitioners/:id/services` - 取得老師已指派課程
+  - `PUT /api/practitioners/:id/services` - 更新課程指派
+- Supabase：
+  - `practitioner_services` 多對多表（`id`, `practitioner_id`, `service_id`, `created_at`）
+  - 外鍵約束：刪除課程時自動刪除關聯
+- RLS：管理員可管理任何老師的課程指派
+- 課程聯動：課程管理模組新增/下架課程時，自動更新可選課程清單
+- 預約驗證：預約建立時驗證該老師是否有提供該課程
+
+---
+
 ## 🎬 使用者流程
 
 ### 流程 1：新增從業人員
@@ -195,13 +264,17 @@
 ```
 管理員點擊「新增老師」
   ↓
-表單打開（輸入框：姓名、電話、EMAIL、簡介、照片）
+表單打開，載入課程清單
   ↓
-填寫資訊並點擊「保存」
+填寫基本資訊（姓名、電話、EMAIL、簡介、照片）
   ↓
-系統驗證（姓名非空、電話格式）
+在「可被預約的課程」區塊選擇課程（至少一個）
   ↓
-後端建立記錄
+點擊「保存」
+  ↓
+系統驗證（姓名非空、至少一個課程被選）
+  ↓
+後端建立記錄到 practitioners 和 practitioner_services 表
   ↓
 表單關閉，列表自動刷新並顯示新記錄
   ↓
@@ -267,6 +340,23 @@ CREATE TABLE practitioner_leaves (
 );
 ```
 
+**practitioner_services**（老師與課程多對多關係）
+```sql
+CREATE TABLE practitioner_services (
+  id UUID PRIMARY KEY,
+  practitioner_id UUID NOT NULL,
+  service_id UUID NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(practitioner_id, service_id),  -- 防止重複指派
+  FOREIGN KEY (practitioner_id) REFERENCES practitioners(id) ON DELETE CASCADE,
+  FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+);
+
+-- 建立索引以加快查詢效能
+CREATE INDEX idx_practitioner_services_practitioner_id ON practitioner_services(practitioner_id);
+CREATE INDEX idx_practitioner_services_service_id ON practitioner_services(service_id);
+```
+
 ### RLS 政策
 
 ```sql
@@ -323,34 +413,99 @@ CREATE POLICY member_read_practitioners ON practitioners
 
 ```
 新增老師
-┌──────────────────────────────┐
-│ 姓名 *                        │
-│ [_____________________]      │
-│                              │
-│ 電話                         │
-│ [_____________________]      │
-│                              │
-│ EMAIL                        │
-│ [_____________________]      │
-│                              │
-│ 個人簡介                      │
-│ [________________]           │
-│ (100 字以內)                  │
-│                              │
-│ 照片                         │
-│ [上傳照片]                    │
-│                              │
-│ [取消]  [保存]               │
-└──────────────────────────────┘
+┌──────────────────────────────────────┐
+│ 姓名 *                              │
+│ [_____________________]              │
+│                                      │
+│ 可被預約的課程 *                      │
+│ ☑ 瑞典按摩 (60 分)                   │
+│ ☐ 深層組織按摩 (90 分)               │
+│ ☑ 伸展課程 (45 分)                   │
+│ ☐ 美容護理 (30 分)                   │
+│ (加載中... 如課程列表為空)            │
+│                                      │
+│ 電話                                │
+│ [_____________________]              │
+│                                      │
+│ EMAIL                               │
+│ [_____________________]              │
+│                                      │
+│ 個人簡介                             │
+│ [________________]                   │
+│ (100 字以內)                         │
+│                                      │
+│ 照片                                │
+│ [上傳照片]                           │
+│                                      │
+│ [取消]  [保存]                      │
+└──────────────────────────────────────┘
 ```
+
+**課程選擇區塊說明**：
+- 課程清單動態從課程管理模組載入
+- 僅顯示狀態為「上架」的課程
+- 使用勾選框（checkbox）表示選擇
+- 課程旁顯示時長，方便參考
+- 必須至少選一個課程
+- 若課程清單載入失敗，顯示「無法載入課程清單」提示
 
 ---
 
 ## 🔄 與其他模組的整合
 
+### 與課程管理的整合 ⭐
+
+**場景 1**：新增/編輯老師時，課程列表動態載入
+
+```typescript
+// 在 PractitionerForm 中
+useEffect(() => {
+  loadAvailableServices()  // 調用課程管理 API 獲取所有上架課程
+}, [])
+
+const loadAvailableServices = async () => {
+  const { data } = await supabase
+    .from('services')
+    .select('id, name, duration_minutes')
+    .eq('is_active', true)  // 只顯示上架課程
+    .order('name', { ascending: true })
+  
+  setAvailableServices(data)
+}
+```
+
+**場景 2**：課程被下架時，自動從老師的指派課程中移除
+
+```typescript
+// 在課程管理模組中，更新課程狀態為非上架時執行
+DELETE FROM practitioner_services 
+WHERE service_id = [被下架的課程ID]
+```
+
+**場景 3**：課程被刪除時，自動清理關聯記錄
+
+```typescript
+-- 資料庫層面的級聯刪除已在外鍵設定中實現
+FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+```
+
 ### 與預約建立的整合
 
-**場景**：客人預約時，系統應檢查該從業人員是否在休假
+**場景 1**：客人預約時，課程選單只顯示該老師被指派的課程
+
+```typescript
+// 在預約表單中
+const handlePractitionerSelect = async (practitionerId: string) => {
+  const { data: assignedServices } = await supabase
+    .from('practitioner_services')
+    .select('service_id, service:services(id, name)')
+    .eq('practitioner_id', practitionerId)
+  
+  setAvailableServices(assignedServices)  // 動態篩選課程選單
+}
+```
+
+**場景 2**：客人預約時，系統應檢查該從業人員是否在休假
 
 ```typescript
 // 預約驗證邏輯
@@ -363,9 +518,25 @@ if (selectedPractitionerId && selectedDate) {
 }
 ```
 
+**場景 3**：預約建立時驗證老師是否有提供該課程
+
+```typescript
+// 預約驗證
+const hasServiceAccess = await supabase
+  .from('practitioner_services')
+  .select('id')
+  .eq('practitioner_id', selectedPractitionerId)
+  .eq('service_id', selectedServiceId)
+  .single()
+
+if (!hasServiceAccess) {
+  throw new Error("該老師不提供此課程")
+}
+```
+
 ### 與預約頁面的整合
 
-**場景**：編輯從業人員名稱後，Calendar 和 Gantt 視圖應自動更新
+**場景**：編輯從業人員名稱或課程指派後，Calendar 和 Gantt 視圖應自動更新
 
 ```typescript
 // 實時同步
@@ -410,10 +581,13 @@ useEffect(() => {
 ### ✅ In Scope
 
 - 從業人員 CRUD 操作（新增、編輯、刪除）
+- **課程指派管理**：多選課程、課程聯動載入、關聯維護
+- **課程驗證**：預約時驗證老師是否有提供該課程
 - 休假時間管理（新增、編輯、刪除休假）
 - 休假衝突驗證（防止重疊預約）
 - 從業人員列表搜尋和篩選
 - RLS 權限管理（管理員限定）
+- 與課程管理模組的整合（動態課程載入、級聯刪除）
 
 ### ❌ Out of Scope（第一版）
 
@@ -433,26 +607,59 @@ useEffect(() => {
 
 ## 🚀 實施計劃
 
-### Phase 1：基礎設施與後端（2-3 天）
+### Phase 1：基礎設施與後端（3-4 天）
 
-- [ ] 建立 `practitioners` 和 `practitioner_leaves` 表
+**資料層**：
+- [ ] 建立 `practitioners` 表
+- [ ] 建立 `practitioner_leaves` 表（休假時間）
+- [ ] 建立 `practitioner_services` 表（多對多課程關聯）
 - [ ] 設計和實施 RLS 政策
-- [ ] 開發 `/api/practitioners/*` 端點（CRUD）
-- [ ] 開發 `/api/practitioners/:id/leaves/*` 端點（CRUD）
-- [ ] 實作預約驗證邏輯（檢查休假）
 
-### Phase 2：前端 UI（2-3 天）
+**API 層**：
+- [ ] 開發 `/api/practitioners` 端點（CRUD）
+- [ ] 開發 `/api/practitioners/:id/services` 端點（課程管理）
+- [ ] 開發 `/api/practitioners/:id/leaves/*` 端點（休假 CRUD）
+- [ ] 開發課程聯動：`GET /api/services?status=active`（載入課程清單）
 
+**驗證邏輯**：
+- [ ] 實作預約驗證：檢查老師是否在休假
+- [ ] 實作課程驗證：檢查老師是否有提供該課程
+- [ ] 課程被下架時，自動移除老師指派
+- [ ] 課程被刪除時，級聯清理老師關聯（於 RLS 層實施）
+
+### Phase 2：前端 UI（3-4 天）
+
+**主組件**：
 - [ ] 創建 `PractitionerManagement` 容器組件
-- [ ] 構建 `PractitionerList` 列表視圖
+- [ ] 構建 `PractitionerList` 列表視圖（含快速操作）
+
+**表單與服務選擇**：
 - [ ] 構建 `PractitionerForm` 新增/編輯表單
+- [ ] 實現課程清單動態載入（從課程管理 API）
+- [ ] 構建課程多選 UI（勾選框、已選視覺化）
+- [ ] 課程驗證：確保至少選一個課程
+
+**其他功能**：
 - [ ] 構建 `PractitionerLeaveManager` 日曆管理
 - [ ] 集成 Realtime 訂閱，實現實時更新
+- [ ] 實現課程清單載入失敗時的降級方案
 
-### Phase 3：整合與測試（1-2 天）
+### Phase 3：整合與測試（2-3 天）
 
+**整合**：
 - [ ] 整合到 BookingManagement 主頁面
+- [ ] 整合課程管理模組（動態課程載入）
+- [ ] 整合預約表單（課程篩選、課程驗證）
+
+**功能測試**：
+- [ ] 測試課程選擇和指派
+- [ ] 測試課程清單動態更新（新增/下架課程）
+- [ ] 測試級聯刪除（課程被刪除時）
+- [ ] 測試預約課程驗證
+
+**端到端測試**：
 - [ ] 測試休假衝突驗證
+- [ ] 測試課程衝突驗證（預約不存在的課程）
 - [ ] 測試跨視圖實時同步
 - [ ] 使用者驗收測試（UAT）
 
@@ -462,7 +669,7 @@ useEffect(() => {
 - [ ] 文檔完善
 - [ ] 生產環境部署
 
-**總耗時**：約 5-9 工作天
+**總耗時**：約 8-13 工作天（包含課程管理整合）
 
 ---
 
@@ -470,11 +677,24 @@ useEffect(() => {
 
 ### 功能驗收
 
+**基本 CRUD**：
 - [ ] 可新增從業人員，立即出現在列表
 - [ ] 可編輯從業人員，預約頁面同步更新
 - [ ] 可刪除從業人員，預約頁面不再顯示
-- [ ] 可設定休假時間，休假期間無法預約
 - [ ] 可搜尋從業人員by姓名
+
+**課程管理**：
+- [ ] 新增老師時，課程清單正確載入
+- [ ] 必須至少選一個課程，否則禁止保存
+- [ ] 已選課程在表單中視覺化標示
+- [ ] 編輯老師時，已指派課程被正確預填
+- [ ] 修改課程指派後，預約頁面課程選單實時更新
+- [ ] 課程被下架時，自動從老師指派中移除
+- [ ] 課程被刪除時，級聯清理老師關聯
+
+**休假管理**：
+- [ ] 可設定休假時間，休假期間無法預約
+- [ ] 可編輯和刪除休假記錄
 
 ### 效能驗收
 
