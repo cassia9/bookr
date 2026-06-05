@@ -566,105 +566,106 @@ export default function BookingsPage() {
   }, [storeCloseTime])
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-screen bg-slate-50">
       {/* ── Main area ── */}
-      <div className={cn('flex-1 flex flex-col p-6 min-w-0 transition-all', selectedEvent && 'pr-3')}>
+      <div className={cn('flex-1 flex flex-col min-w-0 transition-all', selectedEvent && 'pr-3')}>
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-5">
+        <div className="bg-white px-6 py-6 shadow-md border-b border-slate-200">
+          <div className="flex items-center justify-between">
+            {/* Left: title + all view controls */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-4xl font-bold text-text-primary flex items-center gap-2.5">
+                <CalendarRange size={24} strokeWidth={1.5} className="text-indigo-500" />
+                預約管理
+              </h1>
 
-          {/* Left: title + all view controls */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2.5">
-              <CalendarRange size={24} strokeWidth={1.5} className="text-indigo-500" />
-              預約管理
-            </h1>
+              {/* Page mode toggle */}
+              <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm gap-1">
+                {(['calendar', 'gantt'] as PageMode[]).map(m => (
+                  <button key={m}
+                    onClick={() => { setPageMode(m); setSelectedEvent(null) }}
+                    className={cn('px-4 py-1.5 text-sm font-medium rounded-xl transition-all',
+                      pageMode === m ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50')}>
+                    {m === 'calendar' ? '行事曆' : '甘特圖'}
+                  </button>
+                ))}
+              </div>
 
-            {/* Page mode toggle */}
-            <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm gap-1">
-              {(['calendar', 'gantt'] as PageMode[]).map(m => (
-                <button key={m}
-                  onClick={() => { setPageMode(m); setSelectedEvent(null) }}
-                  className={cn('px-4 py-1.5 text-sm font-medium rounded-xl transition-all',
-                    pageMode === m ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50')}>
-                  {m === 'calendar' ? '行事曆' : '甘特圖'}
-                </button>
-              ))}
+              {/* Calendar: month/week/day + date nav */}
+              {pageMode === 'calendar' && (
+                <>
+                  <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm gap-1">
+                    {(['month', 'week', 'day'] as CalViewMode[]).map(v => (
+                      <button key={v} onClick={() => setCalView(v)}
+                        className={cn('px-3 py-1.5 text-sm font-medium rounded-xl transition-all',
+                          calView === v ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50')}>
+                        {v === 'month' ? '月' : v === 'week' ? '週' : '日'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => calNavigate(-1)}
+                      className="w-8 h-8 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-500 transition-colors">
+                      <ChevronLeft size={16} strokeWidth={2} />
+                    </button>
+                    <span className="text-sm font-medium text-slate-700 min-w-[160px] text-center select-none">
+                      {calTitle}
+                    </span>
+                    <button onClick={() => calNavigate(1)}
+                      className="w-8 h-8 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-500 transition-colors">
+                      <ChevronRight size={16} strokeWidth={2} />
+                    </button>
+                  </div>
+                  <button onClick={() => setDate(new Date())}
+                    className="text-sm px-3 py-1.5 rounded-2xl bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-50 transition-colors font-medium">
+                    今天
+                  </button>
+                </>
+              )}
+
+              {/* Gantt: day/week + date nav */}
+              {pageMode === 'gantt' && (
+                <>
+                  <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm gap-1">
+                    {(['week', 'day'] as GanttMode[]).map(m => (
+                      <button key={m} onClick={() => setGanttMode(m)}
+                        className={cn('px-3 py-1.5 text-sm font-medium rounded-xl transition-all',
+                          ganttMode === m ? 'bg-black text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50')}>
+                        {m === 'day' ? '當天' : '當週'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => ganttNavigate(-1)}
+                      className="w-8 h-8 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-500 transition-colors">
+                      <ChevronLeft size={16} strokeWidth={2} />
+                    </button>
+                    <span className="text-sm font-medium text-slate-700 min-w-[180px] text-center select-none">
+                      {ganttTitleDate}
+                    </span>
+                    <button onClick={() => ganttNavigate(1)}
+                      className="w-8 h-8 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-500 transition-colors">
+                      <ChevronRight size={16} strokeWidth={2} />
+                    </button>
+                  </div>
+                  <button onClick={() => setDate(new Date())}
+                    className="text-sm px-3 py-1.5 rounded-2xl bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-50 transition-colors font-medium">
+                    今天
+                  </button>
+                </>
+              )}
             </div>
 
-            {/* Calendar: month/week/day + date nav */}
-            {pageMode === 'calendar' && (
-              <>
-                <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm gap-1">
-                  {(['month', 'week', 'day'] as CalViewMode[]).map(v => (
-                    <button key={v} onClick={() => setCalView(v)}
-                      className={cn('px-3 py-1.5 text-sm font-medium rounded-xl transition-all',
-                        calView === v ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50')}>
-                      {v === 'month' ? '月' : v === 'week' ? '週' : '日'}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => calNavigate(-1)}
-                    className="w-8 h-8 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-500 transition-colors">
-                    <ChevronLeft size={16} strokeWidth={2} />
-                  </button>
-                  <span className="text-sm font-medium text-slate-700 min-w-[160px] text-center select-none">
-                    {calTitle}
-                  </span>
-                  <button onClick={() => calNavigate(1)}
-                    className="w-8 h-8 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-500 transition-colors">
-                    <ChevronRight size={16} strokeWidth={2} />
-                  </button>
-                </div>
-                <button onClick={() => setDate(new Date())}
-                  className="text-sm px-3 py-1.5 rounded-2xl bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-50 transition-colors font-medium">
-                  今天
-                </button>
-              </>
-            )}
-
-            {/* Gantt: day/week + date nav */}
-            {pageMode === 'gantt' && (
-              <>
-                <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm gap-1">
-                  {(['week', 'day'] as GanttMode[]).map(m => (
-                    <button key={m} onClick={() => setGanttMode(m)}
-                      className={cn('px-3 py-1.5 text-sm font-medium rounded-xl transition-all',
-                        ganttMode === m ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50')}>
-                      {m === 'day' ? '當天' : '當週'}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => ganttNavigate(-1)}
-                    className="w-8 h-8 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-500 transition-colors">
-                    <ChevronLeft size={16} strokeWidth={2} />
-                  </button>
-                  <span className="text-sm font-medium text-slate-700 min-w-[180px] text-center select-none">
-                    {ganttTitleDate}
-                  </span>
-                  <button onClick={() => ganttNavigate(1)}
-                    className="w-8 h-8 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-500 transition-colors">
-                    <ChevronRight size={16} strokeWidth={2} />
-                  </button>
-                </div>
-                <button onClick={() => setDate(new Date())}
-                  className="text-sm px-3 py-1.5 rounded-2xl bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-50 transition-colors font-medium">
-                  今天
-                </button>
-              </>
-            )}
+            {/* Right: new booking */}
+            <Button onClick={openNewBooking}>
+              <Plus size={16} strokeWidth={2} /> 新增預約
+            </Button>
           </div>
-
-          {/* Right: new booking */}
-          <Button onClick={openNewBooking}>
-            <Plus size={16} strokeWidth={2} /> 新增預約
-          </Button>
         </div>
 
         {/* ── Content wrapper（loading bar 置於此層）── */}
-        <div className="relative flex-1 flex flex-col min-h-0">
+        <div className="relative flex-1 flex flex-col min-h-0 p-6">
 
           {/* Thin loading bar */}
           <div
@@ -678,7 +679,7 @@ export default function BookingsPage() {
 
         {/* ── Calendar mode ── */}
         {pageMode === 'calendar' && (
-          <div className="flex-1 bg-white rounded-3xl border border-slate-100 shadow-md overflow-hidden">
+          <div className="flex-1 bg-white rounded-3xl border-0 shadow-lg overflow-hidden">
             <DnDCalendar
               localizer={localizer}
               events={allCalEvents}
@@ -716,7 +717,7 @@ export default function BookingsPage() {
 
         {/* ── Gantt Day view ── */}
         {pageMode === 'gantt' && ganttMode === 'day' && (
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-md overflow-hidden flex-1">
+          <div className="bg-white rounded-3xl border-0 shadow-lg overflow-hidden flex-1">
             <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)]">
               <table className="border-collapse" style={{ minWidth: totalGanttWidth + 160 }}>
                 <thead className="sticky top-0 z-10 bg-white">
@@ -892,7 +893,7 @@ export default function BookingsPage() {
 
         {/* ── Gantt Week view ── */}
         {pageMode === 'gantt' && ganttMode === 'week' && (
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-md overflow-hidden flex-1">
+          <div className="bg-white rounded-3xl border-0 shadow-lg overflow-hidden flex-1">
             <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)]">
               <table className="border-collapse w-full">
                 <thead className="sticky top-0 z-10 bg-white">
@@ -1054,8 +1055,8 @@ export default function BookingsPage() {
 
       {/* ── Detail sidebar ── */}
       {selectedEvent && (
-        <div className="w-80 border-l border-slate-100 bg-white flex flex-col shadow-lg">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <div className="w-80 border-l border-slate-200 bg-white flex flex-col shadow-lg">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
             <h2 className="text-sm font-semibold text-slate-900">預約詳情</h2>
             <button onClick={() => setSelectedEvent(null)}
               className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
