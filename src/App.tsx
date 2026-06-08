@@ -12,6 +12,7 @@ import SettingsPage from './pages/admin/SettingsPage'
 import InviteMemberPage from './pages/admin/InviteMemberPage'
 import MembersPage from './pages/admin/MembersPage'
 import AcceptInvitationPage from './pages/auth/AcceptInvitationPage'
+import ComponentShowcase from './pages/dev/ComponentShowcase'
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
+          <Route path="/dev/components" element={<ComponentShowcase />} />
 
           <Route
             path="/admin"
