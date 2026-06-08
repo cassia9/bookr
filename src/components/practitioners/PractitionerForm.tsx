@@ -228,7 +228,7 @@ export default function PractitionerForm({
               <label className="block text-sm font-medium text-slate-900 mb-3">
                 識別顏色 <span className="text-red-500">*</span>
               </label>
-              <div className="grid grid-cols-4 gap-2.5">
+              <div className="flex flex-wrap gap-2">
                 {PRACTITIONER_COLORS.map((color) => (
                   <button
                     key={color.hex}
@@ -237,10 +237,11 @@ export default function PractitionerForm({
                       setFormData({ ...formData, color_hex: color.hex })
                     }
                     disabled={loading}
-                    className="relative group transition-transform duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="relative group transition-transform duration-200 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={color.name}
                   >
                     <div
-                      className={`w-full aspect-square rounded-lg transition-all duration-200 ${
+                      className={`w-9 h-9 rounded-lg transition-all duration-200 ${
                         formData.color_hex === color.hex
                           ? 'ring-2 ring-offset-2 ring-black shadow-md'
                           : 'border-2 border-slate-200 shadow-sm hover:shadow-md'
@@ -249,11 +250,11 @@ export default function PractitionerForm({
                     >
                       {formData.color_hex === color.hex && (
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <Check className="w-5 h-5 text-white drop-shadow-lg" strokeWidth={3} />
+                          <Check className="w-4 h-4 text-white drop-shadow-lg" strokeWidth={3} />
                         </div>
                       )}
                     </div>
-                    <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                       {color.name}
                     </div>
                   </button>
