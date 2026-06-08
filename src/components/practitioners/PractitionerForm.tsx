@@ -12,6 +12,8 @@ import Alert from '@/components/ui/feedback/Alert'
 interface Service {
   id: string
   name: string
+  duration_minutes: number
+  price: number
 }
 
 interface PractitionerFormProps {
@@ -64,8 +66,9 @@ export default function PractitionerForm({
     try {
       const { data, error } = await supabase
         .from('services')
-        .select('id, name')
-        .eq('is_archived', false)
+        .select('id, name, duration_minutes, price')
+        .eq('active', true)
+        .is('deleted_at', null)
         .order('name')
 
       if (error) throw error
@@ -267,15 +270,32 @@ export default function PractitionerForm({
                 message="暫無可用課程，請先建立課程"
               />
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {services.map((service) => (
-                  <Checkbox
+                  <div
                     key={service.id}
-                    label={service.name}
-                    checked={formData.service_ids.includes(service.id)}
-                    onChange={() => handleServiceToggle(service.id)}
-                    disabled={loading}
-                  />
+                    className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${
+                      formData.service_ids.includes(service.id)
+                        ? 'border-black bg-black/5'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                    onClick={() => !loading && handleServiceToggle(service.id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.service_ids.includes(service.id)}
+                      onChange={() => handleServiceToggle(service.id)}
+                      disabled={loading}
+                      className="mt-1 w-5 h-5 cursor-pointer disabled:opacity-50"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-slate-900">{service.name}</div>
+                      <div className="text-sm text-slate-500 mt-1 flex items-center gap-3">
+                        <span>⏱️ {service.duration_minutes} 分鐘</span>
+                        <span>💰 ¥{service.price.toLocaleString('zh-CN')}</span>
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
