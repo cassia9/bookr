@@ -289,6 +289,107 @@ const { data, error } = await query.order('start_time', { ascending: true })
 
 ---
 
+### 規則 🔟：功能完成驗證流程 (Quality Check)
+
+**每次完成功能、頁面或組件開發後，必須執行 `/qc` 流程**
+
+這是**強制性的品質檢查**，用來防止白屏或代碼損壞問題。
+
+**完整流程**：
+
+```
+功能開發完成
+  ↓
+執行 /qc
+  ↓
+Phase 1: VERIFY (應用是否能跑?)
+├─ 運行應用檢查
+├─ 檢測白屏/模組錯誤
+└─ 驗證基本功能
+  ↓
+✅ 通過 → 進行 Phase 2
+❌ 失敗 → 停止，修復代碼，重新 /qc
+  ↓
+Phase 2: CODE-REVIEW (代碼品質)
+├─ 語法檢查
+├─ 架構評估
+└─ 給出改進建議
+  ↓
+報告 + Git 提示
+  ↓
+git add & git commit
+```
+
+**何時執行 /qc**：
+
+✅ **必須執行**:
+- 完成一個功能模塊
+- 完成一個前端頁面
+- 完成一個新組件
+- 修復一個 bug
+- 在提交代碼之前
+
+❌ **不需執行**:
+- 正在進行中的代碼（還未完成）
+- 單純看應用效果（直接用 `/verify`）
+
+**檢查清單**：
+
+- [ ] 運行 `/qc`
+- [ ] Phase 1 VERIFY 通過（無白屏/模組錯誤）
+- [ ] Phase 2 CODE-REVIEW 完成
+- [ ] 查看報告和建議
+- [ ] 執行 `git commit`
+
+**範例流程**：
+
+```bash
+# 1. 完成功能開發
+# （修改 1-3 個文件）
+
+# 2. 執行品質檢查
+/qc
+
+# 3. 檢查結果
+✅ VERIFY: Pass
+✅ CODE-REVIEW: Pass (2 suggestions)
+📝 Ready to commit
+
+# 4. 提交代碼
+git add src/components/MyComponent.tsx
+git commit -m "新增 MyComponent 組件"
+```
+
+**失敗時的處理**：
+
+```bash
+# 如果 /qc 失敗
+
+# 1. 查看失敗信息
+❌ VERIFY: Fail
+   Error: White screen detected
+   Module: Card.tsx not exported
+
+# 2. 修復問題
+# - 查看錯誤信息
+# - 修改相應代碼
+
+# 3. 重新執行 /qc
+/qc
+
+# 4. 通過後再提交
+git commit ...
+```
+
+**重要事項**：
+
+- 🚫 **禁止在 /qc 失敗後提交代碼**
+- 🔄 **一直 /qc 直到通過**
+- 📝 **記錄每次檢查結果**（可選，用於回顧）
+- ⚠️ **如果 /qc 失敗，先修復再提交**
+
+---
+
 ## 📋 現有資源清單
 
 ### 安全相關
@@ -379,5 +480,6 @@ SELECT is_admin();
 
 ---
 
-**最後更新**: 2026-06-03  
-**維護者**: Development Team
+**最後更新**: 2026-06-08  
+**維護者**: Development Team  
+**新增**: 規則 🔟 - 功能完成驗證流程 (/qc)
