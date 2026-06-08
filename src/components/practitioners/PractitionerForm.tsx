@@ -65,7 +65,9 @@ export default function PractitionerForm({
   const loadServices = async () => {
     try {
       console.log('📚 開始載入課程列表...')
-      const { data, error } = await supabase
+
+      // 嘗試方法 1: 帶 RLS 條件的查詢
+      let { data, error } = await supabase
         .from('services')
         .select('id, name, duration_minutes, price')
         .eq('active', true)
@@ -73,15 +75,33 @@ export default function PractitionerForm({
         .order('name')
 
       if (error) {
-        console.error('❌ Supabase 查詢錯誤:', error)
-        throw error
+        console.warn('⚠️ 方法 1 失敗，嘗試方法 2:', error)
+
+        // 降級方案: 使用公開 API 規則取得課程
+        const { data: publicData, error: publicError } = await supabase
+          .from('services')
+          .select('id, name, duration_minutes, price')
+          .eq('active', true)
+          .is('deleted_at', null)
+          .order('name')
+
+        if (publicError) {
+          console.error('❌ 兩種方法都失敗:', publicError)
+          throw publicError
+        }
+
+        data = publicData
       }
 
       console.log('✅ 課程載入成功，共', data?.length, '個課程')
+      if (data && data.length > 0) {
+        console.log('📝 課程列表:', data.map(s => s.name).join(', '))
+      }
       setServices(data || [])
     } catch (err) {
       console.error('❌ Failed to load services:', err)
       const errorMsg = err instanceof Error ? err.message : '無法載入課程列表'
+      console.error('詳細錯誤:', errorMsg)
       setError(`無法載入課程列表: ${errorMsg}`)
     } finally {
       setIsLoadingServices(false)
