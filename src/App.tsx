@@ -5,8 +5,8 @@ import ProtectedRoute from './components/layout/ProtectedRoute'
 import AdminLayout from './components/layout/AdminLayout'
 import BookingManagement from './pages/admin/BookingManagement'
 import PractitionerManagement from './pages/admin/PractitionerManagement'
+import ServicesPage from './pages/admin/ServicesPage'
 // import ClientsPage from './pages/admin/ClientsPage'
-// import ServicesPage from './pages/admin/ServicesPage'
 // import DashboardPage from './pages/admin/DashboardPage'
 // import SettingsPage from './pages/admin/SettingsPage'
 // import InviteMemberPage from './pages/admin/InviteMemberPage'
@@ -32,6 +32,7 @@ export default function App() {
             <Route index element={<Navigate to="bookings" replace />} />
             <Route path="bookings" element={<BookingManagement />} />
             <Route path="practitioners" element={<PractitionerManagement />} />
+            <Route path="services" element={<ServicesPage />} />
             {/* <Route path="practitioners" element={<PractitionerManagement />} />
             <Route path="calendar" element={<Navigate to="/admin/bookings" replace />} />
             <Route path="gantt" element={<Navigate to="/admin/bookings" replace />} />
