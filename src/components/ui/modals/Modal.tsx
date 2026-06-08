@@ -76,7 +76,7 @@ export default function Modal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* 標題欄 */}
-        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-5 flex items-start justify-between">
+        <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-5 flex items-start justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">
               {title}
