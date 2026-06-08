@@ -1,4 +1,4 @@
-import { X, Phone, Mail, Linkedin } from 'lucide-react'
+import { X, Phone, Mail, Globe } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
 interface Practitioner {
@@ -184,9 +184,9 @@ export default function PractitionerDrawer({ isOpen, practitioner, onClose }: Pr
                 </a>
               )}
               <button className="w-full flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors duration-200">
-                <Linkedin size={20} className="text-slate-600 flex-shrink-0" strokeWidth={1.5} />
+                <Globe size={20} className="text-slate-600 flex-shrink-0" strokeWidth={1.5} />
                 <div className="text-left">
-                  <p className="text-sm text-slate-600">LinkedIn</p>
+                  <p className="text-sm text-slate-600">個人網站</p>
                   <p className="text-sm font-medium text-slate-900">{practitioner.name}</p>
                 </div>
               </button>
