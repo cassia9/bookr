@@ -9,6 +9,7 @@ import Button from '../../components/ui/Button'
 import Toggle from '../../components/ui/Toggle'
 import DatePicker from '../../components/ui/DatePicker'
 import TimePicker from '../../components/ui/TimePicker'
+import PractitionerDrawer from '../../components/PractitionerDrawer'
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -46,6 +47,10 @@ export default function PractitionersPage() {
   const [blockSaving,        setBlockSaving]          = useState(false)
   const [blockErrors,        setBlockErrors]          = useState<Record<string, string>>({})
   const [deleteBlockTarget,  setDeleteBlockTarget]    = useState<PractitionerBlock | null>(null)
+
+  // Drawer state
+  const [selectedPractitioner, setSelectedPractitioner] = useState<Practitioner | null>(null)
+  const [showDrawer, setShowDrawer] = useState(false)
 
   useEffect(() => { fetchPractitioners() }, [])
 
@@ -219,6 +224,16 @@ export default function PractitionersPage() {
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => {
+                          setSelectedPractitioner(p)
+                          setShowDrawer(true)
+                        }}
+                        title="查看詳情"
+                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-colors"
+                      >
+                        <UserCircle size={15} strokeWidth={1.5} />
+                      </button>
                       <button
                         onClick={() => openBlocks(p)}
                         title="管理不可預約時段"
@@ -437,6 +452,21 @@ export default function PractitionersPage() {
           <Button variant="danger" className="flex-1" onClick={handleDeleteBlock}>刪除</Button>
         </div>
       </Modal>
+
+      {/* ── Practitioner Details Drawer ── */}
+      {selectedPractitioner && (
+        <PractitionerDrawer
+          isOpen={showDrawer}
+          practitioner={{
+            id: selectedPractitioner.id,
+            name: selectedPractitioner.full_name,
+            profession: selectedPractitioner.title || '從業人員',
+            phone: selectedPractitioner.phone,
+            email: selectedPractitioner.email,
+          }}
+          onClose={() => setShowDrawer(false)}
+        />
+      )}
     </div>
   )
 }
