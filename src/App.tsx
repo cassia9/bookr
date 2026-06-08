@@ -1,18 +1,17 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './lib/auth'
+import LoginPage from './pages/LoginPage'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import AdminLayout from './components/layout/AdminLayout'
-import LoginPage from './pages/LoginPage'
 import BookingManagement from './pages/admin/BookingManagement'
 import PractitionerManagement from './pages/admin/PractitionerManagement'
-import ClientsPage from './pages/admin/ClientsPage'
-import ServicesPage from './pages/admin/ServicesPage'
-import DashboardPage from './pages/admin/DashboardPage'
-import SettingsPage from './pages/admin/SettingsPage'
-import InviteMemberPage from './pages/admin/InviteMemberPage'
-import MembersPage from './pages/admin/MembersPage'
+// import ClientsPage from './pages/admin/ClientsPage'
+// import ServicesPage from './pages/admin/ServicesPage'
+// import DashboardPage from './pages/admin/DashboardPage'
+// import SettingsPage from './pages/admin/SettingsPage'
+// import InviteMemberPage from './pages/admin/InviteMemberPage'
+// import MembersPage from './pages/admin/MembersPage'
 import AcceptInvitationPage from './pages/auth/AcceptInvitationPage'
-import ComponentShowcase from './pages/dev/ComponentShowcase'
 
 export default function App() {
   return (
@@ -21,7 +20,6 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
-          <Route path="/dev/components" element={<ComponentShowcase />} />
 
           <Route
             path="/admin"
@@ -34,7 +32,7 @@ export default function App() {
             <Route index element={<Navigate to="bookings" replace />} />
             <Route path="bookings" element={<BookingManagement />} />
             <Route path="practitioners" element={<PractitionerManagement />} />
-            {/* 舊路由重定向 */}
+            {/* <Route path="practitioners" element={<PractitionerManagement />} />
             <Route path="calendar" element={<Navigate to="/admin/bookings" replace />} />
             <Route path="gantt" element={<Navigate to="/admin/bookings" replace />} />
             <Route path="clients" element={<ClientsPage />} />
@@ -54,7 +52,7 @@ export default function App() {
               <ProtectedRoute adminOnly>
                 <SettingsPage />
               </ProtectedRoute>
-            } />
+            } /> */}
           </Route>
 
           <Route path="*" element={<Navigate to="/admin" replace />} />
