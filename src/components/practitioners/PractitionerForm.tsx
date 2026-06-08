@@ -3,7 +3,6 @@ import { Check } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { callPractitionersAPI } from '@/lib/practitioner-api'
 import Button from '@/components/ui/buttons/Button'
-import { Card, CardBody } from '@/components/ui/cards/Card'
 import Modal from '@/components/ui/modals/Modal'
 import FormField from '@/components/ui/forms/FormField'
 import Input from '@/components/ui/forms/Input'
@@ -194,120 +193,114 @@ export default function PractitionerForm({
         )}
 
         {/* 基本信息卡片 */}
-        <Card variant="default">
-          <CardBody className="space-y-5">
-            <FormField
-              label="老師名字"
-              required
+        <div className="border border-slate-200 rounded-lg bg-white p-5 space-y-5">
+          <FormField
+            label="老師名字"
+            required
+            disabled={loading}
+          >
+            <Input
+              type="text"
+              value={formData.name}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
+              placeholder="例：林老師"
               disabled={loading}
-            >
-              <Input
-                type="text"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                placeholder="例：林老師"
-                disabled={loading}
-              />
-            </FormField>
+            />
+          </FormField>
 
-            {/* 識別顏色 */}
-            <div>
-              <label className="block text-sm font-medium text-slate-900 mb-3">
-                識別顏色 <span className="text-red-500">*</span>
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {PRACTITIONER_COLORS.map((color) => (
-                  <button
-                    key={color.hex}
-                    type="button"
-                    onClick={() =>
-                      setFormData({ ...formData, color_hex: color.hex })
-                    }
-                    disabled={loading}
-                    className="relative group transition-transform duration-200 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={color.name}
+          {/* 識別顏色 */}
+          <div>
+            <label className="block text-sm font-medium text-slate-900 mb-3">
+              識別顏色 <span className="text-red-500">*</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {PRACTITIONER_COLORS.map((color) => (
+                <button
+                  key={color.hex}
+                  type="button"
+                  onClick={() =>
+                    setFormData({ ...formData, color_hex: color.hex })
+                  }
+                  disabled={loading}
+                  className="relative group transition-transform duration-200 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={color.name}
+                >
+                  <div
+                    className={`w-9 h-9 rounded-lg transition-all duration-200 ${
+                      formData.color_hex === color.hex
+                        ? 'ring-2 ring-offset-2 ring-black shadow-md'
+                        : 'border-2 border-slate-200 shadow-sm hover:shadow-md'
+                    }`}
+                    style={{ backgroundColor: color.hex }}
                   >
-                    <div
-                      className={`w-9 h-9 rounded-lg transition-all duration-200 ${
-                        formData.color_hex === color.hex
-                          ? 'ring-2 ring-offset-2 ring-black shadow-md'
-                          : 'border-2 border-slate-200 shadow-sm hover:shadow-md'
-                      }`}
-                      style={{ backgroundColor: color.hex }}
-                    >
-                      {formData.color_hex === color.hex && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Check className="w-4 h-4 text-white drop-shadow-lg" strokeWidth={3} />
-                        </div>
-                      )}
-                    </div>
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                      {color.name}
-                    </div>
-                  </button>
-                ))}
-              </div>
+                    {formData.color_hex === color.hex && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Check className="w-4 h-4 text-white drop-shadow-lg" strokeWidth={3} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                    {color.name}
+                  </div>
+                </button>
+              ))}
             </div>
-          </CardBody>
-        </Card>
+          </div>
+        </div>
 
         {/* 課程指派卡片 */}
-        <Card variant="default">
-          <CardBody className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-900 mb-3">
-                可預約課程 <span className="text-red-500">*</span>
-              </label>
-              {isLoadingServices ? (
-                <div className="flex items-center justify-center py-6">
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
-                  <span className="text-sm text-slate-600 ml-2">載入課程中...</span>
-                </div>
-              ) : services.length === 0 ? (
-                <Alert
-                  type="info"
-                  message="暫無可用課程，請先建立課程"
-                />
-              ) : (
-                <div className="space-y-2">
-                  {services.map((service) => (
-                    <Checkbox
-                      key={service.id}
-                      label={service.name}
-                      checked={formData.service_ids.includes(service.id)}
-                      onChange={() => handleServiceToggle(service.id)}
-                      disabled={loading}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </CardBody>
-        </Card>
+        <div className="border border-slate-200 rounded-lg bg-white p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-900 mb-3">
+              可預約課程 <span className="text-red-500">*</span>
+            </label>
+            {isLoadingServices ? (
+              <div className="flex items-center justify-center py-6">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
+                <span className="text-sm text-slate-600 ml-2">載入課程中...</span>
+              </div>
+            ) : services.length === 0 ? (
+              <Alert
+                type="info"
+                message="暫無可用課程，請先建立課程"
+              />
+            ) : (
+              <div className="space-y-2">
+                {services.map((service) => (
+                  <Checkbox
+                    key={service.id}
+                    label={service.name}
+                    checked={formData.service_ids.includes(service.id)}
+                    onChange={() => handleServiceToggle(service.id)}
+                    disabled={loading}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* 簡介卡片 */}
-        <Card variant="default">
-          <CardBody>
-            <FormField
-              label="簡介"
-              hint="選填 - 輸入老師的簡短介紹或專長"
+        <div className="border border-slate-200 rounded-lg bg-white p-5">
+          <FormField
+            label="簡介"
+            hint="選填 - 輸入老師的簡短介紹或專長"
+            disabled={loading}
+          >
+            <textarea
+              value={formData.bio}
+              onChange={(e) =>
+                setFormData({ ...formData, bio: e.target.value })
+              }
               disabled={loading}
-            >
-              <textarea
-                value={formData.bio}
-                onChange={(e) =>
-                  setFormData({ ...formData, bio: e.target.value })
-                }
-                disabled={loading}
-                placeholder="例：擅長運動傷害、肌筋膜放鬆..."
-                rows={3}
-                className="w-full px-4 py-2.5 border border-slate-200 bg-white rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-            </FormField>
-          </CardBody>
-        </Card>
+              placeholder="例：擅長運動傷害、肌筋膜放鬆..."
+              rows={3}
+              className="w-full px-4 py-2.5 border border-slate-200 bg-white rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </FormField>
+        </div>
 
         {/* 按鈕組 */}
         <div className="flex gap-3 pt-4 border-t border-slate-200">

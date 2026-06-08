@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
 import { toast } from '@/components/ui/Snackbar'
 
 interface InvitationData {
@@ -185,7 +184,7 @@ export default function AcceptInvitationPage() {
   if (pageState === 'invalid') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <Card className="max-w-sm w-full p-8 border-l-4 border-red-500 bg-red-50">
+        <div className="max-w-sm w-full p-8 border border-red-200 rounded-lg bg-red-50">
           <h2 className="text-lg font-semibold text-red-900 mb-2">
             邀請連結無效或已過期
           </h2>
@@ -198,7 +197,7 @@ export default function AcceptInvitationPage() {
           >
             返回登入
           </button>
-        </Card>
+        </div>
       </div>
     )
   }
@@ -206,7 +205,7 @@ export default function AcceptInvitationPage() {
   if (pageState === 'success') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <Card className="max-w-sm w-full p-8 text-center">
+        <div className="max-w-sm w-full p-8 border border-gray-200 rounded-lg bg-white text-center">
           <div className="mb-4">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full">
               <span className="text-3xl">✅</span>
@@ -221,7 +220,7 @@ export default function AcceptInvitationPage() {
           <div className="animate-pulse text-gray-500 text-sm">
             (2 秒後自動跳轉)
           </div>
-        </Card>
+        </div>
       </div>
     )
   }
@@ -229,7 +228,7 @@ export default function AcceptInvitationPage() {
   // pageState === 'valid'
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center px-4 py-12">
-      <Card className="max-w-md w-full p-8">
+      <div className="max-w-md w-full p-8 border border-gray-200 rounded-lg bg-white">
         {/* 邀請標題 */}
         <div className="text-center mb-8">
           <div className="text-4xl mb-2">✨</div>
@@ -388,7 +387,7 @@ export default function AcceptInvitationPage() {
             登入
           </button>
         </p>
-      </Card>
+      </div>
     </div>
   )
 }

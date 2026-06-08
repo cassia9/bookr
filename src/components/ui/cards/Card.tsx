@@ -29,4 +29,5 @@ export const CardFooter = forwardRef((props, ref) => {
 
 CardFooter.displayName = 'CardFooter'
 
+export { Card, CardHeader, CardBody, CardFooter }
 export default Card
