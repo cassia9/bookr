@@ -38,7 +38,7 @@ const sizeClasses = {
  *   size="lg"
  * >
  *   <div className="space-y-4">
- *     {/* 表單內容 */}
+ *     表單內容
  *   </div>
  * </Modal>
  * ```
