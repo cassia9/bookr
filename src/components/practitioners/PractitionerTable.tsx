@@ -18,6 +18,7 @@ interface PractitionerTableProps {
   filterStatus: 'all' | 'active' | 'inactive'
   onEdit: (id: string) => void
   onManageLeaves: (id: string) => void
+  onViewDetails: (practitioner: Practitioner) => void
   onRefresh: () => void
 }
 
@@ -26,6 +27,7 @@ export default function PractitionerTable({
   filterStatus,
   onEdit,
   onManageLeaves,
+  onViewDetails,
   onRefresh,
 }: PractitionerTableProps) {
   const [practitioners, setPractitioners] = useState<Practitioner[]>([])
@@ -277,13 +279,13 @@ export default function PractitionerTable({
                       </button>
                       <button
                         onClick={() => {
-                          // 導航到該老師的預約
-                          window.location.href = `/admin/bookings?practitioner=${practitioner.id}`
+                          onViewDetails(practitioner)
+                          setOpenMenuId(null)
                         }}
                         className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary flex items-center gap-2"
                       >
                         <Eye className="w-4 h-4" />
-                        查看預約
+                        查看詳情
                       </button>
                       <div className="border-t border-slate-200 my-1" />
                       {deleteConfirmId === practitioner.id ? (

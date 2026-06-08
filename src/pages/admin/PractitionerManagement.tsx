@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn'
 import PractitionerTable from '@/components/practitioners/PractitionerTable'
 import PractitionerForm from '@/components/practitioners/PractitionerForm'
 import PractitionerLeaveManager from '@/components/practitioners/PractitionerLeaveManager'
+import PractitionerDrawer from '@/components/PractitionerDrawer'
 import StatsCard from '@/components/ui/StatsCard'
 
 interface PractitionerStats {
@@ -28,6 +29,8 @@ export default function PractitionerManagement() {
     onLeaveToday: 0,
   })
   const [isLoadingStats, setIsLoadingStats] = useState(true)
+  const [showDrawer, setShowDrawer] = useState(false)
+  const [selectedPractitioner, setSelectedPractitioner] = useState<any>(null)
 
   useEffect(() => {
     loadStats()
@@ -231,6 +234,10 @@ export default function PractitionerManagement() {
             filterStatus={filterStatus}
             onEdit={handleEditPractitioner}
             onManageLeaves={handleManageLeaves}
+            onViewDetails={(practitioner) => {
+              setSelectedPractitioner(practitioner)
+              setShowDrawer(true)
+            }}
             onRefresh={loadStats}
           />
         </div>
@@ -259,6 +266,16 @@ export default function PractitionerManagement() {
           }}
         />
       )}
+
+      {/* 從業人員詳情抽屜 */}
+      <PractitionerDrawer
+        isOpen={showDrawer}
+        practitioner={selectedPractitioner}
+        onClose={() => {
+          setShowDrawer(false)
+          setSelectedPractitioner(null)
+        }}
+      />
     </div>
   )
 }
