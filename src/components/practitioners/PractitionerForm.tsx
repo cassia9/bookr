@@ -64,6 +64,7 @@ export default function PractitionerForm({
 
   const loadServices = async () => {
     try {
+      console.log('📚 開始載入課程列表...')
       const { data, error } = await supabase
         .from('services')
         .select('id, name, duration_minutes, price')
@@ -71,11 +72,17 @@ export default function PractitionerForm({
         .is('deleted_at', null)
         .order('name')
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Supabase 查詢錯誤:', error)
+        throw error
+      }
+
+      console.log('✅ 課程載入成功，共', data?.length, '個課程')
       setServices(data || [])
     } catch (err) {
-      console.error('Failed to load services:', err)
-      setError('無法載入課程列表')
+      console.error('❌ Failed to load services:', err)
+      const errorMsg = err instanceof Error ? err.message : '無法載入課程列表'
+      setError(`無法載入課程列表: ${errorMsg}`)
     } finally {
       setIsLoadingServices(false)
     }
