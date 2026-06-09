@@ -126,13 +126,14 @@ export default function PractitionerTable({
   const handleDelete = async (id: string) => {
     try {
       await callPractitionersAPI('delete', { practitioner_id: id })
-      setDeleteConfirmId(null)
+      setDeleteConfirmPractitionerId(null)
+      setDeleteConfirmPractitioner(null)
       setOpenMenuId(null)
       loadPractitioners()
       onRefresh()
     } catch (error) {
       console.error('Failed to delete practitioner:', error)
-      alert('刪除失敗，請稍後重試')
+      alert(`刪除失敗：${error instanceof Error ? error.message : '請稍後重試'}`)
     }
   }
 
