@@ -331,7 +331,7 @@ serve(async (req: Request) => {
         })
       }
 
-      return new Response(null, { status: 204 })
+      return new Response(null, { status: 204, headers: corsHeaders })
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
