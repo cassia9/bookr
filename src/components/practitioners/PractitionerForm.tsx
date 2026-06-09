@@ -122,8 +122,8 @@ export default function PractitionerForm({
       if (error) throw error
 
       setFormData({
-        name: practitioner.name,
-        color_hex: practitioner.color_hex,
+        name: practitioner.full_name,
+        color_hex: practitioner.color,
         bio: practitioner.bio || '',
         photo_url: practitioner.photo_url || '',
         service_ids: [],
