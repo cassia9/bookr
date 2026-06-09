@@ -34,7 +34,8 @@ export default function PractitionerTable({
   const [practitioners, setPractitioners] = useState<Practitioner[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleteConfirmPractitionerId, setDeleteConfirmPractitionerId] = useState<string | null>(null)
+  const [deleteConfirmPractitioner, setDeleteConfirmPractitioner] = useState<Practitioner | null>(null)
   const [menuPosition, setMenuPosition] = useState<'top' | 'bottom'>('bottom')
   const [menuCoords, setMenuCoords] = useState<{ x: number; y: number } | null>(null)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -294,7 +295,7 @@ export default function PractitionerTable({
                   {/* 菜單使用 Portal 渲染 */}
                   {openMenuId === practitioner.id && menuCoords && createPortal(
                     <div
-                      className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50"
+                      className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-40"
                       style={{
                         left: `${menuCoords.x}px`,
                         top: `${menuCoords.y + (menuPosition === 'bottom' ? 8 : -180)}px`,
@@ -331,35 +332,17 @@ export default function PractitionerTable({
                         查看詳情
                       </button>
                       <div className="border-t border-slate-200 my-1" />
-                      {deleteConfirmId === practitioner.id ? (
-                        <>
-                          <button
-                            onClick={() => setDeleteConfirmId(null)}
-                            className="w-full text-left px-4 py-2 text-xs text-text-secondary hover:text-text-primary"
-                          >
-                            取消刪除
-                          </button>
-                          <button
-                            onClick={() =>
-                              handleDelete(practitioner.id)
-                            }
-                            className="w-full text-left px-4 py-2 text-xs bg-danger-light text-danger hover:bg-danger/20 flex items-center gap-2"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            確認刪除
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() =>
-                            setDeleteConfirmId(practitioner.id)
-                          }
-                          className="w-full text-left px-4 py-2 text-sm text-danger hover:bg-danger-light flex items-center gap-2"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          刪除
-                        </button>
-                      )}
+                      <button
+                        onClick={() => {
+                          setDeleteConfirmPractitionerId(practitioner.id)
+                          setDeleteConfirmPractitioner(practitioner)
+                          setOpenMenuId(null)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-danger hover:bg-danger-light flex items-center gap-2 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        刪除
+                      </button>
                     </div>,
                     document.body
                   )}
@@ -371,6 +354,75 @@ export default function PractitionerTable({
         </table>
         </div>
       </div>
+
+      {/* 刪除確認對話框 */}
+      {deleteConfirmPractitionerId && deleteConfirmPractitioner && createPortal(
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => {
+            setDeleteConfirmPractitionerId(null)
+            setDeleteConfirmPractitioner(null)
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 頭部 - 帶顏色條 */}
+            <div className="h-1 bg-gradient-to-r from-danger to-danger/80" />
+
+            {/* 內容區 */}
+            <div className="p-6 space-y-4">
+              {/* 圖標和標題 */}
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-10 h-10 bg-danger/10 rounded-lg flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-danger" strokeWidth={2} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-semibold text-slate-900 tracking-tight">
+                    確定要刪除老師嗎？
+                  </h2>
+                </div>
+              </div>
+
+              {/* 警告文字 */}
+              <div className="bg-danger/5 border border-danger/10 rounded-lg p-3">
+                <p className="text-sm text-slate-700 leading-relaxed">
+                  即將刪除「<span className="font-semibold text-slate-900">{deleteConfirmPractitioner.full_name}</span>」的所有資料，包括預約紀錄關聯。
+                </p>
+                <p className="text-xs text-danger mt-2 font-medium">
+                  ⚠️ 此操作無法撤銷
+                </p>
+              </div>
+            </div>
+
+            {/* 按鈕區 */}
+            <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setDeleteConfirmPractitionerId(null)
+                  setDeleteConfirmPractitioner(null)
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-all duration-150 hover:shadow-sm active:scale-95 cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  handleDelete(deleteConfirmPractitionerId)
+                  setDeleteConfirmPractitionerId(null)
+                  setDeleteConfirmPractitioner(null)
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-danger hover:bg-danger/90 rounded-lg transition-all duration-150 hover:shadow-md active:scale-95 flex items-center gap-2 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" strokeWidth={2} />
+                確認刪除
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
