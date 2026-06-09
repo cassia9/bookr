@@ -119,7 +119,7 @@ serve(async (req: Request) => {
 
       const memberData = adminUserData
 
-      // 建立老師
+      // 建立老師（注意：實際表結構來自 001_initial_schema.sql）
       const { data: practitioner, error: practError } = await supabase
         .from("practitioners")
         .insert({
@@ -153,7 +153,7 @@ serve(async (req: Request) => {
         await supabase.from("practitioners").delete().eq("id", practitioner.id)
         return new Response(
           JSON.stringify({ error: servicesError.message }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
         )
       }
 
@@ -162,7 +162,7 @@ serve(async (req: Request) => {
           data: practitioner,
           message: "Practitioner created successfully",
         }),
-        { status: 201, headers: { "Content-Type": "application/json" } }
+        { status: 201, headers: { "Content-Type": "application/json", ...corsHeaders } }
       )
     }
 
@@ -176,14 +176,14 @@ serve(async (req: Request) => {
       if (!practitioner_id || !Array.isArray(service_ids)) {
         return new Response(
           JSON.stringify({ error: "Missing required fields" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
         )
       }
 
       if (service_ids.length === 0) {
         return new Response(
           JSON.stringify({ error: "At least one service must be assigned" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
         )
       }
 
@@ -246,7 +246,7 @@ serve(async (req: Request) => {
           practitioner_id,
           service_ids,
         }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       )
     }
 
@@ -285,7 +285,7 @@ serve(async (req: Request) => {
             error: "Cannot delete practitioner with pending bookings",
             pending_bookings: bookings.length,
           }),
-          { status: 409, headers: { "Content-Type": "application/json" } }
+          { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } }
         )
       }
 
@@ -307,14 +307,14 @@ serve(async (req: Request) => {
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
     })
   } catch (error) {
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : "Unknown error",
       }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     )
   }
 })
