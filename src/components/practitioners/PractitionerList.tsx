@@ -151,10 +151,10 @@ export default function PractitionerList({
                     <div
                       className="w-3 h-3 rounded-full flex-shrink-0 shadow-sm border border-slate-700"
                       style={{ backgroundColor: practitioner.color }}
-                      title={practitioner.name}
+                      title={practitioner.full_name}
                     />
                     <span className="text-sm font-medium text-slate-50 truncate flex-1">
-                      {practitioner.name}
+                      {practitioner.full_name}
                     </span>
                     {!practitioner.active && (
                       <span className="px-2 py-0.5 bg-slate-700 text-xs text-slate-300 rounded">
