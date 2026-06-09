@@ -38,10 +38,12 @@ export default function PractitionerTable({
   const [deleteConfirmPractitioner, setDeleteConfirmPractitioner] = useState<Practitioner | null>(null)
   const [menuPosition, setMenuPosition] = useState<'top' | 'bottom'>('bottom')
   const [menuCoords, setMenuCoords] = useState<{ x: number; y: number } | null>(null)
+  const [userIsAdmin, setUserIsAdmin] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     loadPractitioners()
+    checkUserRole()
 
     // 訂閱實時更新
     const subscription = supabase
@@ -63,6 +65,23 @@ export default function PractitionerTable({
       subscription.unsubscribe()
     }
   }, [])
+
+  const checkUserRole = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      setUserIsAdmin(data?.role === 'admin')
+    } catch (error) {
+      console.error('Failed to check user role:', error)
+    }
+  }
 
   // 點擊外部關閉菜單
   useEffect(() => {
@@ -216,7 +235,14 @@ export default function PractitionerTable({
           {filteredPractitioners.map((practitioner) => (
             <tr
               key={practitioner.id}
-              className="border-b border-slate-200/30 hover:bg-slate-100 transition-colors group relative"
+              onClick={() => {
+                if (userIsAdmin) {
+                  onEdit(practitioner.id)
+                } else {
+                  onViewDetails(practitioner)
+                }
+              }}
+              className="border-b border-slate-200/30 hover:bg-slate-50 transition-colors cursor-pointer group relative"
             >
               {/* 名字 */}
               <td className="px-6 py-4 text-sm text-text-primary font-medium">
@@ -266,7 +292,7 @@ export default function PractitionerTable({
               </td>
 
               {/* 操作 */}
-              <td className="px-6 py-4 text-right">
+              <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                 <div className="relative inline-block">
                   <button
                     ref={(el) => {
@@ -304,16 +330,6 @@ export default function PractitionerTable({
                     >
                       <button
                         onClick={() => {
-                          onEdit(practitioner.id)
-                          setOpenMenuId(null)
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary flex items-center gap-2"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                        編輯
-                      </button>
-                      <button
-                        onClick={() => {
                           onManageLeaves(practitioner.id)
                           setOpenMenuId(null)
                         }}
@@ -321,16 +337,6 @@ export default function PractitionerTable({
                       >
                         <Calendar className="w-4 h-4" />
                         管理休假
-                      </button>
-                      <button
-                        onClick={() => {
-                          onViewDetails(practitioner)
-                          setOpenMenuId(null)
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary flex items-center gap-2"
-                      >
-                        <Eye className="w-4 h-4" />
-                        查看詳情
                       </button>
                       <div className="border-t border-slate-200 my-1" />
                       <button
