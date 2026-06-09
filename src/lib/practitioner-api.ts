@@ -34,6 +34,11 @@ export async function callPractitionersAPI(
     throw new Error(error.error || '請求失敗')
   }
 
+  // 204 No Content 沒有響應體
+  if (response.status === 204) {
+    return null
+  }
+
   return await response.json()
 }
 
@@ -69,6 +74,11 @@ export async function callPractitionerLeavesAPI(
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.error || '請求失敗')
+  }
+
+  // 204 No Content 沒有響應體
+  if (response.status === 204) {
+    return null
   }
 
   return await response.json()
