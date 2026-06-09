@@ -102,13 +102,13 @@ serve(async (req: Request) => {
       const validatedData = validateCreateRequest(body)
 
       // 檢查當前用戶是否為管理員
-      const { data: adminUserData, error: userError } = await supabase
+      const { data: adminUserData, error: adminCheckError } = await supabase
         .from("users")
         .select("store_id, role")
         .eq("id", userData.user.id)
         .single()
 
-      if (userError || !adminUserData || adminUserData.role !== 'admin') {
+      if (adminCheckError || !adminUserData || adminUserData.role !== 'admin') {
         return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), {
           status: 403,
           headers: { "Content-Type": "application/json" },
