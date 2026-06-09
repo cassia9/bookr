@@ -102,18 +102,20 @@ serve(async (req: Request) => {
       const validatedData = validateCreateRequest(body)
 
       // 檢查當前用戶是否為管理員
-      const { data: memberData } = await supabase
-        .from("members")
-        .select("store_id, is_admin")
-        .eq("user_id", userData.user.id)
+      const { data: adminUserData, error: userError } = await supabase
+        .from("users")
+        .select("store_id, role")
+        .eq("id", userData.user.id)
         .single()
 
-      if (!memberData?.is_admin) {
+      if (userError || !adminUserData || adminUserData.role !== 'admin') {
         return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), {
           status: 403,
           headers: { "Content-Type": "application/json" },
         })
       }
+
+      const memberData = adminUserData
 
       // 建立老師
       const { data: practitioner, error: practError } = await supabase
@@ -186,18 +188,20 @@ serve(async (req: Request) => {
       }
 
       // 檢查管理員權限
-      const { data: memberData } = await supabase
-        .from("members")
-        .select("store_id, is_admin")
-        .eq("user_id", userData.user.id)
+      const { data: adminUserData, error: userError } = await supabase
+        .from("users")
+        .select("store_id, role")
+        .eq("id", userData.user.id)
         .single()
 
-      if (!memberData?.is_admin) {
+      if (userError || !adminUserData || adminUserData.role !== 'admin') {
         return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), {
           status: 403,
           headers: { "Content-Type": "application/json" },
         })
       }
+
+      const memberData = adminUserData
 
       // 驗證老師屬於同一店家
       const { data: practitioner } = await supabase
@@ -253,18 +257,20 @@ serve(async (req: Request) => {
       const { practitioner_id } = await req.json()
 
       // 檢查管理員權限
-      const { data: memberData } = await supabase
-        .from("members")
-        .select("store_id, is_admin")
-        .eq("user_id", userData.user.id)
+      const { data: adminUserData, error: userError } = await supabase
+        .from("users")
+        .select("store_id, role")
+        .eq("id", userData.user.id)
         .single()
 
-      if (!memberData?.is_admin) {
+      if (userError || !adminUserData || adminUserData.role !== 'admin') {
         return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), {
           status: 403,
           headers: { "Content-Type": "application/json" },
         })
       }
+
+      const memberData = adminUserData
 
       // 檢查是否有未完成的預約
       const { data: bookings } = await supabase

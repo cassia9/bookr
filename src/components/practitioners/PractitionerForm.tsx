@@ -299,14 +299,13 @@ export default function PractitionerForm({
             ) : (
               <div className="space-y-3">
                 {services.map((service) => (
-                  <div
+                  <label
                     key={service.id}
                     className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${
                       formData.service_ids.includes(service.id)
                         ? 'border-black bg-black/5'
                         : 'border-slate-200 hover:border-slate-300'
                     }`}
-                    onClick={() => !loading && handleServiceToggle(service.id)}
                   >
                     <input
                       type="checkbox"
@@ -322,7 +321,7 @@ export default function PractitionerForm({
                         <span>💰 ¥{service.price.toLocaleString('zh-CN')}</span>
                       </div>
                     </div>
-                  </div>
+                  </label>
                 ))}
               </div>
             )}
