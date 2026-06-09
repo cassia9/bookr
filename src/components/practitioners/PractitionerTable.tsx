@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { MoreVertical, Trash2, Calendar, Eye, Edit2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
@@ -35,6 +36,8 @@ export default function PractitionerTable({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<'top' | 'bottom'>('bottom')
+  const [menuCoords, setMenuCoords] = useState<{ x: number; y: number } | null>(null)
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     loadPractitioners()
@@ -59,6 +62,24 @@ export default function PractitionerTable({
       subscription.unsubscribe()
     }
   }, [])
+
+  // 點擊外部關閉菜單
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('td')) {
+        setOpenMenuId(null)
+        setMenuCoords(null)
+      }
+    }
+
+    if (openMenuId) {
+      document.addEventListener('click', handleClickOutside)
+      return () => {
+        document.removeEventListener('click', handleClickOutside)
+      }
+    }
+  }, [openMenuId])
 
   const loadPractitioners = async () => {
     try {
@@ -246,12 +267,21 @@ export default function PractitionerTable({
               <td className="px-6 py-4 text-right">
                 <div className="relative inline-block">
                   <button
+                    ref={(el) => {
+                      if (openMenuId === practitioner.id) {
+                        menuButtonRef.current = el
+                      }
+                    }}
                     onClick={(e) => {
                       const button = e.currentTarget
                       const rect = button.getBoundingClientRect()
-                      // 如果距頂部 < 200px，菜單顯示在下方；否則顯示在上方
-                      const shouldShowBelow = rect.top > 200
-                      setMenuPosition(shouldShowBelow ? 'top' : 'bottom')
+                      // 計算菜單位置
+                      const shouldShowAbove = rect.top > 250
+                      setMenuPosition(shouldShowAbove ? 'top' : 'bottom')
+                      setMenuCoords({
+                        x: rect.right - 192, // w-48 = 192px
+                        y: shouldShowAbove ? rect.top : rect.bottom,
+                      })
                       setOpenMenuId(
                         openMenuId === practitioner.id ? null : practitioner.id
                       )
@@ -261,15 +291,14 @@ export default function PractitionerTable({
                     <MoreVertical className="w-4 h-4" />
                   </button>
 
-                  {/* 下拉菜單 - 智能定位 */}
-                  {openMenuId === practitioner.id && (
+                  {/* 菜單使用 Portal 渲染 */}
+                  {openMenuId === practitioner.id && menuCoords && createPortal(
                     <div
-                      className={cn(
-                        'absolute right-0 w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50',
-                        menuPosition === 'top'
-                          ? 'bottom-full mb-1'
-                          : 'top-full mt-1'
-                      )}
+                      className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50"
+                      style={{
+                        left: `${menuCoords.x}px`,
+                        top: `${menuCoords.y + (menuPosition === 'bottom' ? 8 : -180)}px`,
+                      }}
                     >
                       <button
                         onClick={() => {
@@ -331,7 +360,8 @@ export default function PractitionerTable({
                           刪除
                         </button>
                       )}
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </div>
               </td>
