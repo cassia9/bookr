@@ -34,6 +34,7 @@ export default function PractitionerTable({
   const [isLoading, setIsLoading] = useState(true)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [menuPosition, setMenuPosition] = useState<'top' | 'bottom'>('bottom')
 
   useEffect(() => {
     loadPractitioners()
@@ -244,19 +245,31 @@ export default function PractitionerTable({
               <td className="px-6 py-4 text-right">
                 <div className="relative inline-block">
                   <button
-                    onClick={() =>
+                    onClick={(e) => {
+                      const button = e.currentTarget
+                      const rect = button.getBoundingClientRect()
+                      // 如果距頂部 < 200px，菜單顯示在下方；否則顯示在上方
+                      const shouldShowBelow = rect.top > 200
+                      setMenuPosition(shouldShowBelow ? 'top' : 'bottom')
                       setOpenMenuId(
                         openMenuId === practitioner.id ? null : practitioner.id
                       )
-                    }
+                    }}
                     className="p-1 hover:bg-surface-secondary rounded transition text-text-secondary hover:text-text-primary"
                   >
                     <MoreVertical className="w-4 h-4" />
                   </button>
 
-                  {/* 下拉菜單 - 自動向上顯示以避免被截斷 */}
+                  {/* 下拉菜單 - 智能定位 */}
                   {openMenuId === practitioner.id && (
-                    <div className="absolute right-0 bottom-full mb-1 w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50">
+                    <div
+                      className={cn(
+                        'absolute right-0 w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50',
+                        menuPosition === 'top'
+                          ? 'bottom-full mb-1'
+                          : 'top-full mt-1'
+                      )}
+                    >
                       <button
                         onClick={() => {
                           onEdit(practitioner.id)
