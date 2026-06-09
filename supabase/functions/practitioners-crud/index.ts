@@ -56,18 +56,20 @@ function validateCreateRequest(data: any): CreatePractitionerRequest {
   }
 }
 
+// CORS 頭
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Max-Age": "86400",
+}
+
 // 主處理函數
 serve(async (req: Request) => {
   try {
-    // CORS
+    // 處理 CORS preflight
     if (req.method === "OPTIONS") {
-      return new Response("ok", {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      })
+      return new Response("ok", { headers: corsHeaders })
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -79,7 +81,7 @@ serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
       )
     }
 
@@ -90,7 +92,7 @@ serve(async (req: Request) => {
     if (userError || !userData.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...corsHeaders },
       })
     }
 
@@ -111,7 +113,7 @@ serve(async (req: Request) => {
       if (adminCheckError || !adminUserData || adminUserData.role !== 'admin') {
         return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), {
           status: 403,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...corsHeaders },
         })
       }
 
@@ -134,7 +136,7 @@ serve(async (req: Request) => {
       if (practError) {
         return new Response(JSON.stringify({ error: practError.message }), {
           status: 400,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...corsHeaders },
         })
       }
 
@@ -197,7 +199,7 @@ serve(async (req: Request) => {
       if (userError || !adminUserData || adminUserData.role !== 'admin') {
         return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), {
           status: 403,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...corsHeaders },
         })
       }
 
@@ -213,7 +215,7 @@ serve(async (req: Request) => {
       if (!practitioner || practitioner.store_id !== memberData.store_id) {
         return new Response(JSON.stringify({ error: "Practitioner not found" }), {
           status: 404,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...corsHeaders },
         })
       }
 
@@ -236,7 +238,7 @@ serve(async (req: Request) => {
       if (insertError) {
         return new Response(JSON.stringify({ error: insertError.message }), {
           status: 400,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...corsHeaders },
         })
       }
 
@@ -266,7 +268,7 @@ serve(async (req: Request) => {
       if (userError || !adminUserData || adminUserData.role !== 'admin') {
         return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), {
           status: 403,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...corsHeaders },
         })
       }
 
@@ -298,7 +300,7 @@ serve(async (req: Request) => {
       if (deleteError) {
         return new Response(JSON.stringify({ error: deleteError.message }), {
           status: 400,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...corsHeaders },
         })
       }
 
