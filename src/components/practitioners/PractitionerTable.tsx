@@ -254,9 +254,9 @@ export default function PractitionerTable({
                     <MoreVertical className="w-4 h-4" />
                   </button>
 
-                  {/* 下拉菜單 */}
+                  {/* 下拉菜單 - 自動向上顯示以避免被截斷 */}
                   {openMenuId === practitioner.id && (
-                    <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-20">
+                    <div className="absolute right-0 bottom-full mb-1 w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50">
                       <button
                         onClick={() => {
                           onEdit(practitioner.id)
