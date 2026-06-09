@@ -51,6 +51,8 @@ export default function PractitionerForm({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [isLoadingServices, setIsLoadingServices] = useState(true)
+  const [practitionerName, setPractitionerName] = useState<string | null>(null)
+  const [practitionerUpdatedAt, setPractitionerUpdatedAt] = useState<string | null>(null)
 
   useEffect(() => {
     loadServices()
@@ -120,6 +122,10 @@ export default function PractitionerForm({
         .single()
 
       if (error) throw error
+
+      // 保存用於顯示在標題的信息
+      setPractitionerName(practitioner.full_name)
+      setPractitionerUpdatedAt(practitioner.updated_at || null)
 
       setFormData({
         name: practitioner.full_name,
@@ -194,12 +200,36 @@ export default function PractitionerForm({
     }
   }
 
+  // 計算表單是否有效（名字非空且至少選 1 個課程）
+  const isFormValid = formData.name.trim() !== '' && formData.service_ids.length > 0
+
+  // 格式化時間用於顯示
+  const formatUpdatedTime = (dateString: string | null) => {
+    if (!dateString) return null
+    const date = new Date(dateString)
+    return date.toLocaleString('zh-TW', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
   return (
     <Modal
       isOpen={true}
       onClose={onCancel}
-      title={practitionerId ? '編輯老師' : '新增老師'}
-      subtitle={practitionerId ? '更新老師的基本資料和課程指派' : '新增一位老師到系統'}
+      title={practitionerId ? '✏️ 編輯老師' : '➕ 新增老師'}
+      subtitle={
+        practitionerId
+          ? `更新 ${practitionerName} 的基本資料和課程指派${
+              practitionerUpdatedAt
+                ? ` • 最後更新：${formatUpdatedTime(practitionerUpdatedAt)}`
+                : ''
+            }`
+          : '新增一位老師到系統'
+      }
       size="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -245,37 +275,35 @@ export default function PractitionerForm({
             <label className="block text-sm font-medium text-slate-900 mb-3">
               識別顏色 <span className="text-red-500">*</span>
             </label>
-            <div className="flex flex-wrap gap-2">
-              {PRACTITIONER_COLORS.map((color) => (
-                <button
-                  key={color.hex}
-                  type="button"
-                  onClick={() =>
-                    setFormData({ ...formData, color_hex: color.hex })
-                  }
-                  disabled={loading}
-                  className="relative group transition-transform duration-200 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={color.name}
-                >
-                  <div
-                    className={`w-9 h-9 rounded-lg transition-all duration-200 ${
-                      formData.color_hex === color.hex
-                        ? 'ring-2 ring-offset-2 ring-black shadow-md'
-                        : 'border-2 border-slate-200 shadow-sm hover:shadow-md'
-                    }`}
-                    style={{ backgroundColor: color.hex }}
+            <div className="flex flex-wrap gap-3">
+              {PRACTITIONER_COLORS.map((color) => {
+                const isSelected = formData.color_hex === color.hex
+                return (
+                  <button
+                    key={color.hex}
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, color_hex: color.hex })
+                    }
+                    disabled={loading}
+                    className="relative transition-transform duration-150 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none"
+                    title={color.name}
                   >
-                    {formData.color_hex === color.hex && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <Check className="w-4 h-4 text-white drop-shadow-lg" strokeWidth={3} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                    {color.name}
-                  </div>
-                </button>
-              ))}
+                    <div
+                      className={`w-10 h-10 rounded-lg transition-all duration-150 ${
+                        isSelected
+                          ? 'ring-2 ring-offset-2 ring-black shadow-lg'
+                          : 'border border-slate-300 shadow-sm hover:shadow-md'
+                      }`}
+                      style={{ backgroundColor: color.hex }}
+                    >
+                      {isSelected && (
+                        <Check className="w-5 h-5 text-white absolute inset-0 m-auto drop-shadow-lg" strokeWidth={3} />
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </div>
         </div>
@@ -283,9 +311,16 @@ export default function PractitionerForm({
         {/* 課程指派卡片 */}
         <div className="border border-slate-200 rounded-lg bg-white p-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-900 mb-3">
-              可預約課程 <span className="text-red-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-slate-900">
+                可預約課程 <span className="text-red-500">*</span>
+              </label>
+              {services.length > 0 && (
+                <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-1 rounded">
+                  {formData.service_ids.length}/{services.length} 已選
+                </span>
+              )}
+            </div>
             {isLoadingServices ? (
               <div className="flex items-center justify-center py-6">
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
@@ -298,31 +333,42 @@ export default function PractitionerForm({
               />
             ) : (
               <div className="space-y-3">
-                {services.map((service) => (
-                  <label
-                    key={service.id}
-                    className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${
-                      formData.service_ids.includes(service.id)
-                        ? 'border-black bg-black/5'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.service_ids.includes(service.id)}
-                      onChange={() => handleServiceToggle(service.id)}
-                      disabled={loading}
-                      className="mt-1 w-5 h-5 cursor-pointer disabled:opacity-50"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-slate-900">{service.name}</div>
-                      <div className="text-sm text-slate-500 mt-1 flex items-center gap-3">
-                        <span>⏱️ {service.duration_minutes} 分鐘</span>
-                        <span>💰 ¥{service.price.toLocaleString('zh-CN')}</span>
+                {services.map((service) => {
+                  const isSelected = formData.service_ids.includes(service.id)
+                  return (
+                    <label
+                      key={service.id}
+                      className={`flex items-start gap-3 p-4 rounded-lg border-2 transition-all duration-150 cursor-pointer group ${
+                        isSelected
+                          ? 'border-black bg-black/5 shadow-sm'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="flex-shrink-0 w-5 h-5 mt-1 relative">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleServiceToggle(service.id)}
+                          disabled={loading}
+                          className="w-5 h-5 cursor-pointer appearance-none border-2 border-slate-300 rounded checked:border-black checked:bg-black transition-all duration-150 disabled:opacity-50"
+                        />
+                        {isSelected && (
+                          <Check className="w-3 h-3 text-white absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={3} />
+                        )}
                       </div>
-                    </div>
-                  </label>
-                ))}
+                      <div className="flex-1 min-w-0">
+                        <div className={`font-medium transition-colors duration-150 ${isSelected ? 'text-slate-900' : 'text-slate-700 group-hover:text-slate-900'}`}>
+                          {service.name}
+                          {isSelected && <span className="ml-2 text-slate-500 text-sm">✓</span>}
+                        </div>
+                        <div className="text-sm text-slate-500 mt-1 flex items-center gap-3">
+                          <span>⏱️ {service.duration_minutes} 分鐘</span>
+                          <span>💰 ¥{service.price.toLocaleString('zh-CN')}</span>
+                        </div>
+                      </div>
+                    </label>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -361,16 +407,17 @@ export default function PractitionerForm({
           <Button
             variant="primary"
             type="submit"
-            disabled={loading}
+            disabled={loading || !isFormValid}
             className="flex-1"
+            title={!isFormValid ? '需要填寫老師名字並選擇至少 1 個課程' : ''}
           >
             {loading
               ? practitionerId
-                ? '更新中...'
-                : '新增中...'
+                ? '⏳ 更新中...'
+                : '⏳ 新增中...'
               : practitionerId
-                ? '更新老師'
-                : '新增老師'}
+                ? '✓ 更新老師'
+                : '✓ 新增老師'}
           </Button>
         </div>
       </form>
