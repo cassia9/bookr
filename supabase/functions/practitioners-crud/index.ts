@@ -256,6 +256,13 @@ serve(async (req: Request) => {
     if (req.method === "DELETE" && action === "delete") {
       const { practitioner_id } = await req.json()
 
+      if (!practitioner_id) {
+        return new Response(
+          JSON.stringify({ error: "Missing practitioner_id" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        )
+      }
+
       // 檢查管理員權限
       const { data: adminUserData, error: userError } = await supabase
         .from("users")
@@ -272,12 +279,33 @@ serve(async (req: Request) => {
 
       const memberData = adminUserData
 
+      // 驗證老師屬於同一店家
+      const { data: practitioner } = await supabase
+        .from("practitioners")
+        .select("store_id")
+        .eq("id", practitioner_id)
+        .single()
+
+      if (!practitioner || practitioner.store_id !== memberData.store_id) {
+        return new Response(JSON.stringify({ error: "Practitioner not found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        })
+      }
+
       // 檢查是否有未完成的預約
-      const { data: bookings } = await supabase
+      const { data: bookings, error: bookingError } = await supabase
         .from("bookings")
         .select("id")
         .eq("practitioner_id", practitioner_id)
         .in("status", ["pending", "confirmed"])
+
+      if (bookingError) {
+        return new Response(JSON.stringify({ error: bookingError.message }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        })
+      }
 
       if (bookings && bookings.length > 0) {
         return new Response(
@@ -294,6 +322,7 @@ serve(async (req: Request) => {
         .from("practitioners")
         .update({ deleted_at: new Date().toISOString() })
         .eq("id", practitioner_id)
+        .eq("store_id", memberData.store_id)
 
       if (deleteError) {
         return new Response(JSON.stringify({ error: deleteError.message }), {
