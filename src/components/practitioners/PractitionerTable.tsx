@@ -233,9 +233,12 @@ export default function PractitionerTable({
             <tr
               key={practitioner.id}
               onClick={() => {
+                console.log('Row clicked:', { id: practitioner.id, userIsAdmin, hasOnEdit: !!onEdit })
                 if (userIsAdmin) {
+                  console.log('Opening edit for:', practitioner.id)
                   onEdit(practitioner.id)
                 } else {
+                  console.log('Opening view details for:', practitioner)
                   onViewDetails(practitioner)
                 }
               }}
@@ -291,15 +294,19 @@ export default function PractitionerTable({
                       }
                     }}
                     onClick={(e) => {
+                      e.stopPropagation()
                       const button = e.currentTarget
                       const rect = button.getBoundingClientRect()
-                      // 計算菜單位置
+                      // 計算菜單位置：右對齐到按鈕
+                      const menuWidth = 192 // w-48 = 192px
                       const shouldShowAbove = rect.top > 250
+                      const x = Math.max(8, rect.right - menuWidth) // 確保不會超過屏幕左邊，保留 8px 邊距
+                      const y = shouldShowAbove ? rect.top - 8 : rect.bottom + 8
+
+                      console.log('Menu clicked:', { rect: { top: rect.top, right: rect.right, bottom: rect.bottom }, x, y, shouldShowAbove })
+
                       setMenuPosition(shouldShowAbove ? 'top' : 'bottom')
-                      setMenuCoords({
-                        x: rect.right - 192, // w-48 = 192px
-                        y: shouldShowAbove ? rect.top : rect.bottom,
-                      })
+                      setMenuCoords({ x, y })
                       setOpenMenuId(
                         openMenuId === practitioner.id ? null : practitioner.id
                       )
@@ -315,7 +322,7 @@ export default function PractitionerTable({
                       className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-40"
                       style={{
                         left: `${menuCoords.x}px`,
-                        top: `${menuCoords.y + (menuPosition === 'bottom' ? 8 : -180)}px`,
+                        top: `${menuCoords.y}px`,
                       }}
                     >
                       <button
