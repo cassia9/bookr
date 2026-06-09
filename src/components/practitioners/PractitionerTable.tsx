@@ -358,52 +358,37 @@ export default function PractitionerTable({
       {/* 刪除確認對話框 */}
       {deleteConfirmPractitionerId && deleteConfirmPractitioner && createPortal(
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
           onClick={() => {
             setDeleteConfirmPractitionerId(null)
             setDeleteConfirmPractitioner(null)
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200"
+            className="bg-white rounded-lg shadow-lg border border-slate-200 max-w-sm w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 頭部 - 帶顏色條 */}
-            <div className="h-1 bg-gradient-to-r from-danger to-danger/80" />
-
             {/* 內容區 */}
-            <div className="p-6 space-y-4">
-              {/* 圖標和標題 */}
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-danger/10 rounded-lg flex items-center justify-center">
-                  <Trash2 className="w-5 h-5 text-danger" strokeWidth={2} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-base font-semibold text-slate-900 tracking-tight">
-                    確定要刪除老師嗎？
-                  </h2>
-                </div>
-              </div>
+            <div className="p-6 space-y-5">
+              {/* 標題 */}
+              <h2 className="text-base font-semibold text-slate-900">
+                確定要刪除老師嗎？
+              </h2>
 
-              {/* 警告文字 */}
-              <div className="bg-danger/5 border border-danger/10 rounded-lg p-3">
-                <p className="text-sm text-slate-700 leading-relaxed">
-                  即將刪除「<span className="font-semibold text-slate-900">{deleteConfirmPractitioner.full_name}</span>」的所有資料，包括預約紀錄關聯。
-                </p>
-                <p className="text-xs text-danger mt-2 font-medium">
-                  ⚠️ 此操作無法撤銷
-                </p>
-              </div>
+              {/* 說明文字 */}
+              <p className="text-sm text-slate-600 leading-relaxed">
+                將刪除「<span className="font-medium text-slate-900">{deleteConfirmPractitioner.full_name}</span>」的所有資料。此操作無法撤銷。
+              </p>
             </div>
 
             {/* 按鈕區 */}
-            <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-200 flex gap-3 justify-end">
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex gap-3 justify-end">
               <button
                 onClick={() => {
                   setDeleteConfirmPractitionerId(null)
                   setDeleteConfirmPractitioner(null)
                 }}
-                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-all duration-150 hover:shadow-sm active:scale-95 cursor-pointer"
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors duration-150 cursor-pointer"
               >
                 取消
               </button>
@@ -413,9 +398,8 @@ export default function PractitionerTable({
                   setDeleteConfirmPractitionerId(null)
                   setDeleteConfirmPractitioner(null)
                 }}
-                className="px-4 py-2 text-sm font-medium text-white bg-danger hover:bg-danger/90 rounded-lg transition-all duration-150 hover:shadow-md active:scale-95 flex items-center gap-2 cursor-pointer"
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors duration-150 cursor-pointer"
               >
-                <Trash2 className="w-4 h-4" strokeWidth={2} />
                 確認刪除
               </button>
             </div>
