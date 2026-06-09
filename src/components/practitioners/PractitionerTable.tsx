@@ -6,7 +6,7 @@ import { callPractitionersAPI } from '@/lib/practitioner-api'
 
 interface Practitioner {
   id: string
-  name: string
+  full_name: string
   color: string
   active: boolean
   bookingCount?: number
@@ -64,9 +64,9 @@ export default function PractitionerTable({
       setIsLoading(true)
       const { data, error } = await supabase
         .from('practitioners')
-        .select('id, name, color, active')
+        .select('id, full_name, color, active')
         .is('deleted_at', null)
-        .order('name', { ascending: true })
+        .order('full_name', { ascending: true })
 
       if (error) throw error
 
@@ -118,7 +118,7 @@ export default function PractitionerTable({
     // 搜尋過濾
     if (
       searchTerm &&
-      !p.name.toLowerCase().includes(searchTerm.toLowerCase())
+      !p.full_name.toLowerCase().includes(searchTerm.toLowerCase())
     ) {
       return false
     }
@@ -195,7 +195,7 @@ export default function PractitionerTable({
             >
               {/* 名字 */}
               <td className="px-6 py-4 text-sm text-text-primary font-medium">
-                {practitioner.name}
+                {practitioner.full_name}
               </td>
 
               {/* 識別色 */}
