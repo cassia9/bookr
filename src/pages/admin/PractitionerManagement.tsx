@@ -50,14 +50,14 @@ export default function PractitionerManagement() {
       const { count: activeCount } = await supabase
         .from('practitioners')
         .select('id', { count: 'exact', head: 0 })
-        .eq('is_active', true)
+        .eq('active', true)
         .is('deleted_at', null)
 
       // 獲取停用數
       const { count: inactiveCount } = await supabase
         .from('practitioners')
         .select('id', { count: 'exact', head: 0 })
-        .eq('is_active', false)
+        .eq('active', false)
         .is('deleted_at', null)
 
       // 獲取今日休假數

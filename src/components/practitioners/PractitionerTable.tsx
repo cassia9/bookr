@@ -7,8 +7,8 @@ import { callPractitionersAPI } from '@/lib/practitioner-api'
 interface Practitioner {
   id: string
   name: string
-  color_hex: string
-  is_active: boolean
+  color: string
+  active: boolean
   bookingCount?: number
   serviceCount?: number
 }
@@ -64,7 +64,7 @@ export default function PractitionerTable({
       setIsLoading(true)
       const { data, error } = await supabase
         .from('practitioners')
-        .select('id, name, color_hex, is_active')
+        .select('id, name, color, active')
         .is('deleted_at', null)
         .order('name', { ascending: true })
 
@@ -124,10 +124,10 @@ export default function PractitionerTable({
     }
 
     // 狀態過濾
-    if (filterStatus === 'active' && !p.is_active) {
+    if (filterStatus === 'active' && !p.active) {
       return false
     }
-    if (filterStatus === 'inactive' && p.is_active) {
+    if (filterStatus === 'inactive' && p.active) {
       return false
     }
 
@@ -203,11 +203,11 @@ export default function PractitionerTable({
                 <div className="flex items-center gap-2">
                   <div
                     className="w-5 h-5 rounded border border-slate-200 shadow-sm"
-                    style={{ backgroundColor: practitioner.color_hex }}
-                    title={practitioner.color_hex}
+                    style={{ backgroundColor: practitioner.color }}
+                    title={practitioner.color}
                   />
                   <span className="text-xs text-text-secondary">
-                    {practitioner.color_hex}
+                    {practitioner.color}
                   </span>
                 </div>
               </td>
@@ -229,7 +229,7 @@ export default function PractitionerTable({
 
               {/* 狀態 */}
               <td className="px-6 py-4 text-sm">
-                {practitioner.is_active ? (
+                {practitioner.active ? (
                   <span className="inline-block px-2 py-1 bg-success-light border border-success rounded text-xs text-success">
                     活躍
                   </span>

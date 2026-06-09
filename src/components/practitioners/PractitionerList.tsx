@@ -6,9 +6,9 @@ import { callPractitionersAPI } from '@/lib/practitioner-api'
 
 interface Practitioner {
   id: string
-  name: string
-  color_hex: string
-  is_active: boolean
+  full_name: string
+  color: string
+  active: boolean
   deleted_at: string | null
 }
 
@@ -63,9 +63,9 @@ export default function PractitionerList({
       setIsLoading(true)
       const { data, error } = await supabase
         .from('practitioners')
-        .select('id, name, color_hex, is_active, deleted_at')
+        .select('id, full_name, color, active, deleted_at')
         .is('deleted_at', null) // 排除已軟刪除的老師
-        .order('name', { ascending: true })
+        .order('full_name', { ascending: true })
 
       if (error) throw error
       setPractitioners(data || [])
@@ -77,7 +77,7 @@ export default function PractitionerList({
   }
 
   const filteredPractitioners = practitioners.filter((p) =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+    p.full_name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const handleDelete = async (id: string) => {
@@ -150,13 +150,13 @@ export default function PractitionerList({
                     {/* 顏色指示 */}
                     <div
                       className="w-3 h-3 rounded-full flex-shrink-0 shadow-sm border border-slate-700"
-                      style={{ backgroundColor: practitioner.color_hex }}
+                      style={{ backgroundColor: practitioner.color }}
                       title={practitioner.name}
                     />
                     <span className="text-sm font-medium text-slate-50 truncate flex-1">
                       {practitioner.name}
                     </span>
-                    {!practitioner.is_active && (
+                    {!practitioner.active && (
                       <span className="px-2 py-0.5 bg-slate-700 text-xs text-slate-300 rounded">
                         停用
                       </span>
