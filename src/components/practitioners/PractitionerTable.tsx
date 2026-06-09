@@ -215,9 +215,6 @@ export default function PractitionerTable({
               名字
             </th>
             <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
-              識別色
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
               課程
             </th>
             <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
@@ -246,20 +243,13 @@ export default function PractitionerTable({
             >
               {/* 名字 */}
               <td className="px-6 py-4 text-sm text-text-primary font-medium">
-                {practitioner.full_name}
-              </td>
-
-              {/* 識別色 */}
-              <td className="px-6 py-4 text-sm">
                 <div className="flex items-center gap-2">
+                  {practitioner.full_name}
                   <div
-                    className="w-5 h-5 rounded border border-slate-200 shadow-sm"
+                    className="w-4 h-4 rounded border border-slate-200 shadow-sm flex-shrink-0"
                     style={{ backgroundColor: practitioner.color }}
                     title={practitioner.color}
                   />
-                  <span className="text-xs text-text-secondary">
-                    {practitioner.color}
-                  </span>
                 </div>
               </td>
 
