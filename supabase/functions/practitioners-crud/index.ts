@@ -124,11 +124,9 @@ serve(async (req: Request) => {
         .from("practitioners")
         .insert({
           store_id: memberData.store_id,
-          name: validatedData.name,
-          color_hex: validatedData.color_hex,
-          bio: validatedData.bio,
-          photo_url: validatedData.photo_url,
-          is_active: true,
+          full_name: validatedData.name,
+          color: validatedData.color_hex,
+          active: true,
         })
         .select()
         .single()
