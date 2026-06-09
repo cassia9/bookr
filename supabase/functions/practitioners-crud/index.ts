@@ -128,7 +128,7 @@ serve(async (req: Request) => {
           color: validatedData.color_hex,
           active: true,
         })
-        .select()
+        .select("id, store_id, full_name, color, active, created_at")
         .single()
 
       if (practError) {
