@@ -89,12 +89,14 @@ export async function getPractitionerServices(
 
 /**
  * 檢查預約時段衝突
+ * @param storeId 店家 ID（用於多租戶隔離）
  * @param practitionerId 老師 ID
  * @param startTime 預約開始時間
  * @param endTime 預約結束時間
  * @param excludeBookingId 排除的預約 ID（編輯時使用）
  */
 export async function checkBookingConflict(
+  storeId: string,
   practitionerId: string,
   startTime: string,
   endTime: string,
@@ -104,6 +106,7 @@ export async function checkBookingConflict(
     let query = supabase
       .from('bookings')
       .select('id', { count: 'exact', head: 0 })
+      .eq('store_id', storeId)
       .eq('practitioner_id', practitionerId)
       .in('status', ['pending', 'confirmed'])
       .lt('start_time', endTime)
@@ -134,6 +137,7 @@ export async function createBooking(
   try {
     // 檢查衝突
     const hasConflict = await checkBookingConflict(
+      storeId,
       data.practitioner_id,
       data.start_time,
       data.end_time
@@ -178,12 +182,13 @@ export async function updateBooking(
     if (data.start_time && data.end_time) {
       const { data: existingBooking } = await supabase
         .from('bookings')
-        .select('practitioner_id')
+        .select('practitioner_id, store_id')
         .eq('id', bookingId)
         .single()
 
       if (existingBooking) {
         const hasConflict = await checkBookingConflict(
+          existingBooking.store_id,
           existingBooking.practitioner_id,
           data.start_time,
           data.end_time,

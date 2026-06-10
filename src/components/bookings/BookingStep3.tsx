@@ -71,10 +71,11 @@ export default function BookingStep3({
     onTimeChange(newStartTime, newEndTime)
 
     // 檢查衝突
-    if (selectedPractitioner) {
+    if (selectedPractitioner && storeId) {
       setIsCheckingConflict(true)
       try {
         const conflict = await BookingAPI.checkBookingConflict(
+          storeId,
           selectedPractitioner.id,
           newStartTime,
           newEndTime

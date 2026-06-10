@@ -58,7 +58,7 @@ export default function BookingForm({
 
         if (userData) setStoreId(userData.store_id)
 
-        // 如果是編輯模式，載入預約數據
+        // 如果是編輯模式，載入預約數據和相關對象
         if (editingBookingId) {
           const { data: booking } = await supabase
             .from('bookings')
@@ -68,6 +68,30 @@ export default function BookingForm({
 
           if (booking) {
             setEditingBooking(booking)
+
+            // 並行加載客戶、從業人員、服務的完整數據
+            const [
+              { data: clientData },
+              { data: practitionerData },
+              { data: serviceData },
+            ] = await Promise.all([
+              supabase
+                .from('clients')
+                .select('*')
+                .eq('id', booking.client_id)
+                .single(),
+              supabase
+                .from('practitioners')
+                .select('*')
+                .eq('id', booking.practitioner_id)
+                .single(),
+              supabase
+                .from('services')
+                .select('*')
+                .eq('id', booking.service_id)
+                .single(),
+            ])
+
             setState(prev => ({
               ...prev,
               formData: {
@@ -78,6 +102,9 @@ export default function BookingForm({
                 end_time: booking.end_time,
                 notes: booking.notes || '',
               },
+              selectedClient: clientData || null,
+              selectedPractitioner: practitionerData || null,
+              selectedService: serviceData || null,
             }))
           }
         }
