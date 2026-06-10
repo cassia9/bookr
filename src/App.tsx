@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './lib/auth'
+import { SnackbarProvider } from './components/ui/Snackbar'
 import LoginPage from './pages/LoginPage'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import AdminLayout from './components/layout/AdminLayout'
@@ -17,6 +18,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <SnackbarProvider />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/accept-invitation" element={<AcceptInvitationPage />} />

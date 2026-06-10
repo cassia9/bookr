@@ -317,10 +317,10 @@ serve(async (req: Request) => {
         )
       }
 
-      // 軟刪除
+      // 硬刪除
       const { error: deleteError } = await supabase
         .from("practitioners")
-        .update({ deleted_at: new Date().toISOString() })
+        .delete()
         .eq("id", practitioner_id)
         .eq("store_id", memberData.store_id)
 
