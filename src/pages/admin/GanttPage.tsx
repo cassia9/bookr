@@ -4,20 +4,20 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface Booking {
   id: string
-  booking_time: string
-  duration_minutes: number
+  start_time: string
+  end_time: string
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
   client_id: string
   practitioner_id: string
   service_id: string
-  client?: { name: string }
-  practitioner?: { name: string }
+  client?: { full_name: string }
+  practitioner?: { full_name: string }
   service?: { name: string }
 }
 
 interface Practitioner {
   id: string
-  name: string
+  full_name: string
 }
 
 const statusColorMap = {
@@ -87,18 +87,18 @@ export default function GanttPage({
         .from('bookings')
         .select(`
           id,
-          booking_time,
-          duration_minutes,
+          start_time,
+          end_time,
           status,
           client_id,
           practitioner_id,
           service_id,
-          client:clients(name),
-          practitioner:practitioners(name),
+          client:clients(full_name),
+          practitioner:practitioners(full_name),
           service:services(name)
         `)
-        .gte('booking_time', startOfDay.toISOString())
-        .lt('booking_time', endOfDay.toISOString())
+        .gte('start_time', startOfDay.toISOString())
+        .lt('start_time', endOfDay.toISOString())
         .in('status', ['pending', 'confirmed', 'completed'])
 
       // 如果選擇了特定從業人員，則篩選
@@ -106,7 +106,7 @@ export default function GanttPage({
         bookQuery = bookQuery.eq('practitioner_id', selectedPractitionerId)
       }
 
-      const { data: bookingsData, error: bookError } = await bookQuery.order('booking_time', { ascending: true })
+      const { data: bookingsData, error: bookError } = await bookQuery.order('start_time', { ascending: true })
 
       if (bookError) throw bookError
       setBookings(bookingsData || [])
@@ -118,16 +118,19 @@ export default function GanttPage({
   }
 
   const getBookingPosition = (booking: Booking) => {
-    const bookingDate = new Date(booking.booking_time)
-    const hours = bookingDate.getHours()
-    const minutes = bookingDate.getMinutes()
+    const startDate = new Date(booking.start_time)
+    const endDate = new Date(booking.end_time)
+    const hours = startDate.getHours()
+    const minutes = startDate.getMinutes()
 
     if (hours < BUSINESS_HOURS.start || hours >= BUSINESS_HOURS.end) {
       return null
     }
 
     const topPixels = (hours - BUSINESS_HOURS.start) * HOUR_HEIGHT + (minutes / 60) * HOUR_HEIGHT
-    const heightPixels = (booking.duration_minutes / 60) * HOUR_HEIGHT
+    const durationMs = endDate.getTime() - startDate.getTime()
+    const durationMinutes = durationMs / (1000 * 60)
+    const heightPixels = (durationMinutes / 60) * HOUR_HEIGHT
 
     return { top: topPixels, height: Math.max(heightPixels, 40) }
   }
@@ -244,7 +247,7 @@ export default function GanttPage({
                         className="px-4 py-3 text-sm font-medium text-text-primary flex items-center border-t border-slate-200"
                         style={{ height: Math.max(200, HOUR_HEIGHT * (BUSINESS_HOURS.end - BUSINESS_HOURS.start)) }}
                       >
-                        {practitioner.name}
+                        {practitioner.full_name}
                       </div>
                     ))
                   )}
@@ -313,10 +316,10 @@ export default function GanttPage({
                                 onMouseLeave={() => setHoveredBooking(null)}
                               >
                                 <div className={`font-semibold ${statusTextColorMap[booking.status]} truncate text-xs leading-tight`}>
-                                  {booking.client?.name || '未知客戶'}
+                                  {booking.client?.full_name || '未知客戶'}
                                 </div>
                                 <div className={`${statusTextColorMap[booking.status]} mt-0.5 text-xs leading-tight`}>
-                                  {formatTime(booking.booking_time)} ({booking.duration_minutes}分鐘)
+                                  {formatTime(booking.start_time)} ({Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / (1000 * 60))}分鐘)
                                 </div>
                                 <div className={`${statusTextColorMap[booking.status]} truncate mt-0.5 text-xs leading-tight`}>
                                   {booking.service?.name || '未知服務'}

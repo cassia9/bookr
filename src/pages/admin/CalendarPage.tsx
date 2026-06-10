@@ -5,22 +5,20 @@ import { cn } from '@/lib/cn'
 
 interface Booking {
   id: string
-  client_name: string
-  client_phone: string
-  service_name: string
+  client?: { full_name: string; phone: string }
+  service?: { name: string }
   start_time: string
   end_time: string
-  practitioner_name: string
+  practitioner?: { full_name: string }
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
   notes?: string
 }
 
 interface Client {
   id: string
-  name: string
+  full_name: string
   phone: string
-  email: string
-  visit_count: number
+  email?: string
   notes?: string
 }
 
@@ -57,12 +55,11 @@ export default function CalendarPage({
         .from('bookings')
         .select(`
           id,
-          client_name,
-          client_phone: clients!inner(phone),
-          service_name: services!inner(name),
+          client:clients(full_name, phone),
+          service:services(name),
           start_time,
           end_time,
-          practitioner_name: practitioners!inner(name),
+          practitioner:practitioners(full_name),
           status,
           notes
         `)
@@ -90,7 +87,7 @@ export default function CalendarPage({
       const { data, error } = await supabase
         .from('clients')
         .select('*')
-        .eq('phone', booking.client_phone)
+        .eq('phone', booking.client?.phone)
         .single()
 
       if (!error && data) {
@@ -273,7 +270,7 @@ export default function CalendarPage({
                               getStatusColor(booking.status)
                             )}
                           >
-                            {booking.client_name}
+                            {booking.client?.full_name}
                           </button>
                         ))}
                         {dayBookings.length > 3 && (
@@ -323,7 +320,7 @@ export default function CalendarPage({
                                 getStatusColor(booking.status)
                               )}
                             >
-                              {booking.client_name}
+                              {booking.client?.full_name}
                             </button>
                           ))}
                         </div>
@@ -355,10 +352,10 @@ export default function CalendarPage({
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <h3 className="font-semibold text-base text-text-primary">
-                            {booking.client_name}
+                            {booking.client?.full_name}
                           </h3>
                           <p className="text-sm text-text-secondary mt-1">
-                            {booking.service_name}
+                            {booking.service?.name}
                           </p>
                         </div>
                         <span className={cn(
@@ -380,7 +377,7 @@ export default function CalendarPage({
                         </div>
                         <div className="flex items-center gap-2">
                           <MapPin size={16} />
-                          {booking.practitioner_name}
+                          {booking.practitioner?.full_name}
                         </div>
                       </div>
                     </button>
@@ -422,12 +419,12 @@ export default function CalendarPage({
                 <div className="space-y-2 text-sm">
                   <div>
                     <div className="text-slate-500">課程</div>
-                    <div className="font-medium">{selectedBooking.service_name}</div>
+                    <div className="font-medium">{selectedBooking.service?.name}</div>
                   </div>
                   <div>
                     <div className="text-slate-500">服務人員</div>
                     <div className="font-medium">
-                      {selectedBooking.practitioner_name}
+                      {selectedBooking.practitioner?.full_name}
                     </div>
                   </div>
                   <div>
@@ -470,7 +467,7 @@ export default function CalendarPage({
                   <div className="space-y-2 text-sm">
                     <div>
                       <div className="text-slate-500">姓名</div>
-                      <div className="font-medium">{selectedClient.name}</div>
+                      <div className="font-medium">{selectedClient.full_name}</div>
                     </div>
                     <div>
                       <div className="text-slate-500">電話</div>
