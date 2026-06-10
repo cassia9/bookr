@@ -28,6 +28,7 @@ import { supabase } from '../../lib/supabase'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import NewBookingModal, { nearestSlot } from '../../components/booking/NewBookingModal'
+import BookingForm from '../../components/bookings/BookingForm'
 import { cn } from '../../lib/cn'
 import { toast } from '../../components/ui/Snackbar'
 import type { Practitioner, Client, Service, PractitionerBlock } from '../../types/database'
@@ -126,6 +127,10 @@ export default function BookingsPage() {
   const [slotDate,           setSlotDate]           = useState<string | undefined>()
   const [slotTime,           setSlotTime]           = useState<string | undefined>()
   const [slotPractitionerId, setSlotPractitionerId] = useState<string | undefined>()
+
+  // ── BookingForm (新的 4 步驟表單) ──
+  const [showBookingForm,    setShowBookingForm]    = useState(false)
+  const [editingBookingId,   setEditingBookingId]   = useState<string | null>(null)
 
   // ── DnD ──────────────────────────────────────────────────────────
   const [draggingEvent, setDraggingEvent] = useState<CalEvent | null>(null)
@@ -497,8 +502,9 @@ export default function BookingsPage() {
   }
 
   function openNewBooking() {
-    setSlotDate(undefined); setSlotTime(undefined); setSlotPractitionerId(undefined)
-    setNewBookingOpen(true)
+    // 打開新的 BookingForm（4步驟表單）
+    setEditingBookingId(null)
+    setShowBookingForm(true)
   }
 
   const ganttTitleDate = ganttMode === 'day'
@@ -1284,6 +1290,17 @@ export default function BookingsPage() {
           defaultBufferMinutes={defaultBufferMinutes}
         />
       )}
+
+      {/* ── 新的 BookingForm (4步驟表單) ── */}
+      <BookingForm
+        isOpen={showBookingForm}
+        onClose={() => setShowBookingForm(false)}
+        onSuccess={() => {
+          setShowBookingForm(false)
+          fetchBookings()
+        }}
+        editingBookingId={editingBookingId || undefined}
+      />
     </div>
   )
 }
