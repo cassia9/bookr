@@ -4,6 +4,7 @@
  * 瀏覽所有 UI 元件，開發時先在這裡找可用元件
  */
 import { useState } from 'react'
+import { Search, Mail, Lock } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import type { BadgeVariant } from '@/components/ui/Badge'
@@ -13,6 +14,13 @@ import TimePicker from '@/components/ui/TimePicker'
 import Modal from '@/components/ui/Modal'
 import Toggle from '@/components/ui/Toggle'
 import Spinner from '@/components/ui/Spinner'
+import Input from '@/components/ui/Input'
+import Textarea from '@/components/ui/Textarea'
+import FormField from '@/components/ui/FormField'
+import Alert from '@/components/ui/Alert'
+import SearchInput from '@/components/ui/SearchInput'
+import Pagination from '@/components/ui/Pagination'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import { toast } from '@/components/ui/Snackbar'
 
 // ── 類別區塊元件 ────────────────────────────────────────────────────────────
@@ -42,8 +50,12 @@ export default function ComponentsPage() {
   const [dateVal, setDateVal] = useState('')
   const [timeVal, setTimeVal] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [toggleA, setToggleA] = useState(false)
   const [toggleB, setToggleB] = useState(true)
+  const [inputVal, setInputVal] = useState('')
+  const [searchVal, setSearchVal] = useState('')
+  const [pagePage, setPagePage] = useState(1)
 
   const practitionerOptions = [
     { value: '1', label: '王小明', color: '#6366f1' },
@@ -187,7 +199,82 @@ export default function ComponentsPage() {
           </Modal>
         </Section>
 
-        {/* ── 7. Toggle ── */}
+        {/* ── 7. Input / Textarea / FormField ── */}
+        <Section title="Input 輸入框 / Textarea / FormField">
+          <Row label="Input 基本">
+            <div className="w-72">
+              <Input value={inputVal} onChange={e => setInputVal(e.target.value)} placeholder="輸入文字…" />
+            </div>
+            <div className="w-72">
+              <Input value="" onChange={() => {}} placeholder="有錯誤狀態" error />
+            </div>
+          </Row>
+          <Row label="Input 帶圖示">
+            <div className="w-72">
+              <Input value="" onChange={() => {}} placeholder="搜尋…" prefix={<Search size={14} />} />
+            </div>
+            <div className="w-72">
+              <Input type="email" value="" onChange={() => {}} placeholder="Email" prefix={<Mail size={14} />} />
+            </div>
+            <div className="w-72">
+              <Input type="password" value="" onChange={() => {}} placeholder="密碼" prefix={<Lock size={14} />} />
+            </div>
+          </Row>
+          <Row label="Textarea">
+            <div className="w-full">
+              <Textarea placeholder="多行文字輸入…" rows={3} />
+            </div>
+          </Row>
+          <Row label="FormField 組合">
+            <div className="w-72 space-y-3">
+              <FormField label="老師名字" required>
+                <Input value="" onChange={() => {}} placeholder="例：林老師" />
+              </FormField>
+              <FormField label="備注" hint="選填" error="此欄位不能為空">
+                <Input value="" onChange={() => {}} error />
+              </FormField>
+            </div>
+          </Row>
+        </Section>
+
+        {/* ── 8. Alert ── */}
+        <Section title="Alert 提示橫幅">
+          <div className="space-y-2 w-full">
+            <Alert variant="success">操作成功！課程已儲存。</Alert>
+            <Alert variant="error" onClose={() => {}}>發生錯誤，請稍後再試。</Alert>
+            <Alert variant="warning">注意：此時段已有其他預約。</Alert>
+            <Alert variant="info" title="提示">點擊卡片可查看詳細預約資訊。</Alert>
+          </div>
+        </Section>
+
+        {/* ── 9. SearchInput / Pagination ── */}
+        <Section title="SearchInput 搜尋框 / Pagination 分頁">
+          <Row label="SearchInput">
+            <div className="w-72">
+              <SearchInput value={searchVal} onChange={setSearchVal} placeholder="搜尋客戶或課程…" />
+            </div>
+          </Row>
+          <Row label="Pagination">
+            <Pagination page={pagePage} totalPages={8} onChange={setPagePage} />
+          </Row>
+        </Section>
+
+        {/* ── 10. ConfirmModal ── */}
+        <Section title="ConfirmModal 確認對話框">
+          <Row label="刪除確認">
+            <Button variant="danger" onClick={() => setConfirmOpen(true)}>開啟確認框</Button>
+          </Row>
+          <ConfirmModal
+            open={confirmOpen}
+            onClose={() => setConfirmOpen(false)}
+            onConfirm={() => { toast.info('已確認'); setConfirmOpen(false) }}
+            title="確認刪除課程"
+            description="該課程將被永久刪除，歷史預約記錄將保留但無法使用此課程。此操作無法撤銷。"
+            confirmLabel="確認刪除"
+          />
+        </Section>
+
+        {/* ── 11. Toggle ── */}
         <Section title="Toggle 開關">
           <Row label="狀態">
             <div className="flex items-center gap-3">

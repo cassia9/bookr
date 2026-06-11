@@ -2,7 +2,9 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { cn } from '../lib/cn'
+import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
+import Alert from '../components/ui/Alert'
 
 export default function LoginPage() {
   const { signIn } = useAuth()
@@ -28,67 +30,45 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="w-full max-w-sm">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
-          <div className="mb-8 text-center">
-            <div className="w-12 h-12 bg-indigo-600 rounded-xl mx-auto mb-4 flex items-center justify-center">
-              <span className="text-white text-xl">✦</span>
+        <div className="bg-white rounded-3xl shadow-lg border border-slate-200/80 p-8">
+          <div className="mb-7 text-center">
+            <div className="w-12 h-12 bg-black rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg">
+              <span className="text-white text-lg">✦</span>
             </div>
-            <h1 className="text-xl font-semibold text-slate-900">預約管理系統</h1>
-            <p className="text-sm text-slate-500 mt-1">請登入以繼續</p>
+            <h1 className="text-xl font-bold text-slate-900">預約管理系統</h1>
+            <p className="text-sm text-slate-400 mt-1">請登入以繼續</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                電子信箱
-              </label>
-              <input
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">電子信箱</label>
+              <Input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
                 placeholder="you@example.com"
-                className={cn(
-                  'w-full px-3 py-2 rounded-lg border text-sm outline-none',
-                  'border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100',
-                  'placeholder:text-slate-400 transition'
-                )}
+                disabled={loading}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                密碼
-              </label>
-              <input
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">密碼</label>
+              <Input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
                 placeholder="••••••••"
-                className={cn(
-                  'w-full px-3 py-2 rounded-lg border text-sm outline-none',
-                  'border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100',
-                  'placeholder:text-slate-400 transition'
-                )}
+                disabled={loading}
               />
             </div>
 
-            {error && (
-              <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
-            )}
+            {error && <Alert variant="error">{error}</Alert>}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className={cn(
-                'w-full py-2.5 px-4 rounded-lg text-sm font-medium transition',
-                'bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800',
-                'disabled:opacity-60 disabled:cursor-not-allowed'
-              )}
-            >
-              {loading ? '登入中...' : '登入'}
-            </button>
+            <Button type="submit" loading={loading} className="w-full mt-1">
+              登入
+            </Button>
           </form>
         </div>
       </div>

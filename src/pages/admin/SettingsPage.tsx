@@ -6,6 +6,8 @@ import { useState, useEffect } from 'react'
 import { Settings, Clock, Save, CheckCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
+import Select from '@/components/ui/Select'
 import { toast } from '@/components/ui/Snackbar'
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
@@ -96,11 +98,10 @@ export default function SettingsPage() {
           <h2 className="text-sm font-semibold text-slate-700">基本資料</h2>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">店家名稱</label>
-            <input
+            <Input
               type="text"
               value={storeName}
               onChange={e => setStoreName(e.target.value)}
-              className="w-full h-10 px-3 text-sm border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-shadow"
             />
           </div>
         </div>
@@ -118,27 +119,19 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">開始時間</label>
-              <select
-                value={openHour}
-                onChange={e => setOpenHour(Number(e.target.value))}
-                className="w-full h-10 px-3 text-sm border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 appearance-none transition-shadow"
-              >
-                {hourOptions(6, 14).map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
+              <Select
+                value={String(openHour)}
+                onChange={v => setOpenHour(Number(v))}
+                options={hourOptions(6, 14).map(o => ({ value: String(o.value), label: o.label }))}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">結束時間</label>
-              <select
-                value={closeHour}
-                onChange={e => setCloseHour(Number(e.target.value))}
-                className="w-full h-10 px-3 text-sm border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 appearance-none transition-shadow"
-              >
-                {hourOptions(15, 24).map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
+              <Select
+                value={String(closeHour)}
+                onChange={v => setCloseHour(Number(v))}
+                options={hourOptions(15, 24).map(o => ({ value: String(o.value), label: o.label }))}
+              />
             </div>
           </div>
 
