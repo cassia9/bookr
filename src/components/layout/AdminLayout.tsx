@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   CalendarDays, LayoutGrid, Users, UserCheck, Scissors, BarChart2,
-  Settings, LogOut, Menu, X
+  Settings, LogOut, Menu, X, Layers
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../../lib/auth'
@@ -15,6 +15,7 @@ const navItems = [
   { to: '/admin/dashboard', icon: BarChart2, label: '數據總覽' },
   { to: '/admin/members', icon: Users, label: '成員管理', adminOnly: true },
   { to: '/admin/settings', icon: Settings, label: '設定', adminOnly: true },
+  { to: '/admin/components', icon: Layers, label: '元件庫（開發用）' },
 ]
 
 export default function AdminLayout() {
