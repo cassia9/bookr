@@ -569,6 +569,55 @@ export default function CalendarPage({
         onClose={closeModal}
         title={modalBooking ? (modalBooking.client?.full_name ?? '預約詳情') : '預約詳情'}
         size="md"
+        footer={modalBooking ? (
+          /* ── Footer：操作按鈕（固定在底部） ── */
+          showCancelConfirm ? (
+            /* 取消確認 */
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-red-600">
+                <AlertTriangle size={15} />
+                <p className="text-sm font-semibold">確認取消此預約？</p>
+              </div>
+              <p className="text-xs text-red-400">取消後此預約將從行事曆移除（客戶紀錄仍保留）</p>
+              <div className="flex gap-2">
+                <Button variant="secondary" className="flex-1" onClick={() => setShowCancelConfirm(false)}>
+                  返回
+                </Button>
+                <Button variant="danger" className="flex-1" loading={saving} onClick={() => handleStatusChange('cancelled')}>
+                  確認取消
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* 狀態操作按鈕 */
+            <div className="space-y-2">
+              {modalBooking.status === 'pending' && (
+                <Button variant="secondary" className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 border-0"
+                  onClick={() => handleStatusChange('confirmed')}>
+                  ✓ 確認預約
+                </Button>
+              )}
+              {modalBooking.status === 'confirmed' && (
+                <Button variant="secondary" className="w-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-0"
+                  onClick={() => handleStatusChange('completed')}>
+                  ✓ 標記完課
+                </Button>
+              )}
+              {modalBooking.status === 'confirmed' && (
+                <Button variant="secondary" className="w-full bg-slate-50 text-slate-600 hover:bg-slate-100 border-0"
+                  onClick={() => handleStatusChange('no_show')}>
+                  未到場
+                </Button>
+              )}
+              {isEditable(modalBooking.status) && (
+                <Button variant="ghost" className="w-full text-red-500 hover:bg-red-50"
+                  onClick={() => setShowCancelConfirm(true)}>
+                  取消預約
+                </Button>
+              )}
+            </div>
+          )
+        ) : undefined}
       >
         {modalBooking && (
           <div className="space-y-5">
@@ -706,78 +755,6 @@ export default function CalendarPage({
                 {modalBooking.notes && (
                   <InfoRow label="備注">{modalBooking.notes}</InfoRow>
                 )}
-              </div>
-            )}
-
-            {/* ── 狀態操作按鈕 ── */}
-            {!showCancelConfirm && (
-              <div className="space-y-2 pt-1">
-                {modalBooking.status === 'pending' && (
-                  <Button
-                    variant="secondary"
-                    className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 border-0"
-                    onClick={() => handleStatusChange('confirmed')}
-                  >
-                    ✓ 確認預約
-                  </Button>
-                )}
-                {modalBooking.status === 'confirmed' && (
-                  <Button
-                    variant="secondary"
-                    className="w-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-0"
-                    onClick={() => handleStatusChange('completed')}
-                  >
-                    ✓ 標記完課
-                  </Button>
-                )}
-                {modalBooking.status === 'confirmed' && (
-                  <Button
-                    variant="secondary"
-                    className="w-full bg-slate-50 text-slate-600 hover:bg-slate-100 border-0"
-                    onClick={() => handleStatusChange('no_show')}
-                  >
-                    未到場
-                  </Button>
-                )}
-                {isEditable(modalBooking.status) && (
-                  <Button
-                    variant="ghost"
-                    className="w-full text-red-500 hover:bg-red-50"
-                    onClick={() => setShowCancelConfirm(true)}
-                  >
-                    取消預約
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* ── 取消確認 ── */}
-            {showCancelConfirm && (
-              <div className="border border-red-200 bg-red-50 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center gap-2 text-red-600">
-                  <AlertTriangle size={16} />
-                  <p className="text-sm font-semibold">確認取消此預約？</p>
-                </div>
-                <p className="text-xs text-red-500">
-                  取消後此預約將從行事曆移除（客戶紀錄仍保留）
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={() => setShowCancelConfirm(false)}
-                  >
-                    返回
-                  </Button>
-                  <Button
-                    variant="danger"
-                    className="flex-1"
-                    loading={saving}
-                    onClick={() => handleStatusChange('cancelled')}
-                  >
-                    確認取消
-                  </Button>
-                </div>
               </div>
             )}
 
