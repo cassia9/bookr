@@ -59,6 +59,8 @@ interface CalendarPageProps {
   selectedPractitionerId?: string | null
   defaultView?: ViewMode
   defaultDate?: Date
+  startHour?: number
+  endHour?: number
 }
 
 // ── 常數 ──────────────────────────────────────────────────────────────────────
@@ -87,6 +89,8 @@ export default function CalendarPage({
   selectedPractitionerId,
   defaultView = 'week',
   defaultDate,
+  startHour = 9,
+  endHour = 21,
 }: CalendarPageProps) {
   const [view, setView] = useState<ViewMode>(defaultView)
   const [currentDate, setCurrentDate] = useState(defaultDate || new Date())
@@ -492,7 +496,7 @@ export default function CalendarPage({
                   ))}
                 </div>
                 {/* 時間格 */}
-                {Array.from({ length: 13 }, (_, i) => i + 8).map(hour => (
+                {Array.from({ length: endHour - startHour }, (_, i) => i + startHour).map(hour => (
                   <div key={hour} className="grid border-b border-slate-50 min-h-16"
                     style={{ gridTemplateColumns: '64px repeat(7, 1fr)' }}>
                     <div className="text-right pr-3 pt-2 text-xs text-slate-300 border-r border-slate-100 shrink-0">
@@ -534,7 +538,7 @@ export default function CalendarPage({
                     {format(currentDate, 'M月 d日 (EEEE)', { locale: zhTW })}
                   </h3>
                 </div>
-                {Array.from({ length: 13 }, (_, i) => i + 8).map(hour => {
+                {Array.from({ length: endHour - startHour }, (_, i) => i + startHour).map(hour => {
                   const hBk = bookingsOnHour(currentDate, hour)
                   return (
                     <div key={hour} className="flex gap-3 px-4 py-2 border-b border-slate-50 min-h-14">
@@ -567,7 +571,7 @@ export default function CalendarPage({
       <Modal
         open={!!modalBooking}
         onClose={closeModal}
-        title={modalBooking ? (modalBooking.client?.full_name ?? '預約詳情') : '預約詳情'}
+        title="編輯預約"
         size="md"
         footer={modalBooking ? (
           /* ── Footer：操作按鈕（固定在底部） ── */
@@ -684,7 +688,7 @@ export default function CalendarPage({
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1.5">時間</label>
-                    <TimePicker value={editTime} onChange={handleTimeChange} />
+                    <TimePicker value={editTime} onChange={handleTimeChange} startHour={startHour} endHour={endHour} />
                   </div>
                 </div>
 

@@ -8,6 +8,7 @@ import BookingManagement from './pages/admin/BookingManagement'
 import PractitionerManagement from './pages/admin/PractitionerManagement'
 import ServicesPage from './pages/admin/ServicesPage'
 import ComponentsPage from './pages/admin/ComponentsPage'
+import SettingsPage from './pages/admin/SettingsPage'
 // import ClientsPage from './pages/admin/ClientsPage'
 // import DashboardPage from './pages/admin/DashboardPage'
 // import SettingsPage from './pages/admin/SettingsPage'
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="practitioners" element={<PractitionerManagement />} />
             <Route path="services" element={<ServicesPage />} />
             <Route path="components" element={<ComponentsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
             {/* <Route path="practitioners" element={<PractitionerManagement />} />
             <Route path="calendar" element={<Navigate to="/admin/bookings" replace />} />
             <Route path="gantt" element={<Navigate to="/admin/bookings" replace />} />

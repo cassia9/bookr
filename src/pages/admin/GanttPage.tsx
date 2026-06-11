@@ -37,17 +37,21 @@ const statusTextColorMap = {
 }
 
 const HOUR_HEIGHT = 80
-const BUSINESS_HOURS = { start: 9, end: 20 }
 
 interface GanttPageProps {
   selectedPractitionerId?: string | null
   defaultDate?: Date
+  startHour?: number
+  endHour?: number
 }
 
 export default function GanttPage({
   selectedPractitionerId,
   defaultDate,
+  startHour = 9,
+  endHour = 21,
 }: GanttPageProps) {
+  const BUSINESS_HOURS = { start: startHour, end: endHour }
   const [bookings, setBookings] = useState<Booking[]>([])
   const [practitioners, setPractitioners] = useState<Practitioner[]>([])
   const [isLoading, setIsLoading] = useState(true)

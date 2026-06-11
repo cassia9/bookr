@@ -23,6 +23,8 @@ export default function BookingManagement() {
   const [clients, setClients] = useState<Client[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [defaultBufferMinutes, setDefaultBufferMinutes] = useState(30)
+  const [startHour, setStartHour] = useState(9)
+  const [endHour, setEndHour] = useState(21)
 
   useEffect(() => {
     async function fetchMeta() {
@@ -30,12 +32,15 @@ export default function BookingManagement() {
         supabase.from('practitioners').select('*').eq('store_id', STORE_ID).eq('active', true).is('deleted_at', null),
         supabase.from('clients').select('*').eq('store_id', STORE_ID).order('full_name'),
         supabase.from('services').select('*').eq('store_id', STORE_ID).eq('active', true),
-        supabase.from('stores').select('default_buffer_minutes').eq('id', STORE_ID).single(),
+        supabase.from('stores').select('open_time, close_time, default_buffer_minutes').eq('id', STORE_ID).single(),
       ])
       setPractitioners(p ?? [])
       setClients(c ?? [])
       setServices(s ?? [])
-      setDefaultBufferMinutes((store as any)?.default_buffer_minutes ?? 30)
+      const storeData = store as any
+      setDefaultBufferMinutes(storeData?.default_buffer_minutes ?? 30)
+      setStartHour(parseInt(storeData?.open_time ?? '09:00', 10))
+      setEndHour(parseInt(storeData?.close_time ?? '21:00', 10))
     }
     fetchMeta()
   }, [])
@@ -176,11 +181,15 @@ export default function BookingManagement() {
             key={refreshKey}
             defaultView={calendarView}
             defaultDate={currentDate}
+            startHour={startHour}
+            endHour={endHour}
           />
         ) : (
           <GanttPage
             key={refreshKey}
             defaultDate={currentDate}
+            startHour={startHour}
+            endHour={endHour}
           />
         )}
       </div>
