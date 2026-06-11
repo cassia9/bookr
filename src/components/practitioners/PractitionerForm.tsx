@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { Check } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { callPractitionersAPI } from '@/lib/practitioner-api'
-import Button from '@/components/ui/buttons/Button'
-import Modal from '@/components/ui/modals/Modal'
-import FormField from '@/components/ui/forms/FormField'
-import Input from '@/components/ui/forms/Input'
-import Checkbox from '@/components/ui/forms/Checkbox'
-import Alert from '@/components/ui/feedback/Alert'
+import Modal from '@/components/ui/Modal'
+import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
+import Textarea from '@/components/ui/Textarea'
+import FormField from '@/components/ui/FormField'
+import Alert from '@/components/ui/Alert'
+import Spinner from '@/components/ui/Spinner'
 
 interface Service {
   id: string
@@ -17,7 +18,7 @@ interface Service {
 }
 
 interface PractitionerFormProps {
-  practitionerId?: string // 編輯時提供
+  practitionerId?: string
   onSuccess: () => void
   onCancel: () => void
 }
@@ -33,393 +34,211 @@ const PRACTITIONER_COLORS = [
   { name: '靛色', hex: '#6366F1' },
 ]
 
-export default function PractitionerForm({
-  practitionerId,
-  onSuccess,
-  onCancel,
-}: PractitionerFormProps) {
-  const [formData, setFormData] = useState({
+export default function PractitionerForm({ practitionerId, onSuccess, onCancel }: PractitionerFormProps) {
+  const [form, setForm] = useState({
     name: '',
     color_hex: '#9333EA',
     bio: '',
-    photo_url: '',
     service_ids: [] as string[],
   })
-
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingServices, setLoadingServices] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [isLoadingServices, setIsLoadingServices] = useState(true)
-  const [practitionerName, setPractitionerName] = useState<string | null>(null)
-  const [practitionerUpdatedAt, setPractitionerUpdatedAt] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadServices()
-  }, [])
+  useEffect(() => { loadServices() }, [])
+  useEffect(() => { if (practitionerId) loadPractitioner() }, [practitionerId])
 
-  useEffect(() => {
-    if (practitionerId) {
-      loadPractitionerData()
-    }
-  }, [practitionerId])
-
-  const loadServices = async () => {
+  async function loadServices() {
     try {
-      console.log('📚 開始載入課程列表...')
-
-      // 嘗試方法 1: 帶 RLS 條件的查詢
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from('services')
         .select('id, name, duration_minutes, price')
         .eq('active', true)
         .is('deleted_at', null)
         .order('name')
-
-      if (error) {
-        console.warn('⚠️ 方法 1 失敗，嘗試方法 2:', error)
-
-        // 降級方案: 使用公開 API 規則取得課程
-        const { data: publicData, error: publicError } = await supabase
-          .from('services')
-          .select('id, name, duration_minutes, price')
-          .eq('active', true)
-          .is('deleted_at', null)
-          .order('name')
-
-        if (publicError) {
-          console.error('❌ 兩種方法都失敗:', publicError)
-          throw publicError
-        }
-
-        data = publicData
-      }
-
-      console.log('✅ 課程載入成功，共', data?.length, '個課程')
-      if (data && data.length > 0) {
-        console.log('📝 課程列表:', data.map(s => s.name).join(', '))
-      }
+      if (error) throw error
       setServices(data || [])
     } catch (err) {
-      console.error('❌ Failed to load services:', err)
-      const errorMsg = err instanceof Error ? err.message : '無法載入課程列表'
-      console.error('詳細錯誤:', errorMsg)
-      setError(`無法載入課程列表: ${errorMsg}`)
+      setError('無法載入課程列表')
     } finally {
-      setIsLoadingServices(false)
+      setLoadingServices(false)
     }
   }
 
-  const loadPractitionerData = async () => {
+  async function loadPractitioner() {
     if (!practitionerId) return
-
     try {
       setLoading(true)
-      const { data: practitioner, error } = await supabase
-        .from('practitioners')
-        .select('*')
-        .eq('id', practitionerId)
-        .single()
+      const { data: p, error: pe } = await supabase
+        .from('practitioners').select('*').eq('id', practitionerId).single()
+      if (pe) throw pe
 
-      if (error) throw error
+      const { data: ps, error: pse } = await supabase
+        .from('practitioner_services').select('service_id').eq('practitioner_id', practitionerId)
+      if (pse) throw pse
 
-      // 保存用於顯示在標題的信息
-      setPractitionerName(practitioner.full_name)
-      setPractitionerUpdatedAt(practitioner.updated_at || null)
-
-      setFormData({
-        name: practitioner.full_name,
-        color_hex: practitioner.color,
-        bio: practitioner.bio || '',
-        photo_url: practitioner.photo_url || '',
-        service_ids: [],
+      setForm({
+        name: p.full_name,
+        color_hex: p.color,
+        bio: p.bio || '',
+        service_ids: ps.map((s: any) => s.service_id),
       })
-
-      const { data: services, error: servicesError } = await supabase
-        .from('practitioner_services')
-        .select('service_id')
-        .eq('practitioner_id', practitionerId)
-
-      if (servicesError) throw servicesError
-      setFormData((prev) => ({
-        ...prev,
-        service_ids: services.map((s) => s.service_id),
-      }))
-    } catch (err) {
-      console.error('Failed to load practitioner:', err)
-      setError('無法載入老師信息')
+    } catch {
+      setError('無法載入老師資料')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleServiceToggle = (serviceId: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      service_ids: prev.service_ids.includes(serviceId)
-        ? prev.service_ids.filter((id) => id !== serviceId)
-        : [...prev.service_ids, serviceId],
+  function toggleService(id: string) {
+    setForm(f => ({
+      ...f,
+      service_ids: f.service_ids.includes(id)
+        ? f.service_ids.filter(s => s !== id)
+        : [...f.service_ids, id],
     }))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    setSuccess(false)
-
-    if (!formData.name.trim()) {
-      setError('老師名字不能為空')
-      return
-    }
-
-    if (formData.service_ids.length === 0) {
-      setError('至少要選擇一個課程')
-      return
-    }
-
+    if (!form.name.trim()) { setError('老師名字不能為空'); return }
+    if (form.service_ids.length === 0) { setError('至少要選擇一個課程'); return }
+    setLoading(true)
     try {
-      setLoading(true)
-
       if (practitionerId) {
         await callPractitionersAPI('update_services', {
           practitioner_id: practitionerId,
-          service_ids: formData.service_ids,
+          service_ids: form.service_ids,
         })
-        setSuccess(true)
-        setTimeout(onSuccess, 1000)
       } else {
-        await callPractitionersAPI('create', formData)
-        setSuccess(true)
-        setTimeout(onSuccess, 1000)
+        await callPractitionersAPI('create', {
+          name: form.name.trim(),
+          color_hex: form.color_hex,
+          bio: form.bio.trim() || undefined,
+          service_ids: form.service_ids,
+        })
       }
+      onSuccess()
     } catch (err) {
-      console.error('Failed to save practitioner:', err)
-      setError(err instanceof Error ? err.message : '保存失敗，請稍後重試')
+      setError(err instanceof Error ? err.message : '儲存失敗，請稍後重試')
     } finally {
       setLoading(false)
     }
   }
 
-  // 計算表單是否有效（名字非空且至少選 1 個課程）
-  const isFormValid = formData.name.trim() !== '' && formData.service_ids.length > 0
-
-  // 格式化時間用於顯示
-  const formatUpdatedTime = (dateString: string | null) => {
-    if (!dateString) return null
-    const date = new Date(dateString)
-    return date.toLocaleString('zh-TW', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
+  const isEdit = !!practitionerId
+  const isValid = form.name.trim() !== '' && form.service_ids.length > 0
 
   return (
     <Modal
-      isOpen={true}
+      open
       onClose={onCancel}
-      title={practitionerId ? '✏️ 編輯老師' : '➕ 新增老師'}
-      subtitle={
-        practitionerId
-          ? `更新 ${practitionerName} 的基本資料和課程指派${
-              practitionerUpdatedAt
-                ? ` • 最後更新：${formatUpdatedTime(practitionerUpdatedAt)}`
-                : ''
-            }`
-          : '新增一位老師到系統'
+      title={isEdit ? '編輯老師' : '新增老師'}
+      size="md"
+      footer={
+        <div className="flex gap-2">
+          <Button variant="secondary" className="flex-1" onClick={onCancel} disabled={loading}>
+            取消
+          </Button>
+          <Button variant="primary" className="flex-1" loading={loading} disabled={!isValid}
+            onClick={handleSubmit as any}>
+            {isEdit ? '更新老師' : '新增老師'}
+          </Button>
+        </div>
       }
-      size="lg"
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* 錯誤提示 */}
-        {error && (
-          <Alert
-            type="error"
-            title="出錯了"
-            message={error}
-            onClose={() => setError(null)}
-            closable
-          />
-        )}
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && <Alert variant="error" onClose={() => setError(null)}>{error}</Alert>}
 
-        {/* 成功提示 */}
-        {success && (
-          <Alert
-            type="success"
-            message={practitionerId ? '更新成功！' : '新增成功！'}
-          />
-        )}
-
-        {/* 基本信息卡片 */}
-        <div className="border border-slate-200 rounded-lg bg-white p-5 space-y-5">
-          <FormField
-            label="老師名字"
-            required
+        {/* 名字 */}
+        <FormField label="老師名字" required>
+          <Input
+            type="text"
+            value={form.name}
+            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            placeholder="例：林老師"
             disabled={loading}
-          >
-            <Input
-              type="text"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-              placeholder="例：林老師"
-              disabled={loading}
-            />
-          </FormField>
+          />
+        </FormField>
 
-          {/* 識別顏色 */}
-          <div>
-            <label className="block text-sm font-medium text-slate-900 mb-3">
-              識別顏色 <span className="text-red-500">*</span>
-            </label>
-            <div className="flex flex-wrap gap-3">
-              {PRACTITIONER_COLORS.map((color) => {
-                const isSelected = formData.color_hex === color.hex
+        {/* 識別顏色 */}
+        <div>
+          <p className="text-xs font-medium text-slate-500 mb-2">識別顏色 <span className="text-red-400">*</span></p>
+          <div className="flex flex-wrap gap-2.5">
+            {PRACTITIONER_COLORS.map(c => (
+              <button
+                key={c.hex}
+                type="button"
+                title={c.name}
+                onClick={() => setForm(f => ({ ...f, color_hex: c.hex }))}
+                disabled={loading}
+                className="relative w-9 h-9 rounded-xl transition-all hover:scale-110 focus:outline-none disabled:opacity-50"
+                style={{ backgroundColor: c.hex }}
+              >
+                {form.color_hex === c.hex && (
+                  <span className="absolute inset-0 flex items-center justify-center">
+                    <Check size={16} className="text-white drop-shadow" strokeWidth={3} />
+                  </span>
+                )}
+                {form.color_hex === c.hex && (
+                  <span className="absolute inset-0 rounded-xl ring-2 ring-offset-2 ring-black" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 課程指派 */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-slate-500">可預約課程 <span className="text-red-400">*</span></p>
+            {services.length > 0 && (
+              <span className="text-xs text-slate-400">{form.service_ids.length}/{services.length} 已選</span>
+            )}
+          </div>
+          {loadingServices ? (
+            <div className="flex justify-center py-6"><Spinner size="sm" /></div>
+          ) : services.length === 0 ? (
+            <Alert variant="info">暫無可用課程，請先建立課程</Alert>
+          ) : (
+            <div className="space-y-2">
+              {services.map(s => {
+                const sel = form.service_ids.includes(s.id)
                 return (
-                  <button
-                    key={color.hex}
-                    type="button"
-                    onClick={() =>
-                      setFormData({ ...formData, color_hex: color.hex })
-                    }
-                    disabled={loading}
-                    className="relative transition-transform duration-150 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none"
-                    title={color.name}
-                  >
-                    <div
-                      className={`w-10 h-10 rounded-lg transition-all duration-150 ${
-                        isSelected
-                          ? 'ring-2 ring-offset-2 ring-black shadow-lg'
-                          : 'border border-slate-300 shadow-sm hover:shadow-md'
-                      }`}
-                      style={{ backgroundColor: color.hex }}
-                    >
-                      {isSelected && (
-                        <Check className="w-5 h-5 text-white absolute inset-0 m-auto drop-shadow-lg" strokeWidth={3} />
-                      )}
+                  <label key={s.id} className={[
+                    'flex items-start gap-3 px-4 py-3 rounded-2xl border-2 cursor-pointer transition-all',
+                    sel ? 'border-black bg-black/5' : 'border-slate-200 hover:border-slate-300',
+                  ].join(' ')}>
+                    <div className="relative mt-0.5 shrink-0">
+                      <input type="checkbox" checked={sel}
+                        onChange={() => toggleService(s.id)} disabled={loading}
+                        className="w-4 h-4 cursor-pointer appearance-none border-2 border-slate-300 rounded-md
+                          checked:border-black checked:bg-black transition-all disabled:opacity-50" />
+                      {sel && <Check size={10} strokeWidth={3} className="text-white absolute inset-0 m-auto pointer-events-none" />}
                     </div>
-                  </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800">{s.name}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{s.duration_minutes} 分鐘 · NT$ {s.price.toLocaleString()}</p>
+                    </div>
+                  </label>
                 )
               })}
             </div>
-          </div>
+          )}
         </div>
 
-        {/* 課程指派卡片 */}
-        <div className="border border-slate-200 rounded-lg bg-white p-5 space-y-4">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="block text-sm font-medium text-slate-900">
-                可預約課程 <span className="text-red-500">*</span>
-              </label>
-              {services.length > 0 && (
-                <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-1 rounded">
-                  {formData.service_ids.length}/{services.length} 已選
-                </span>
-              )}
-            </div>
-            {isLoadingServices ? (
-              <div className="flex items-center justify-center py-6">
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
-                <span className="text-sm text-slate-600 ml-2">載入課程中...</span>
-              </div>
-            ) : services.length === 0 ? (
-              <Alert
-                type="info"
-                message="暫無可用課程，請先建立課程"
-              />
-            ) : (
-              <div className="space-y-3">
-                {services.map((service) => {
-                  const isSelected = formData.service_ids.includes(service.id)
-                  return (
-                    <label
-                      key={service.id}
-                      className={`flex items-start gap-3 p-4 rounded-lg border-2 transition-all duration-150 cursor-pointer group ${
-                        isSelected
-                          ? 'border-black bg-black/5 shadow-sm'
-                          : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
-                      }`}
-                    >
-                      <div className="flex-shrink-0 w-5 h-5 mt-1 relative">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleServiceToggle(service.id)}
-                          disabled={loading}
-                          className="w-5 h-5 cursor-pointer appearance-none border-2 border-slate-300 rounded checked:border-black checked:bg-black transition-all duration-150 disabled:opacity-50"
-                        />
-                        {isSelected && (
-                          <Check className="w-3 h-3 text-white absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={3} />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className={`font-medium transition-colors duration-150 ${isSelected ? 'text-slate-900' : 'text-slate-700 group-hover:text-slate-900'}`}>
-                          {service.name}
-                          {isSelected && <span className="ml-2 text-slate-500 text-sm">✓</span>}
-                        </div>
-                        <div className="text-sm text-slate-500 mt-1 flex items-center gap-3">
-                          <span>⏱️ {service.duration_minutes} 分鐘</span>
-                          <span>💰 ¥{service.price.toLocaleString('zh-CN')}</span>
-                        </div>
-                      </div>
-                    </label>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 簡介卡片 */}
-        <div className="border border-slate-200 rounded-lg bg-white p-5">
-          <FormField
-            label="簡介"
-            hint="選填 - 輸入老師的簡短介紹或專長"
+        {/* 簡介 */}
+        <FormField label="簡介" hint="選填">
+          <Textarea
+            value={form.bio}
+            onChange={e => setForm(f => ({ ...f, bio: e.target.value }))}
+            placeholder="例：擅長運動傷害、肌筋膜放鬆…"
+            rows={2}
             disabled={loading}
-          >
-            <textarea
-              value={formData.bio}
-              onChange={(e) =>
-                setFormData({ ...formData, bio: e.target.value })
-              }
-              disabled={loading}
-              placeholder="例：擅長運動傷害、肌筋膜放鬆..."
-              rows={3}
-              className="w-full px-4 py-2.5 border border-slate-200 bg-white rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-          </FormField>
-        </div>
-
-        {/* 按鈕組 */}
-        <div className="flex gap-3 pt-4 border-t border-slate-200">
-          <Button
-            variant="secondary"
-            onClick={onCancel}
-            disabled={loading}
-            className="flex-1"
-          >
-            取消
-          </Button>
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={loading || !isFormValid}
-            className="flex-1"
-            title={!isFormValid ? '需要填寫老師名字並選擇至少 1 個課程' : ''}
-          >
-            {loading
-              ? practitionerId
-                ? '⏳ 更新中...'
-                : '⏳ 新增中...'
-              : practitionerId
-                ? '✓ 更新老師'
-                : '✓ 新增老師'}
-          </Button>
-        </div>
+          />
+        </FormField>
       </form>
     </Modal>
   )

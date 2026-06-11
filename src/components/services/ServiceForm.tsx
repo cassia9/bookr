@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { createService, updateService, type Service } from '@/lib/services-api'
-import Button from '@/components/ui/buttons/Button'
-import Modal from '@/components/ui/modals/Modal'
-import FormField from '@/components/ui/forms/FormField'
-import Input from '@/components/ui/forms/Input'
-import Alert from '@/components/ui/feedback/Alert'
+import Modal from '@/components/ui/Modal'
+import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
+import Textarea from '@/components/ui/Textarea'
+import FormField from '@/components/ui/FormField'
+import Alert from '@/components/ui/Alert'
+import Toggle from '@/components/ui/Toggle'
 
 interface ServiceFormProps {
   service?: Service | null
@@ -12,27 +14,20 @@ interface ServiceFormProps {
   onCancel: () => void
 }
 
-export default function ServiceForm({
-  service,
-  onSuccess,
-  onCancel,
-}: ServiceFormProps) {
-  const [formData, setFormData] = useState({
+export default function ServiceForm({ service, onSuccess, onCancel }: ServiceFormProps) {
+  const [form, setForm] = useState({
     name: '',
     description: '',
     duration_minutes: 60,
     price: 0,
     active: true,
   })
-
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
 
-  // 初始化編輯時的數據
   useEffect(() => {
     if (service) {
-      setFormData({
+      setForm({
         name: service.name,
         description: service.description || '',
         duration_minutes: service.duration_minutes,
@@ -42,249 +37,125 @@ export default function ServiceForm({
     }
   }, [service])
 
-  const validateForm = (): boolean => {
-    setError(null)
-
-    // 驗證課程名稱
-    if (!formData.name.trim()) {
-      setError('課程名稱不能為空')
-      return false
-    }
-
-    if (formData.name.trim().length > 100) {
-      setError('課程名稱不能超過 100 個字符')
-      return false
-    }
-
-    // 驗證時長
-    if (!Number.isInteger(formData.duration_minutes) || formData.duration_minutes < 15 || formData.duration_minutes > 480) {
-      setError('時長必須是 15-480 分鐘之間的整數')
-      return false
-    }
-
-    // 驗證定價
-    if (typeof formData.price !== 'number' || formData.price < 0 || formData.price > 999999) {
-      setError('定價必須在 0-999,999 之間')
-      return false
-    }
-
+  function validate(): boolean {
+    if (!form.name.trim()) { setError('課程名稱不能為空'); return false }
+    if (form.name.length > 100) { setError('課程名稱不能超過 100 個字'); return false }
+    if (form.duration_minutes < 15 || form.duration_minutes > 480) { setError('時長必須在 15–480 分鐘之間'); return false }
+    if (form.price < 0 || form.price > 999999) { setError('定價必須在 0–999,999 之間'); return false }
     return true
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    setSuccess(false)
-
-    if (!validateForm()) {
-      return
-    }
-
+    if (!validate()) return
+    setLoading(true)
     try {
-      setLoading(true)
-
       if (service) {
-        // 編輯課程
         await updateService({
           service_id: service.id,
-          name: formData.name.trim(),
-          description: formData.description.trim() || undefined,
-          duration_minutes: formData.duration_minutes,
-          price: formData.price,
-          active: formData.active,
+          name: form.name.trim(),
+          description: form.description.trim() || undefined,
+          duration_minutes: form.duration_minutes,
+          price: form.price,
+          active: form.active,
         })
-        setSuccess(true)
-        setTimeout(onSuccess, 1000)
       } else {
-        // 新增課程
         await createService({
-          name: formData.name.trim(),
-          description: formData.description.trim() || undefined,
-          duration_minutes: formData.duration_minutes,
-          price: formData.price,
-          active: formData.active,
+          name: form.name.trim(),
+          description: form.description.trim() || undefined,
+          duration_minutes: form.duration_minutes,
+          price: form.price,
+          active: form.active,
         })
-        setSuccess(true)
-        setTimeout(onSuccess, 1000)
       }
+      onSuccess()
     } catch (err) {
-      console.error('Failed to save service:', err)
-      setError(err instanceof Error ? err.message : '保存失敗，請稍後重試')
+      setError(err instanceof Error ? err.message : '儲存失敗，請稍後重試')
     } finally {
       setLoading(false)
     }
   }
 
+  const isEdit = !!service
+
   return (
     <Modal
-      isOpen={true}
+      open
       onClose={onCancel}
-      title={service ? '編輯課程' : '新增課程'}
-      subtitle={service ? '編輯課程信息和定價' : '新增一個可預約的課程'}
-      size="lg"
-    >
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* 錯誤提示 */}
-        {error && (
-          <Alert
-            type="error"
-            title="出錯了"
-            message={error}
-            onClose={() => setError(null)}
-            closable
-          />
-        )}
-
-        {/* 成功提示 */}
-        {success && (
-          <Alert
-            type="success"
-            message={service ? '課程已更新！' : '課程已新增！'}
-          />
-        )}
-
-        {/* 基本信息卡片 */}
-        <div className="border border-slate-200 rounded-lg bg-white p-5 space-y-5">
-          <FormField
-            label="課程名稱"
-            required
-            disabled={loading}
-            hint="例：深層肌肉放鬆、瑜伽伸展、皮膚護理"
-          >
-            <Input
-              type="text"
-              value={formData.name}
-              onChange={(e) => {
-                const value = e.target.value.slice(0, 100)
-                setFormData({ ...formData, name: value })
-              }}
-              placeholder="輸入課程名稱"
-              disabled={loading}
-              maxLength={100}
-            />
-            <div className="text-xs text-slate-500 mt-1">
-              {formData.name.length}/100
-            </div>
-          </FormField>
-
-          <FormField
-            label="課程描述"
-            disabled={loading}
-            hint="選填 - 簡短描述課程內容和效果"
-          >
-            <textarea
-              value={formData.description}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
-              }
-              disabled={loading}
-              placeholder="例：深層肌肉按摩，專注於放鬆肌肉緊張..."
-              rows={3}
-              className="w-full px-4 py-2.5 border border-slate-200 bg-white rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-          </FormField>
-        </div>
-
-        {/* 時長和定價卡片 */}
-        <div className="border border-slate-200 rounded-lg bg-white p-5 space-y-5">
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              label="課程時長（分鐘）"
-              required
-              disabled={loading}
-              hint="15-480 分鐘"
-            >
-              <Input
-                type="number"
-                value={formData.duration_minutes}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    duration_minutes: Math.max(15, Math.min(480, parseInt(e.target.value) || 0)),
-                  })
-                }
-                disabled={loading}
-                min={15}
-                max={480}
-              />
-            </FormField>
-
-            <FormField
-              label="定價（¥）"
-              required
-              disabled={loading}
-              hint="0-999,999"
-            >
-              <Input
-                type="number"
-                value={formData.price}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    price: Math.max(0, Math.min(999999, parseFloat(e.target.value) || 0)),
-                  })
-                }
-                disabled={loading}
-                min={0}
-                max={999999}
-                step={1}
-              />
-            </FormField>
-          </div>
-        </div>
-
-        {/* 上架狀態卡片 */}
-        <div className="border border-slate-200 rounded-lg bg-white p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-sm font-medium text-slate-900">
-                上架狀態
-              </label>
-              <p className="text-xs text-slate-500 mt-1">
-                {formData.active ? '此課程可供客戶預約' : '此課程已下架，客戶無法預約'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setFormData({ ...formData, active: !formData.active })}
-              disabled={loading}
-              className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors ${
-                formData.active ? 'bg-green-500' : 'bg-slate-300'
-              } ${loading ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-            >
-              <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                  formData.active ? 'translate-x-9' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-
-        {/* 按鈕組 */}
-        <div className="flex gap-3 pt-4 border-t border-slate-200">
-          <Button
-            variant="secondary"
-            onClick={onCancel}
-            disabled={loading}
-            className="flex-1"
-          >
+      title={isEdit ? '編輯課程' : '新增課程'}
+      size="md"
+      footer={
+        <div className="flex gap-2">
+          <Button variant="secondary" className="flex-1" onClick={onCancel} disabled={loading}>
             取消
           </Button>
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={loading}
-            className="flex-1"
-          >
-            {loading
-              ? service
-                ? '更新中...'
-                : '新增中...'
-              : service
-                ? '更新課程'
-                : '新增課程'}
+          <Button variant="primary" className="flex-1" loading={loading} onClick={handleSubmit as any}>
+            {isEdit ? '更新課程' : '新增課程'}
           </Button>
+        </div>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <Alert variant="error" onClose={() => setError(null)}>{error}</Alert>
+        )}
+
+        <FormField label="課程名稱" required hint={`${form.name.length}/100`}>
+          <Input
+            type="text"
+            value={form.name}
+            onChange={e => setForm(f => ({ ...f, name: e.target.value.slice(0, 100) }))}
+            placeholder="例：深層肌肉放鬆、瑜伽伸展"
+            disabled={loading}
+            maxLength={100}
+          />
+        </FormField>
+
+        <FormField label="課程描述" hint="選填">
+          <Textarea
+            value={form.description}
+            onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            placeholder="簡短描述課程內容和效果…"
+            rows={3}
+            disabled={loading}
+          />
+        </FormField>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="時長（分鐘）" required hint="15–480">
+            <Input
+              type="number"
+              value={form.duration_minutes}
+              onChange={e => setForm(f => ({ ...f, duration_minutes: Math.max(15, Math.min(480, parseInt(e.target.value) || 0)) }))}
+              min={15} max={480}
+              disabled={loading}
+            />
+          </FormField>
+          <FormField label="定價（NT$）" required>
+            <Input
+              type="number"
+              value={form.price}
+              onChange={e => setForm(f => ({ ...f, price: Math.max(0, Math.min(999999, parseFloat(e.target.value) || 0)) }))}
+              min={0} max={999999}
+              disabled={loading}
+              prefix={<span className="text-xs">NT$</span>}
+            />
+          </FormField>
+        </div>
+
+        <div className="flex items-center justify-between bg-slate-50 rounded-2xl px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-slate-700">上架狀態</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {form.active ? '此課程可供客戶預約' : '此課程已下架，客戶無法預約'}
+            </p>
+          </div>
+          <Toggle
+            checked={form.active}
+            onChange={v => setForm(f => ({ ...f, active: v }))}
+            disabled={loading}
+          />
         </div>
       </form>
     </Modal>
