@@ -53,31 +53,46 @@ export function SnackbarProvider() {
   )
 }
 
-// ── Single item ───────────────────────────────────────────────────────────────
-const CONFIG: Record<SnackbarType, { icon: React.ReactNode; bar: string; bg: string; title: string }> = {
+// ── 與 Alert 元件相同的色系設定 ─────────────────────────────────────────────
+const CONFIG: Record<SnackbarType, {
+  icon: React.ReactNode
+  bg: string
+  border: string
+  text: string
+  desc: string
+  progress: string
+}> = {
   success: {
-    icon: <CheckCircle size={18} strokeWidth={1.5} className="text-emerald-500 flex-shrink-0 mt-0.5" />,
-    bar: 'bg-emerald-500',
-    bg: 'bg-white',
-    title: 'text-slate-900',
+    icon: <CheckCircle size={16} strokeWidth={2} className="text-emerald-500 shrink-0 mt-0.5" />,
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+    text: 'text-emerald-800',
+    desc: 'text-emerald-600',
+    progress: 'bg-emerald-400',
   },
   error: {
-    icon: <XCircle size={18} strokeWidth={1.5} className="text-red-500 flex-shrink-0 mt-0.5" />,
-    bar: 'bg-red-500',
-    bg: 'bg-white',
-    title: 'text-slate-900',
+    icon: <XCircle size={16} strokeWidth={2} className="text-red-500 shrink-0 mt-0.5" />,
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    text: 'text-red-800',
+    desc: 'text-red-500',
+    progress: 'bg-red-400',
   },
   warning: {
-    icon: <AlertCircle size={18} strokeWidth={1.5} className="text-amber-500 flex-shrink-0 mt-0.5" />,
-    bar: 'bg-amber-500',
-    bg: 'bg-white',
-    title: 'text-slate-900',
+    icon: <AlertCircle size={16} strokeWidth={2} className="text-amber-500 shrink-0 mt-0.5" />,
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    text: 'text-amber-800',
+    desc: 'text-amber-600',
+    progress: 'bg-amber-400',
   },
   info: {
-    icon: <Info size={18} strokeWidth={1.5} className="text-blue-500 flex-shrink-0 mt-0.5" />,
-    bar: 'bg-blue-500',
-    bg: 'bg-white',
-    title: 'text-slate-900',
+    icon: <Info size={16} strokeWidth={2} className="text-blue-500 shrink-0 mt-0.5" />,
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+    text: 'text-blue-800',
+    desc: 'text-blue-500',
+    progress: 'bg-blue-400',
   },
 }
 
@@ -88,12 +103,8 @@ function SnackbarItem({ msg, onDismiss }: { msg: SnackbarMessage; onDismiss: (id
   const [progress, setProgress] = useState(100)
   const cfg = CONFIG[msg.type]
 
-  // Mount animation
-  useEffect(() => {
-    requestAnimationFrame(() => setVisible(true))
-  }, [])
+  useEffect(() => { requestAnimationFrame(() => setVisible(true)) }, [])
 
-  // Auto dismiss
   useEffect(() => {
     const start = Date.now()
     const interval = setInterval(() => {
@@ -117,30 +128,32 @@ function SnackbarItem({ msg, onDismiss }: { msg: SnackbarMessage; onDismiss: (id
   return (
     <div
       className={cn(
-        `pointer-events-auto w-80 rounded-3xl border border-slate-200 ${shadow.float} overflow-hidden transition-all duration-300`,
-        cfg.bg,
+        'pointer-events-auto w-80 rounded-2xl border overflow-hidden',
+        shadow.float,
+        'transition-all duration-300',
+        cfg.bg, cfg.border,
         visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-3',
       )}
     >
       <div className="flex items-start gap-3 px-4 pt-3.5 pb-3">
         {cfg.icon}
         <div className="flex-1 min-w-0">
-          <p className={cn('text-sm font-semibold', cfg.title)}>{msg.title}</p>
+          <p className={cn('text-sm font-semibold', cfg.text)}>{msg.title}</p>
           {msg.description && (
-            <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{msg.description}</p>
+            <p className={cn('text-xs mt-0.5 leading-relaxed', cfg.desc)}>{msg.description}</p>
           )}
         </div>
         <button
           onClick={handleDismiss}
-          className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0 -mr-1"
+          className={cn('p-1 rounded-lg transition-opacity hover:opacity-60 shrink-0 -mr-1', cfg.text)}
         >
-          <X size={14} strokeWidth={2} />
+          <X size={13} strokeWidth={2} />
         </button>
       </div>
-      {/* Progress bar */}
-      <div className="h-0.5 bg-slate-100">
+      {/* 進度條 */}
+      <div className="h-0.5 bg-black/5">
         <div
-          className={cn('h-full transition-all', cfg.bar)}
+          className={cn('h-full', cfg.progress)}
           style={{ width: `${progress}%`, transition: 'width 50ms linear' }}
         />
       </div>
