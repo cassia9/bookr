@@ -188,7 +188,7 @@ AS $$
     b.status,
     b.price,
     b.notes,
-    p.name  AS practitioner_name,
+    p.full_name AS practitioner_name,
     s.name  AS service_name,
     s.duration_minutes AS service_duration
   FROM bookings b
