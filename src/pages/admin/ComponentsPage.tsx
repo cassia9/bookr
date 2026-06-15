@@ -20,7 +20,7 @@ import FormField from '@/components/ui/FormField'
 import Alert from '@/components/ui/Alert'
 import SearchInput from '@/components/ui/SearchInput'
 import Pagination from '@/components/ui/Pagination'
-import ConfirmModal from '@/components/ui/ConfirmModal'
+import Drawer from '@/components/ui/Drawer'
 import { toast } from '@/components/ui/Snackbar'
 
 // ── 類別區塊元件 ────────────────────────────────────────────────────────────
@@ -50,12 +50,12 @@ export default function ComponentsPage() {
   const [dateVal, setDateVal] = useState('')
   const [timeVal, setTimeVal] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
   const [toggleA, setToggleA] = useState(false)
   const [toggleB, setToggleB] = useState(true)
   const [inputVal, setInputVal] = useState('')
   const [searchVal, setSearchVal] = useState('')
   const [pagePage, setPagePage] = useState(1)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const practitionerOptions = [
     { value: '1', label: '王小明', color: '#6366f1' },
@@ -259,22 +259,7 @@ export default function ComponentsPage() {
           </Row>
         </Section>
 
-        {/* ── 10. ConfirmModal ── */}
-        <Section title="ConfirmModal 確認對話框">
-          <Row label="刪除確認">
-            <Button variant="danger" onClick={() => setConfirmOpen(true)}>開啟確認框</Button>
-          </Row>
-          <ConfirmModal
-            open={confirmOpen}
-            onClose={() => setConfirmOpen(false)}
-            onConfirm={() => { toast.info('已確認'); setConfirmOpen(false) }}
-            title="確認刪除課程"
-            description="該課程將被永久刪除，歷史預約記錄將保留但無法使用此課程。此操作無法撤銷。"
-            confirmLabel="確認刪除"
-          />
-        </Section>
-
-        {/* ── 11. Toggle ── */}
+        {/* ── 10. Toggle ── */}
         <Section title="Toggle 開關">
           <Row label="狀態">
             <div className="flex items-center gap-3">
@@ -317,10 +302,38 @@ export default function ComponentsPage() {
               ℹ Info
             </Button>
           </Row>
-          <p className="text-xs text-slate-400">Toast 通知會出現在畫面右下角，3秒後自動消失</p>
+          <p className="text-xs text-slate-400">Toast 通知會出現在畫面頂部，3秒後自動消失</p>
         </Section>
 
-        {/* ── 10. 顏色（設計系統） ── */}
+        {/* ── 10. Drawer 右側抽屜 ── */}
+        <Section title="Drawer 右側抽屜">
+          <Row label="觸發">
+            <Button variant="secondary" size="sm" onClick={() => setDrawerOpen(true)}>
+              開啟 Drawer
+            </Button>
+          </Row>
+          <Drawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            title="客戶詳情"
+            subtitle="0912-345-678"
+            footer={
+              <div className="flex gap-2">
+                <Button variant="secondary" className="flex-1" onClick={() => setDrawerOpen(false)}>編輯資料</Button>
+                <Button variant="danger" className="flex-1" onClick={() => setDrawerOpen(false)}>刪除客戶</Button>
+              </div>
+            }
+          >
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-slate-600">Drawer 從右側滑入，支援 ESC 關閉、點擊遮罩關閉。</p>
+              <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-500">
+                內容區可捲動，Header 與 Footer 固定。
+              </div>
+            </div>
+          </Drawer>
+        </Section>
+
+        {/* ── 11. 顏色（設計系統） ── */}
         <Section title="設計系統色板">
           <div className="grid grid-cols-5 gap-3">
             {[

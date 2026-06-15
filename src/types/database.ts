@@ -54,8 +54,10 @@ export interface Database {
           notes: string | null
           store_id: string
           created_at: string
+          updated_at: string | null
+          deleted_at: string | null
         }
-        Insert: Omit<Database['public']['Tables']['clients']['Row'], 'id' | 'created_at'>
+        Insert: Omit<Database['public']['Tables']['clients']['Row'], 'id' | 'created_at' | 'updated_at' | 'deleted_at'>
         Update: Partial<Database['public']['Tables']['clients']['Insert']>
       }
       services: {
@@ -114,6 +116,48 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['notification_templates']['Insert']>
       }
     }
+    Views: {
+      client_stats: {
+        Row: {
+          id: string
+          store_id: string
+          full_name: string
+          phone: string
+          email: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string | null
+          booking_count: number
+          completed_count: number
+          cancelled_count: number
+          total_spent: number
+          avg_spent: number
+          first_booking_at: string | null
+          last_booking_at: string | null
+          upcoming_count: number
+        }
+      }
+    }
+    Functions: {
+      search_clients: {
+        Args: { p_query: string; p_store_id?: string; p_limit?: number }
+        Returns: Array<{ id: string; full_name: string; phone: string; email: string | null }>
+      }
+      get_client_bookings: {
+        Args: { p_client_id: string; p_limit?: number }
+        Returns: Array<{
+          id: string
+          start_time: string
+          end_time: string
+          status: BookingStatus
+          price: number
+          notes: string | null
+          practitioner_name: string
+          service_name: string
+          service_duration: number
+        }>
+      }
+    }
   }
 }
 
@@ -130,3 +174,4 @@ export type BookingWithRelations = Booking & {
   practitioner: Practitioner
   service: Service
 }
+export type ClientStat = Database['public']['Views']['client_stats']['Row']
