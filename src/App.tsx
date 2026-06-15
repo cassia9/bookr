@@ -38,28 +38,8 @@ export default function App() {
             <Route path="practitioners" element={<PractitionerManagement />} />
             <Route path="services" element={<ServicesPage />} />
             <Route path="components" element={<ComponentsPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            {/* <Route path="practitioners" element={<PractitionerManagement />} />
-            <Route path="calendar" element={<Navigate to="/admin/bookings" replace />} />
-            <Route path="gantt" element={<Navigate to="/admin/bookings" replace />} />
             <Route path="clients" element={<ClientsPage />} />
-            <Route path="services" element={<ServicesPage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="members" element={
-              <ProtectedRoute adminOnly>
-                <MembersPage />
-              </ProtectedRoute>
-            } />
-            <Route path="invite-member" element={
-              <ProtectedRoute adminOnly>
-                <InviteMemberPage />
-              </ProtectedRoute>
-            } />
-            <Route path="settings" element={
-              <ProtectedRoute adminOnly>
-                <SettingsPage />
-              </ProtectedRoute>
-            } /> */}
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/admin" replace />} />
