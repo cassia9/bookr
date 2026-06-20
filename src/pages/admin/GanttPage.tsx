@@ -68,8 +68,9 @@ export default function GanttPage({
       // 取得從業人員列表
       let practQuery = supabase
         .from('practitioners')
-        .select('id, name')
-        .order('name', { ascending: true })
+        .select('id, full_name')
+        .eq('active', true)
+        .order('full_name', { ascending: true })
 
       // 如果選擇了特定從業人員，則只顯示該人員
       if (selectedPractitionerId) {
