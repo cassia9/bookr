@@ -80,7 +80,7 @@ function StatCard({ label, value, sub, icon: Icon, color }: {
       </div>
       <div className="min-w-0">
         <p className="text-xs text-slate-400 font-medium">{label}</p>
-        <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{value}</p>
+        <p className="text-base font-bold text-slate-900 leading-tight mt-0.5 break-all">{value}</p>
         {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
       </div>
     </div>
