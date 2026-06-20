@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Users, Plus, Phone, Mail, ChevronRight,
   CalendarDays, TrendingUp, Clock, ChevronDown,
-  Check, X, DollarSign, FileText,
+  Check, X, DollarSign, FileText, Pencil, Trash2,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
@@ -28,6 +28,7 @@ import SearchInput from '@/components/ui/SearchInput'
 import Pagination from '@/components/ui/Pagination'
 import Spinner from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Snackbar'
+import IconButton from '@/components/ui/IconButton'
 import { cn } from '@/lib/cn'
 import type { ClientStat } from '@/types/database'
 
@@ -367,11 +368,11 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
       title={client.full_name}
       subtitle={client.phone}
       width="md"
-      footer={
-        <div className="flex gap-2">
-          <Button variant="secondary" className="flex-1" onClick={onEdit}>編輯資料</Button>
-          <Button variant="danger" className="flex-1" onClick={onDelete}>刪除客戶</Button>
-        </div>
+      headerActions={
+        <>
+          <IconButton icon={Pencil} label="編輯資料" onClick={onEdit} />
+          <IconButton icon={Trash2} label="刪除客戶" variant="danger" onClick={onDelete} />
+        </>
       }
     >
       <div className="px-6 py-5 space-y-6">

@@ -13,6 +13,8 @@ interface Props {
   title: string
   subtitle?: string
   children: ReactNode
+  /** 標題列右側（X 按鈕左邊）的額外操作按鈕，建議使用 IconButton */
+  headerActions?: ReactNode
   footer?: ReactNode
   width?: 'sm' | 'md' | 'lg'
 }
@@ -24,7 +26,7 @@ const widthCls = {
 }
 
 export default function Drawer({
-  open, onClose, title, subtitle, children, footer, width = 'md',
+  open, onClose, title, subtitle, children, headerActions, footer, width = 'md',
 }: Props) {
   // ESC 關閉
   useEffect(() => {
@@ -68,12 +70,15 @@ export default function Drawer({
               <p className="text-sm text-slate-400 mt-0.5 truncate">{subtitle}</p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-          >
-            <X size={16} strokeWidth={2} />
-          </button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            {headerActions}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <X size={16} strokeWidth={2} />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable body */}
