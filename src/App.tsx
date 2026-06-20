@@ -12,7 +12,7 @@ import SettingsPage from './pages/admin/SettingsPage'
 import ClientsPage from './pages/admin/ClientsPage'
 // import DashboardPage from './pages/admin/DashboardPage'
 // import SettingsPage from './pages/admin/SettingsPage'
-import InviteMemberPage from './pages/admin/InviteMemberPage'
+// InviteMemberPage 已整合為 SettingsPage 內的 Modal
 // MembersPage 已整合進 SettingsPage
 import AcceptInvitationPage from './pages/auth/AcceptInvitationPage'
 
@@ -41,7 +41,7 @@ export default function App() {
             <Route path="clients" element={<ClientsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="members" element={<Navigate to="/admin/settings" replace />} />
-            <Route path="invite-member" element={<InviteMemberPage />} />
+            <Route path="invite-member" element={<Navigate to="/admin/settings" replace />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/admin" replace />} />

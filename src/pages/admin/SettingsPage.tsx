@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+
 import { useAuth } from '@/lib/auth'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
+import FormField from '@/components/ui/FormField'
 import Modal from '@/components/ui/Modal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import Badge from '@/components/ui/Badge'
@@ -202,13 +203,59 @@ function BasicSettings() {
 // ── 成員管理 Tab ─────────────────────────────────────────────────────────────
 
 function MembersSettings() {
-  const navigate = useNavigate()
-  const { session } = useAuth()
+  const { session, profile } = useAuth()
 
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [editingMember, setEditingMember] = useState<Member | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  // 邀請 Modal 狀態
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState<'member' | 'admin'>('member')
+  const [inviteEmailError, setInviteEmailError] = useState('')
+  const [inviteSending, setInviteSending] = useState(false)
+
+  function validateEmail(email: string) {
+    return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email)
+  }
+
+  function openInvite() {
+    setInviteEmail('')
+    setInviteRole('member')
+    setInviteEmailError('')
+    setInviteOpen(true)
+  }
+
+  async function handleInviteSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!inviteEmail) { setInviteEmailError('請輸入 Email'); return }
+    if (!validateEmail(inviteEmail)) { setInviteEmailError('請輸入有效的 Email 格式'); return }
+    if (!session) return
+
+    setInviteSending(true)
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-member`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: inviteEmail, role: inviteRole, storeName: profile?.full_name || '預約系統' }),
+        }
+      )
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error ?? `HTTP ${res.status}`)
+      }
+      toast.success('邀請已發送', `邀請信已寄到 ${inviteEmail}`)
+      setInviteOpen(false)
+    } catch (err: any) {
+      toast.error('發送失敗', err.message)
+    } finally {
+      setInviteSending(false)
+    }
+  }
 
   useEffect(() => { loadMembers() }, [])
 
@@ -269,7 +316,7 @@ function MembersSettings() {
           <h2 className="text-base font-semibold text-slate-900">成員管理</h2>
           <p className="text-sm text-slate-500 mt-0.5">管理能夠存取此管理後台的帳號與角色權限</p>
         </div>
-        <Button variant="primary" size="sm" onClick={() => navigate('/admin/invite-member')}>
+        <Button variant="primary" size="sm" onClick={openInvite}>
           <UserPlus size={15} />
           邀請成員
         </Button>
@@ -379,6 +426,47 @@ function MembersSettings() {
         description="你確定要移除此成員的存取權限？此操作無法撤銷。"
         confirmLabel="確認移除"
       />
+
+      {/* 邀請新成員 Modal */}
+      <Modal open={inviteOpen} onClose={() => setInviteOpen(false)} title="邀請新成員">
+        <form onSubmit={handleInviteSubmit} className="space-y-5">
+          <p className="text-sm text-slate-500">邀請信將寄到對方信箱，對方點擊連結後即可設定密碼加入。</p>
+
+          <FormField label="Email 地址" required hint="用於發送邀請郵件" error={inviteEmailError}>
+            <Input
+              type="email"
+              placeholder="john@example.com"
+              value={inviteEmail}
+              onChange={e => { setInviteEmail(e.target.value); setInviteEmailError('') }}
+              onBlur={() => { if (inviteEmail && !validateEmail(inviteEmail)) setInviteEmailError('請輸入有效的 Email 格式') }}
+              error={!!inviteEmailError}
+              disabled={inviteSending}
+            />
+          </FormField>
+
+          <FormField label="成員角色" required>
+            <Select
+              value={inviteRole}
+              onChange={v => setInviteRole(v as 'member' | 'admin')}
+              options={[
+                { value: 'member', label: '一般成員 — 只能查看和操作自己的預約' },
+                { value: 'admin', label: '管理員 — 擁有完整管理員權限' },
+              ]}
+              disabled={inviteSending}
+            />
+          </FormField>
+
+          <div className="flex gap-2 pt-1">
+            <Button type="button" variant="secondary" className="flex-1" onClick={() => setInviteOpen(false)} disabled={inviteSending}>
+              取消
+            </Button>
+            <Button type="submit" variant="primary" className="flex-1" loading={inviteSending}>
+              <Send size={14} />
+              發送邀請
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }
