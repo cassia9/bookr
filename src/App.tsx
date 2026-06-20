@@ -13,7 +13,7 @@ import ClientsPage from './pages/admin/ClientsPage'
 // import DashboardPage from './pages/admin/DashboardPage'
 // import SettingsPage from './pages/admin/SettingsPage'
 // import InviteMemberPage from './pages/admin/InviteMemberPage'
-// import MembersPage from './pages/admin/MembersPage'
+import MembersPage from './pages/admin/MembersPage'
 import AcceptInvitationPage from './pages/auth/AcceptInvitationPage'
 
 export default function App() {
@@ -40,6 +40,7 @@ export default function App() {
             <Route path="components" element={<ComponentsPage />} />
             <Route path="clients" element={<ClientsPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="members" element={<MembersPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/admin" replace />} />

@@ -10,7 +10,7 @@ import { toast } from '@/components/ui/Snackbar'
 interface Member {
   id: string
   email: string
-  name: string
+  full_name: string
   role: 'member' | 'admin'
   created_at: string
 }
@@ -37,8 +37,7 @@ export default function MembersPage() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, email, name, role, created_at')
-        .is('deleted_at', null)
+        .select('id, email, full_name, role, created_at')
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -219,7 +218,7 @@ export default function MembersPage() {
                         {member.email}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
-                        {member.name || '-'}
+                        {member.full_name || '-'}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
