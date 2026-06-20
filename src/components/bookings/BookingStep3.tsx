@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import * as BookingAPI from '@/lib/bookings/api'
+import Select from '@/components/ui/Select'
 
 interface BookingStep3Props {
   selectedPractitioner: any | null
@@ -165,17 +166,17 @@ export default function BookingStep3({
         <label className="block text-sm font-semibold text-slate-900 mb-2">
           預約時長 <span className="text-red-500">*</span>
         </label>
-        <select
-          value={durationMinutes}
-          onChange={(e) => handleDurationChange(Number(e.target.value))}
-          className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black"
-        >
-          <option value={30}>30 分鐘</option>
-          <option value={45}>45 分鐘</option>
-          <option value={60}>1 小時</option>
-          <option value={90}>1.5 小時</option>
-          <option value={120}>2 小時</option>
-        </select>
+        <Select
+          value={String(durationMinutes)}
+          onChange={(v) => handleDurationChange(Number(v))}
+          options={[
+            { value: '30',  label: '30 分鐘' },
+            { value: '45',  label: '45 分鐘' },
+            { value: '60',  label: '1 小時' },
+            { value: '90',  label: '1.5 小時' },
+            { value: '120', label: '2 小時' },
+          ]}
+        />
       </div>
 
       {/* 衝突警告 */}

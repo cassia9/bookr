@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Download, Filter } from 'lucide-react'
+import { Plus, Download, Filter } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
 import PractitionerTable from '@/components/practitioners/PractitionerTable'
@@ -7,6 +7,9 @@ import PractitionerForm from '@/components/practitioners/PractitionerForm'
 import PractitionerLeaveManager from '@/components/practitioners/PractitionerLeaveManager'
 import PractitionerDrawer from '@/components/PractitionerDrawer'
 import StatsCard from '@/components/ui/StatsCard'
+import Button from '@/components/ui/Button'
+import SearchInput from '@/components/ui/SearchInput'
+import Select from '@/components/ui/Select'
 
 interface PractitionerStats {
   total: number
@@ -118,27 +121,16 @@ export default function PractitionerManagement() {
 
           {/* 操作按鈕 */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => {}}
-              className="p-2.5 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
-              title="篩選"
-            >
+            <Button variant="ghost" size="sm" onClick={() => {}} title="篩選">
               <Filter className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => {}}
-              className="p-2.5 hover:bg-surface-secondary rounded-lg transition text-text-secondary hover:text-text-primary"
-              title="匯出"
-            >
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => {}} title="匯出">
               <Download className="w-5 h-5" />
-            </button>
-            <button
-              onClick={handleAddPractitioner}
-              className="flex items-center gap-2 px-4 py-2.5 bg-black hover:bg-primary-hover text-white rounded-lg transition font-medium text-sm shadow-md hover:shadow-lg active:scale-95"
-            >
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleAddPractitioner}>
               <Plus className="w-4 h-4" />
               新增老師
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -189,30 +181,24 @@ export default function PractitionerManagement() {
         {/* 搜尋和篩選 */}
         <div className="px-6 py-5 border-b border-slate-200/50 space-y-3 bg-white shadow-xs">
           <div className="flex gap-3">
-            {/* 搜尋框 */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-              <input
-                type="text"
-                placeholder="搜尋老師名字或課程..."
+            <div className="flex-1">
+              <SearchInput
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 bg-white rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-0 focus:border-black transition"
+                onChange={setSearchTerm}
+                placeholder="搜尋老師名字或課程..."
               />
             </div>
-
-            {/* 狀態篩選 */}
-            <select
-              value={filterStatus}
-              onChange={(e) =>
-                setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')
-              }
-              className="px-4 py-2.5 text-sm border border-slate-200 bg-white rounded-lg text-text-primary focus:outline-none focus:ring-0 focus:border-black transition"
-            >
-              <option value="all">全部狀態</option>
-              <option value="active">活躍</option>
-              <option value="inactive">停用</option>
-            </select>
+            <div className="w-40">
+              <Select
+                value={filterStatus}
+                onChange={(v) => setFilterStatus(v as 'all' | 'active' | 'inactive')}
+                options={[
+                  { value: 'all', label: '全部狀態' },
+                  { value: 'active', label: '活躍' },
+                  { value: 'inactive', label: '停用' },
+                ]}
+              />
+            </div>
           </div>
 
           {/* 篩選指示 */}

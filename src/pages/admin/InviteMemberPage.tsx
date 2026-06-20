@@ -4,6 +4,9 @@ import { useAuth } from '@/lib/auth'
 import Button from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { toast } from '@/components/ui/Snackbar'
+import Input from '@/components/ui/Input'
+import Select from '@/components/ui/Select'
+import FormField from '@/components/ui/FormField'
 
 interface InviteFormState {
   email: string
@@ -41,10 +44,6 @@ export default function InviteMemberPage() {
     if (form.email && !validateEmail(form.email)) {
       setErrors({ email: 'Please enter a valid email address' })
     }
-  }
-
-  const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setForm({ ...form, role: e.target.value as 'member' | 'admin' })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -123,50 +122,32 @@ export default function InviteMemberPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email 輸入 */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email 地址 *
-              </label>
-              <input
-                id="email"
+            <FormField label="Email 地址" required hint="用於發送邀請郵件" error={errors.email}>
+              <Input
                 type="email"
                 placeholder="john@example.com"
                 value={form.email}
                 onChange={handleEmailChange}
                 onBlur={handleEmailBlur}
-                className={`w-full px-4 py-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.email ? 'border-red-500' : 'border-gray-300'
-                }`}
+                error={!!errors.email}
                 disabled={isLoading}
               />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-              )}
-              <p className="mt-1 text-xs text-gray-500">
-                用於發送邀請郵件
-              </p>
-            </div>
+            </FormField>
 
             {/* 角色選擇 */}
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
-                成員角色 *
-              </label>
-              <select
-                id="role"
+            <FormField label="成員角色" required>
+              <Select
                 value={form.role}
-                onChange={handleRoleChange}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(v) => {
+                  setForm(prev => ({ ...prev, role: v as 'member' | 'admin' }))
+                }}
+                options={[
+                  { value: 'member', label: '一般成員 — 只能查看和操作自己的預約' },
+                  { value: 'admin', label: '管理員 — 擁有完整管理員權限' },
+                ]}
                 disabled={isLoading}
-              >
-                <option value="member">
-                  一般成員 - 只能查看和操作自己的預約
-                </option>
-                <option value="admin">
-                  管理員 - 擁有完整管理員權限
-                </option>
-              </select>
-            </div>
+              />
+            </FormField>
 
             {/* 提交按鈕 */}
             <Button

@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Snackbar'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 
 interface Member {
   id: string
@@ -263,73 +264,48 @@ export default function MembersPage() {
       >
         {editingMember && (
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">{editingMember.email}</p>
-            <div className="space-y-3">
-              <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-blue-50"
-              >
+            <p className="text-sm text-slate-500">{editingMember.email}</p>
+            <div className="space-y-2">
+              <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-colors">
                 <input
                   type="radio"
                   name="role"
                   value="member"
                   checked={editingMember.role === 'member'}
                   onChange={() => setEditingMember({ ...editingMember, role: 'member' })}
+                  className="accent-black"
                 />
-                <span>一般成員</span>
+                <span className="text-sm font-medium text-slate-700">一般成員</span>
               </label>
-              <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-blue-50">
+              <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-colors">
                 <input
                   type="radio"
                   name="role"
                   value="admin"
                   checked={editingMember.role === 'admin'}
                   onChange={() => setEditingMember({ ...editingMember, role: 'admin' })}
+                  className="accent-black"
                 />
-                <span>管理員</span>
+                <span className="text-sm font-medium text-slate-700">管理員</span>
               </label>
             </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setEditingMember(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => handleEditRole(editingMember.role)}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                保存
-              </button>
+            <div className="flex gap-2 pt-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setEditingMember(null)}>取消</Button>
+              <Button variant="primary" className="flex-1" onClick={() => handleEditRole(editingMember.role)}>儲存</Button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* 刪除確認 Dialog */}
-      {deletingMemberId && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <Card className="max-w-sm w-full p-6">
-            <h3 className="text-lg font-semibold mb-2">確認刪除</h3>
-            <p className="text-gray-600 mb-4">
-              你確定要刪除此成員？此操作無法撤銷。
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setDeletingMemberId(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleDeleteMember}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                確認刪除
-              </button>
-            </div>
-          </Card>
-        </div>
-      )}
+      {/* 刪除確認 */}
+      <ConfirmModal
+        open={!!deletingMemberId}
+        onClose={() => setDeletingMemberId(null)}
+        onConfirm={handleDeleteMember}
+        title="確認刪除成員"
+        description="你確定要刪除此成員？此操作無法撤銷。"
+        confirmLabel="確認刪除"
+      />
 
     </div>
   )
