@@ -232,15 +232,16 @@ function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
 
 // ── 狀態操作設定 ────────────────────────────────────────────────────────────
 
-const STATUS_ACTIONS: Partial<Record<BookingStatus, { label: string; next: BookingStatus; style: string }[]>> = {
+type BtnVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+const STATUS_ACTIONS: Partial<Record<BookingStatus, { label: string; next: BookingStatus; variant: BtnVariant; className?: string }[]>> = {
   pending: [
-    { label: '確認預約', next: 'confirmed', style: 'bg-indigo-500 hover:bg-indigo-600 text-white' },
-    { label: '取消',     next: 'cancelled', style: 'bg-white hover:bg-red-50 text-red-600 border border-red-200' },
+    { label: '確認預約', next: 'confirmed', variant: 'primary',   className: 'bg-indigo-500 hover:bg-indigo-600 shadow-indigo-200/50' },
+    { label: '取消',     next: 'cancelled', variant: 'ghost',     className: 'text-red-500 hover:bg-red-50' },
   ],
   confirmed: [
-    { label: '完課',   next: 'completed', style: 'bg-emerald-500 hover:bg-emerald-600 text-white' },
-    { label: '未到場', next: 'no_show',   style: 'bg-slate-500 hover:bg-slate-600 text-white' },
-    { label: '取消',   next: 'cancelled', style: 'bg-white hover:bg-red-50 text-red-600 border border-red-200' },
+    { label: '完課',   next: 'completed', variant: 'primary',   className: 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200/50' },
+    { label: '未到場', next: 'no_show',   variant: 'secondary' },
+    { label: '取消',   next: 'cancelled', variant: 'ghost',     className: 'text-red-500 hover:bg-red-50' },
   ],
 }
 
@@ -511,24 +512,20 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
 
                         {/* 價格 */}
                         {isEditable ? (
-                          <div>
-                            <label className="text-xs font-medium text-slate-500 flex items-center gap-1 mb-1">
-                              <DollarSign size={11} />
-                              價格（NT$）
-                            </label>
-                            <input
+                          <FormField label="價格（NT$）" disabled={isSaving}>
+                            <Input
                               type="number"
                               min={0}
                               value={edit.price}
+                              prefix={<DollarSign size={14} />}
                               onChange={e => setEditMap(prev => ({
                                 ...prev,
                                 [b.id]: { ...prev[b.id], price: e.target.value },
                               }))}
                               onBlur={() => savePrice(b.id)}
                               disabled={isSaving}
-                              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 disabled:opacity-50"
                             />
-                          </div>
+                          </FormField>
                         ) : (
                           <div className="flex items-center gap-1.5 text-sm text-slate-700">
                             <DollarSign size={13} className="text-slate-400" />
@@ -538,20 +535,15 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
 
                         {/* 備注 */}
                         {isEditable ? (
-                          <div>
-                            <label className="text-xs font-medium text-slate-500 flex items-center gap-1 mb-1">
-                              <FileText size={11} />
-                              備注
-                            </label>
-                            <textarea
+                          <FormField label="備注" hint="1.5 秒後自動儲存" disabled={isSaving}>
+                            <Textarea
                               value={edit.notes}
                               onChange={e => handleNotesChange(b.id, e.target.value)}
                               disabled={isSaving}
                               rows={2}
                               placeholder="輸入備注…"
-                              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 disabled:opacity-50"
                             />
-                          </div>
+                          </FormField>
                         ) : b.notes ? (
                           <div className="flex gap-1.5 text-xs text-slate-500 italic">
                             <FileText size={12} className="text-slate-300 shrink-0 mt-0.5" />
@@ -562,34 +554,37 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
                         {/* 狀態操作按鈕 */}
                         {actions && (
                           <div>
-                            {/* 取消確認 inline */}
                             {cancelTarget === b.id ? (
-                              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                              <div className="bg-red-50 border border-red-200 rounded-2xl px-3 py-2.5">
                                 <p className="text-xs text-red-700 mb-2 font-medium">確定要取消這筆預約？</p>
                                 <div className="flex gap-2">
-                                  <button
-                                    type="button"
+                                  <Button
+                                    size="sm"
+                                    variant="danger"
+                                    className="flex-1"
+                                    loading={isSaving}
                                     onClick={() => updateStatus(b.id, 'cancelled')}
-                                    disabled={isSaving}
-                                    className="flex-1 text-xs py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
                                   >
                                     <Check size={12} /> 確定取消
-                                  </button>
-                                  <button
-                                    type="button"
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="flex-1"
                                     onClick={() => setCancelTarget(null)}
-                                    className="flex-1 text-xs py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium transition-colors flex items-center justify-center gap-1"
                                   >
                                     <X size={12} /> 算了
-                                  </button>
+                                  </Button>
                                 </div>
                               </div>
                             ) : (
                               <div className="flex flex-wrap gap-1.5">
                                 {actions.map(action => (
-                                  <button
+                                  <Button
                                     key={action.next}
-                                    type="button"
+                                    size="sm"
+                                    variant={action.variant}
+                                    className={action.className}
                                     disabled={isSaving}
                                     onClick={() => {
                                       if (action.next === 'cancelled') {
@@ -598,13 +593,9 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
                                         updateStatus(b.id, action.next)
                                       }
                                     }}
-                                    className={cn(
-                                      'text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50',
-                                      action.style,
-                                    )}
                                   >
                                     {isSaving ? '…' : action.label}
-                                  </button>
+                                  </Button>
                                 ))}
                               </div>
                             )}
