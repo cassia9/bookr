@@ -7,10 +7,11 @@
  * - 新增 / 編輯 / 軟刪除客戶
  * - 右側 Drawer 詳情：統計卡片 + 預約歷史
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Users, Plus, Search, Phone, Mail, ChevronRight,
-  CalendarDays, TrendingUp, Clock, AlertTriangle,
+  Users, Plus, Phone, Mail, ChevronRight,
+  CalendarDays, TrendingUp, Clock, ChevronDown,
+  Check, X, DollarSign, FileText,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
@@ -33,13 +34,19 @@ import type { ClientStat } from '@/types/database'
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
 const PAGE_SIZE = 20
 
+type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
+
 interface ClientBooking {
   id: string
+  client_id: string
+  practitioner_id: string
+  service_id: string
   start_time: string
   end_time: string
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
+  status: BookingStatus
   price: number
   notes: string | null
+  buffer_minutes: number
   practitioner_name: string
   service_name: string
   service_duration: number
@@ -223,6 +230,20 @@ function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
   )
 }
 
+// ── 狀態操作設定 ────────────────────────────────────────────────────────────
+
+const STATUS_ACTIONS: Partial<Record<BookingStatus, { label: string; next: BookingStatus; style: string }[]>> = {
+  pending: [
+    { label: '確認預約', next: 'confirmed', style: 'bg-indigo-500 hover:bg-indigo-600 text-white' },
+    { label: '取消',     next: 'cancelled', style: 'bg-white hover:bg-red-50 text-red-600 border border-red-200' },
+  ],
+  confirmed: [
+    { label: '完課',   next: 'completed', style: 'bg-emerald-500 hover:bg-emerald-600 text-white' },
+    { label: '未到場', next: 'no_show',   style: 'bg-slate-500 hover:bg-slate-600 text-white' },
+    { label: '取消',   next: 'cancelled', style: 'bg-white hover:bg-red-50 text-red-600 border border-red-200' },
+  ],
+}
+
 // ── 客戶詳情 Drawer ───────────────────────────────────────────────────────────
 
 interface ClientDrawerProps {
@@ -231,22 +252,110 @@ interface ClientDrawerProps {
   onClose: () => void
   onEdit: () => void
   onDelete: () => void
+  onStatsRefresh: () => void
 }
 
-function ClientDrawer({ client, open, onClose, onEdit, onDelete }: ClientDrawerProps) {
-  const [bookings, setBookings] = useState<ClientBooking[]>([])
-  const [loading, setLoading]   = useState(false)
+function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh }: ClientDrawerProps) {
+  const [bookings,    setBookings]    = useState<ClientBooking[]>([])
+  const [loading,     setLoading]     = useState(false)
+  const [expandedId,  setExpandedId]  = useState<string | null>(null)
+  // 每筆預約的 local edit state: bookingId → {price, notes}
+  const [editMap,     setEditMap]     = useState<Record<string, { price: string; notes: string }>>({})
+  const [savingId,    setSavingId]    = useState<string | null>(null)
+  // cancel inline confirm
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null)
+  const notesTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
-  useEffect(() => {
-    if (!open || !client) return
+  const loadBookings = useCallback(() => {
+    if (!client) return
     setLoading(true)
     supabase
       .rpc('get_client_bookings', { p_client_id: client.id })
       .then(({ data, error }) => {
-        if (!error) setBookings((data as ClientBooking[]) ?? [])
+        if (!error) {
+          const list = (data as ClientBooking[]) ?? []
+          setBookings(list)
+          // 初始化 editMap（不覆蓋用戶正在編輯的）
+          setEditMap(prev => {
+            const next = { ...prev }
+            list.forEach(b => {
+              if (!next[b.id]) {
+                next[b.id] = { price: String(b.price), notes: b.notes ?? '' }
+              }
+            })
+            return next
+          })
+        }
         setLoading(false)
       })
+  }, [client])
+
+  useEffect(() => {
+    if (!open || !client) return
+    setExpandedId(null)
+    setCancelTarget(null)
+    loadBookings()
   }, [open, client?.id])
+
+  // 更新預約狀態
+  async function updateStatus(bookingId: string, newStatus: BookingStatus) {
+    setSavingId(bookingId)
+    const { error } = await supabase
+      .from('bookings')
+      .update({ status: newStatus })
+      .eq('id', bookingId)
+
+    if (error) {
+      toast.error('更新失敗', error.message)
+    } else {
+      toast.success('狀態已更新')
+      setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus } : b))
+      if (newStatus === 'completed' || newStatus === 'cancelled' || newStatus === 'no_show') {
+        setExpandedId(null)
+        onStatsRefresh()
+      }
+    }
+    setSavingId(null)
+    setCancelTarget(null)
+  }
+
+  // 更新價格（blur 儲存）
+  async function savePrice(bookingId: string) {
+    const raw = editMap[bookingId]?.price ?? '0'
+    const newPrice = Math.max(0, parseInt(raw.replace(/\D/g, '')) || 0)
+    const original = bookings.find(b => b.id === bookingId)?.price ?? 0
+    if (newPrice === original) return
+
+    setSavingId(bookingId)
+    const { error } = await supabase
+      .from('bookings')
+      .update({ price: newPrice })
+      .eq('id', bookingId)
+
+    if (error) {
+      toast.error('儲存失敗', error.message)
+      setEditMap(prev => ({ ...prev, [bookingId]: { ...prev[bookingId], price: String(original) } }))
+    } else {
+      setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, price: newPrice } : b))
+      onStatsRefresh()
+    }
+    setSavingId(null)
+  }
+
+  // 更新備注（debounce 1.5s 自動儲存）
+  function handleNotesChange(bookingId: string, value: string) {
+    setEditMap(prev => ({ ...prev, [bookingId]: { ...prev[bookingId], notes: value } }))
+    clearTimeout(notesTimers.current[bookingId])
+    notesTimers.current[bookingId] = setTimeout(async () => {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ notes: value || null })
+        .eq('id', bookingId)
+      if (!error) {
+        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, notes: value || null } : b))
+      }
+    }, 1500)
+  }
 
   if (!client) return null
 
@@ -260,13 +369,7 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete }: ClientDrawerP
       footer={
         <div className="flex gap-2">
           <Button variant="secondary" className="flex-1" onClick={onEdit}>編輯資料</Button>
-          <Button
-            variant="danger"
-            className="flex-1"
-            onClick={onDelete}
-          >
-            刪除客戶
-          </Button>
+          <Button variant="danger" className="flex-1" onClick={onDelete}>刪除客戶</Button>
         </div>
       }
     >
@@ -350,36 +453,166 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete }: ClientDrawerP
           ) : (
             <div className="space-y-2">
               {bookings.map(b => {
-                const cfg = STATUS_CONFIG[b.status]
+                const cfg       = STATUS_CONFIG[b.status]
+                const isExpanded = expandedId === b.id
+                const isEditable = b.status === 'pending' || b.status === 'confirmed'
+                const actions    = STATUS_ACTIONS[b.status]
+                const edit       = editMap[b.id] ?? { price: String(b.price), notes: b.notes ?? '' }
+                const isSaving   = savingId === b.id
+
                 return (
                   <div
                     key={b.id}
-                    className="bg-slate-50 rounded-xl border border-slate-100 px-3.5 py-3"
+                    className={cn(
+                      'rounded-xl border transition-colors',
+                      isExpanded
+                        ? 'bg-white border-indigo-200 shadow-sm'
+                        : 'bg-slate-50 border-slate-100 hover:border-slate-200',
+                    )}
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    {/* 收合列 — 點擊切換展開 */}
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(isExpanded ? null : b.id)}
+                      className="w-full text-left px-3.5 py-3 flex items-start justify-between gap-2"
+                    >
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">
-                          {b.service_name}
-                        </p>
+                        <p className="text-sm font-medium text-slate-800 truncate">{b.service_name}</p>
                         <p className="text-xs text-slate-500 mt-0.5">
                           {fmtDateTime(b.start_time)} · {b.practitioner_name}
                         </p>
-                        {b.notes && (
-                          <p className="text-xs text-slate-400 mt-1 italic">"{b.notes}"</p>
-                        )}
                       </div>
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        <Badge variant={cfg.variant}>{cfg.label}</Badge>
-                        {b.price > 0 && (
-                          <span className="text-xs font-semibold text-slate-700">
-                            {fmtMoney(b.price)}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex flex-col items-end gap-1">
+                          <Badge variant={cfg.variant}>{cfg.label}</Badge>
+                          <span className="text-xs font-semibold text-slate-600">
+                            {b.price > 0 ? fmtMoney(b.price) : '免費'}
                           </span>
-                        )}
-                        {b.price === 0 && (
-                          <span className="text-xs text-slate-400">免費</span>
-                        )}
+                        </div>
+                        <ChevronDown
+                          size={14}
+                          className={cn(
+                            'text-slate-400 transition-transform shrink-0',
+                            isExpanded && 'rotate-180',
+                          )}
+                        />
                       </div>
-                    </div>
+                    </button>
+
+                    {/* 展開內容 */}
+                    {isExpanded && (
+                      <div className="border-t border-slate-100 px-3.5 py-3 space-y-3">
+
+                        {/* 服務詳情 */}
+                        <p className="text-xs text-slate-500">
+                          時長：{b.service_duration} 分鐘
+                          {b.buffer_minutes > 0 && ` · 緩衝 ${b.buffer_minutes} 分鐘`}
+                        </p>
+
+                        {/* 價格 */}
+                        {isEditable ? (
+                          <div>
+                            <label className="text-xs font-medium text-slate-500 flex items-center gap-1 mb-1">
+                              <DollarSign size={11} />
+                              價格（NT$）
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={edit.price}
+                              onChange={e => setEditMap(prev => ({
+                                ...prev,
+                                [b.id]: { ...prev[b.id], price: e.target.value },
+                              }))}
+                              onBlur={() => savePrice(b.id)}
+                              disabled={isSaving}
+                              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 disabled:opacity-50"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-sm text-slate-700">
+                            <DollarSign size={13} className="text-slate-400" />
+                            {b.price > 0 ? fmtMoney(b.price) : '免費'}
+                          </div>
+                        )}
+
+                        {/* 備注 */}
+                        {isEditable ? (
+                          <div>
+                            <label className="text-xs font-medium text-slate-500 flex items-center gap-1 mb-1">
+                              <FileText size={11} />
+                              備注
+                            </label>
+                            <textarea
+                              value={edit.notes}
+                              onChange={e => handleNotesChange(b.id, e.target.value)}
+                              disabled={isSaving}
+                              rows={2}
+                              placeholder="輸入備注…"
+                              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 disabled:opacity-50"
+                            />
+                          </div>
+                        ) : b.notes ? (
+                          <div className="flex gap-1.5 text-xs text-slate-500 italic">
+                            <FileText size={12} className="text-slate-300 shrink-0 mt-0.5" />
+                            {b.notes}
+                          </div>
+                        ) : null}
+
+                        {/* 狀態操作按鈕 */}
+                        {actions && (
+                          <div>
+                            {/* 取消確認 inline */}
+                            {cancelTarget === b.id ? (
+                              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                                <p className="text-xs text-red-700 mb-2 font-medium">確定要取消這筆預約？</p>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateStatus(b.id, 'cancelled')}
+                                    disabled={isSaving}
+                                    className="flex-1 text-xs py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                                  >
+                                    <Check size={12} /> 確定取消
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCancelTarget(null)}
+                                    className="flex-1 text-xs py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium transition-colors flex items-center justify-center gap-1"
+                                  >
+                                    <X size={12} /> 算了
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-1.5">
+                                {actions.map(action => (
+                                  <button
+                                    key={action.next}
+                                    type="button"
+                                    disabled={isSaving}
+                                    onClick={() => {
+                                      if (action.next === 'cancelled') {
+                                        setCancelTarget(b.id)
+                                      } else {
+                                        updateStatus(b.id, action.next)
+                                      }
+                                    }}
+                                    className={cn(
+                                      'text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50',
+                                      action.style,
+                                    )}
+                                  >
+                                    {isSaving ? '…' : action.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -667,6 +900,7 @@ export default function ClientsPage() {
         onClose={() => setDrawerOpen(false)}
         onEdit={() => handleEdit(drawerClient!)}
         onDelete={() => handleDelete(drawerClient!)}
+        onStatsRefresh={loadClients}
       />
 
     </div>
