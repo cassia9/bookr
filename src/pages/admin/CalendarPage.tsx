@@ -108,6 +108,13 @@ export default function CalendarPage({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // 拖曳狀態
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ date: string; hour: number } | null>(null)
+
+  // Hover Tooltip
+  const [hoverTooltip, setHoverTooltip] = useState<{ booking: Booking; x: number; y: number } | null>(null)
+
   // 編輯中的欄位（local state，auto-save on change）
   const [editPractitionerId, setEditPractitionerId] = useState('')
   const [editServiceId, setEditServiceId] = useState('')
@@ -410,6 +417,49 @@ export default function CalendarPage({
 
   const isEditable = (status: string) => ['pending', 'confirmed'].includes(status)
 
+  // ── 拖曳換時段 ──────────────────────────────────────────────────────────────
+
+  async function rescheduleBooking(bookingId: string, newDateStr: string, newHour: number) {
+    const booking = bookings.find(b => b.id === bookingId)
+    if (!booking) return
+
+    const originalStart = parseISO(booking.start_time)
+    const duration = parseISO(booking.end_time).getTime() - originalStart.getTime()
+    const newStart = new Date(`${newDateStr}T${String(newHour).padStart(2, '0')}:${format(originalStart, 'mm')}:00`)
+    const newEnd = new Date(newStart.getTime() + duration)
+
+    // Optimistic update
+    setBookings(prev => prev.map(b => b.id !== bookingId ? b : {
+      ...b, start_time: newStart.toISOString(), end_time: newEnd.toISOString(),
+    }))
+
+    const { data, error } = await supabase.rpc('upsert_booking', {
+      p_booking_id:      booking.id,
+      p_client_id:       booking.client_id,
+      p_practitioner_id: booking.practitioner_id,
+      p_service_id:      booking.service_id,
+      p_start_time:      newStart.toISOString(),
+      p_end_time:        newEnd.toISOString(),
+      p_buffer_minutes:  booking.buffer_minutes,
+      p_notes:           booking.notes,
+      p_store_id:        STORE_ID,
+      p_price:           booking.price,
+    })
+
+    if (error) { toast.error('移動失敗', error.message); fetchBookings(); return }
+    const result = data as { ok: boolean; error?: string; conflict?: { client_name: string; service_name: string } }
+    if (!result.ok) {
+      if (result.error === 'TIME_CONFLICT' && result.conflict) {
+        toast.error('時間衝突', `${result.conflict.client_name} · ${result.conflict.service_name} 已佔用此時段`)
+      } else {
+        toast.error('移動失敗', result.error ?? '未知錯誤')
+      }
+      fetchBookings()
+      return
+    }
+    toast.success('預約時間已更新')
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -457,6 +507,11 @@ export default function CalendarPage({
                           {dayBk.slice(0, 3).map(b => (
                             <button key={b.id}
                               onClick={() => openModal(b)}
+                              onMouseEnter={e => {
+                                const rect = e.currentTarget.getBoundingClientRect()
+                                setHoverTooltip({ booking: b, x: rect.right + 8, y: rect.top })
+                              }}
+                              onMouseLeave={() => setHoverTooltip(null)}
                               className="w-full text-left text-xs px-1.5 py-0.5 rounded-md text-white font-medium truncate hover:brightness-110 transition-all"
                               style={cardStyle(b)}
                             >
@@ -504,15 +559,44 @@ export default function CalendarPage({
                     </div>
                     {datesForView.map(date => {
                       const hBk = bookingsOnHour(date, hour)
+                      const dateStr = format(date, 'yyyy-MM-dd')
+                      const isDropTarget = dropTarget?.date === dateStr && dropTarget?.hour === hour
                       return (
-                        <div key={date.toISOString()} className={cn(
-                          'px-1 py-1 border-r border-slate-100 space-y-0.5',
-                          isToday(date) && 'bg-indigo-50/20',
-                        )}>
+                        <div key={date.toISOString()}
+                          className={cn(
+                            'px-1 py-1 border-r border-slate-100 space-y-0.5 transition-colors',
+                            isToday(date) && 'bg-indigo-50/20',
+                            isDropTarget && 'bg-indigo-100/60 ring-1 ring-inset ring-indigo-300',
+                          )}
+                          onDragOver={e => { e.preventDefault(); setDropTarget({ date: dateStr, hour }) }}
+                          onDragLeave={() => setDropTarget(null)}
+                          onDrop={e => {
+                            e.preventDefault()
+                            setDropTarget(null)
+                            if (draggingId) rescheduleBooking(draggingId, dateStr, hour)
+                            setDraggingId(null)
+                          }}
+                        >
                           {hBk.map(b => (
                             <button key={b.id}
+                              draggable={isEditable(b.status)}
                               onClick={() => openModal(b)}
-                              className="w-full text-left text-xs px-2 py-1 rounded-lg text-white font-medium leading-tight hover:brightness-110 transition-all"
+                              onDragStart={e => {
+                                e.dataTransfer.effectAllowed = 'move'
+                                setDraggingId(b.id)
+                                setHoverTooltip(null)
+                              }}
+                              onDragEnd={() => { setDraggingId(null); setDropTarget(null) }}
+                              onMouseEnter={e => {
+                                const rect = e.currentTarget.getBoundingClientRect()
+                                setHoverTooltip({ booking: b, x: rect.right + 8, y: rect.top })
+                              }}
+                              onMouseLeave={() => setHoverTooltip(null)}
+                              className={cn(
+                                'w-full text-left text-xs px-2 py-1 rounded-lg text-white font-medium leading-tight hover:brightness-110 transition-all',
+                                draggingId === b.id && 'opacity-40',
+                                isEditable(b.status) && 'cursor-grab active:cursor-grabbing',
+                              )}
                               style={cardStyle(b)}
                             >
                               <div className="truncate">{b.client?.full_name}</div>
@@ -540,14 +624,41 @@ export default function CalendarPage({
                 </div>
                 {Array.from({ length: endHour - startHour }, (_, i) => i + startHour).map(hour => {
                   const hBk = bookingsOnHour(currentDate, hour)
+                  const dateStr = format(currentDate, 'yyyy-MM-dd')
+                  const isDropTarget = dropTarget?.date === dateStr && dropTarget?.hour === hour
                   return (
-                    <div key={hour} className="flex gap-3 px-4 py-2 border-b border-slate-50 min-h-14">
+                    <div key={hour}
+                      className={cn(
+                        'flex gap-3 px-4 py-2 border-b border-slate-50 min-h-14 transition-colors',
+                        isDropTarget && 'bg-indigo-50 ring-1 ring-inset ring-indigo-200',
+                      )}
+                      onDragOver={e => { e.preventDefault(); setDropTarget({ date: dateStr, hour }) }}
+                      onDragLeave={() => setDropTarget(null)}
+                      onDrop={e => {
+                        e.preventDefault()
+                        setDropTarget(null)
+                        if (draggingId) rescheduleBooking(draggingId, dateStr, hour)
+                        setDraggingId(null)
+                      }}
+                    >
                       <div className="w-12 text-right text-xs text-slate-300 pt-1 shrink-0">{hour}:00</div>
                       <div className="flex-1 flex flex-wrap gap-2">
                         {hBk.map(b => (
                           <button key={b.id}
+                            draggable={isEditable(b.status)}
                             onClick={() => openModal(b)}
-                            className="text-left text-sm px-3 py-1.5 rounded-xl text-white font-medium hover:brightness-110 transition-all min-w-40"
+                            onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDraggingId(b.id); setHoverTooltip(null) }}
+                            onDragEnd={() => { setDraggingId(null); setDropTarget(null) }}
+                            onMouseEnter={e => {
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              setHoverTooltip({ booking: b, x: rect.right + 8, y: rect.top })
+                            }}
+                            onMouseLeave={() => setHoverTooltip(null)}
+                            className={cn(
+                              'text-left text-sm px-3 py-1.5 rounded-xl text-white font-medium hover:brightness-110 transition-all min-w-40',
+                              draggingId === b.id && 'opacity-40',
+                              isEditable(b.status) && 'cursor-grab active:cursor-grabbing',
+                            )}
                             style={cardStyle(b)}
                           >
                             <div className="font-semibold">{b.client?.full_name}</div>
@@ -766,8 +877,42 @@ export default function CalendarPage({
         )}
       </Modal>
 
-      {/* ── BookingManagement 的導航欄已在上層，這裡不重複 ── */}
-      {/* header title & nav 已移至 BookingManagement.tsx */}
+      {/* ── Hover Tooltip ── */}
+      {hoverTooltip && !draggingId && (
+        <div
+          className="fixed z-50 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 pointer-events-none"
+          style={{ left: Math.min(hoverTooltip.x, window.innerWidth - 225), top: hoverTooltip.y, width: 215 }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2.5 h-2.5 rounded-full" style={cardStyle(hoverTooltip.booking)} />
+            <Badge variant={STATUS_BADGE_VARIANT[hoverTooltip.booking.status]}>
+              {STATUS_LABEL[hoverTooltip.booking.status]}
+            </Badge>
+          </div>
+          <p className="font-bold text-slate-900 text-sm">{hoverTooltip.booking.client?.full_name}</p>
+          {hoverTooltip.booking.client?.phone && (
+            <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+              <Phone size={10} /> {hoverTooltip.booking.client.phone}
+            </p>
+          )}
+          <div className="mt-2 pt-2 border-t border-slate-100 space-y-1">
+            {hoverTooltip.booking.practitioner?.full_name && (
+              <p className="text-xs text-slate-600">{hoverTooltip.booking.practitioner.full_name}</p>
+            )}
+            {hoverTooltip.booking.service?.name && (
+              <p className="text-xs text-slate-600">{hoverTooltip.booking.service.name}</p>
+            )}
+            <p className="text-xs text-slate-400 flex items-center gap-1">
+              <Clock size={10} />
+              {format(parseISO(hoverTooltip.booking.start_time), 'M/d HH:mm')} – {format(parseISO(hoverTooltip.booking.end_time), 'HH:mm')}
+            </p>
+            <p className="text-xs font-semibold text-emerald-600">NT$ {hoverTooltip.booking.price.toLocaleString()}</p>
+          </div>
+          {isEditable(hoverTooltip.booking.status) && (
+            <p className="text-[10px] text-slate-300 mt-2">拖曳可調整時間</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
