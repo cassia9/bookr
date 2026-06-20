@@ -20,9 +20,9 @@ export default function SearchInput({ value, onChange, placeholder = '搜尋…'
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full h-10 pl-9 pr-8 text-sm bg-white border border-slate-200 rounded-2xl
-          text-slate-900 placeholder:text-slate-300
-          focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-shadow"
+        className="w-full h-10 pl-9 pr-8 text-sm bg-slate-50 border border-slate-200 rounded-2xl
+          text-slate-900 placeholder:text-slate-400
+          focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 focus:bg-white transition-all"
       />
       {value && (
         <button

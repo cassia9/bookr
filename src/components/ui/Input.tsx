@@ -28,15 +28,15 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           disabled={disabled}
           className={cn(
-            'w-full h-10 text-sm bg-white border rounded-2xl transition-shadow',
-            'placeholder:text-slate-300 text-slate-900',
-            'focus:outline-none focus:ring-2',
+            'w-full h-10 text-sm bg-slate-50 border rounded-2xl transition-all',
+            'placeholder:text-slate-400 text-slate-900',
+            'focus:outline-none focus:ring-2 focus:bg-white',
             error
-              ? 'border-red-400 focus:ring-red-200'
-              : 'border-slate-200 focus:ring-indigo-400',
+              ? 'border-red-400 ring-2 ring-red-100 bg-white'
+              : 'border-slate-200 focus:border-indigo-400 focus:ring-indigo-100',
             prefix ? 'pl-9' : 'px-3',
             suffix ? 'pr-9' : 'pr-3',
-            disabled && 'opacity-50 cursor-not-allowed bg-slate-50',
+            disabled && 'opacity-50 cursor-not-allowed',
             className,
           )}
           {...props}
