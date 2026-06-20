@@ -881,7 +881,14 @@ export default function CalendarPage({
       {hoverTooltip && !draggingId && (
         <div
           className="fixed z-50 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 pointer-events-none"
-          style={{ left: Math.min(hoverTooltip.x, window.innerWidth - 225), top: hoverTooltip.y, width: 215 }}
+          style={{
+            left: Math.min(hoverTooltip.x, window.innerWidth - 225),
+            width: 215,
+            // 若距底部不足 220px 則往上顯示
+            ...(hoverTooltip.y + 220 > window.innerHeight
+              ? { bottom: window.innerHeight - hoverTooltip.y, top: 'auto' }
+              : { top: hoverTooltip.y }),
+          }}
         >
           <div className="flex items-center gap-2 mb-2">
             <div className="w-2.5 h-2.5 rounded-full" style={cardStyle(hoverTooltip.booking)} />

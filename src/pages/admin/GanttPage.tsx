@@ -487,7 +487,13 @@ export default function GanttPage({
       {tooltip && !dragState && (
         <div
           className="fixed z-50 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 pointer-events-none"
-          style={{ left: Math.min(tooltip.x, window.innerWidth - 220), top: tooltip.y, width: 210 }}
+          style={{
+            left: Math.min(tooltip.x, window.innerWidth - 220),
+            width: 210,
+            ...(tooltip.y + 200 > window.innerHeight
+              ? { bottom: window.innerHeight - tooltip.y, top: 'auto' }
+              : { top: tooltip.y }),
+          }}
         >
           <div className="flex items-center gap-2 mb-2">
             <div className="w-2.5 h-2.5 rounded-full" style={cardStyle(tooltip.booking)} />
