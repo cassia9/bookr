@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useId } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Check } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { shadow } from '../../lib/styles'
@@ -25,16 +26,49 @@ export default function Select({
   placeholder = '請選擇', disabled, error, className,
 }: Props) {
   const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const listRef    = useRef<HTMLDivElement>(null)
   const id = useId()
 
   const selected = options.find(o => o.value === value)
 
+  // 計算下拉選單的 portal 定位（fixed，對齊 trigger）
+  function calcDropdownStyle() {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom
+    const dropH = Math.min(208, (options.length + 1) * 44 + 8) // max-h-52 = 208px
+
+    if (spaceBelow >= dropH || spaceBelow >= 120) {
+      // 往下開
+      setDropdownStyle({
+        position: 'fixed',
+        top:   rect.bottom + 6,
+        left:  rect.left,
+        width: rect.width,
+        zIndex: 9999,
+      })
+    } else {
+      // 空間不夠往上開
+      setDropdownStyle({
+        position: 'fixed',
+        bottom: window.innerHeight - rect.top + 6,
+        left:   rect.left,
+        width:  rect.width,
+        zIndex: 9999,
+      })
+    }
+  }
+
   // Click outside → close
   useEffect(() => {
     function onMouseDown(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const t = e.target as Node
+      if (
+        triggerRef.current && !triggerRef.current.contains(t) &&
+        listRef.current   && !listRef.current.contains(t)
+      ) {
         setOpen(false)
       }
     }
@@ -42,14 +76,17 @@ export default function Select({
     return () => document.removeEventListener('mousedown', onMouseDown)
   }, [])
 
-  // Keyboard: Escape → close
+  // Escape → close; scroll → reposition
   useEffect(() => {
     if (!open) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
+    function onScroll() { calcDropdownStyle() }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', onScroll, true)
+    }
   }, [open])
 
   // Scroll selected option into view when opening
@@ -61,7 +98,9 @@ export default function Select({
   }, [open, value])
 
   function toggle() {
-    if (!disabled) setOpen(v => !v)
+    if (disabled) return
+    if (!open) calcDropdownStyle()
+    setOpen(v => !v)
   }
 
   function select(val: string) {
@@ -69,10 +108,67 @@ export default function Select({
     setOpen(false)
   }
 
-  return (
-    <div ref={containerRef} className={cn('relative', className)}>
-      {/* Trigger */}
+  const dropdown = open && createPortal(
+    <div
+      ref={listRef}
+      role="listbox"
+      style={dropdownStyle}
+      className={cn(
+        `bg-white rounded-2xl border border-slate-200 ${shadow.float}`,
+        'overflow-y-auto max-h-52',
+      )}
+    >
+      {/* Placeholder row */}
       <button
+        type="button"
+        role="option"
+        aria-selected={value === ''}
+        onClick={() => select('')}
+        className={cn(
+          'w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors text-left',
+          value === ''
+            ? 'bg-indigo-50 text-indigo-700 font-medium'
+            : 'text-slate-400 hover:bg-slate-50',
+        )}
+      >
+        <span>{placeholder}</span>
+        {value === '' && <Check size={14} strokeWidth={2} className="text-indigo-500" />}
+      </button>
+
+      {options.length > 0 && <div className="border-t border-slate-100 mx-2" />}
+
+      {options.map(opt => (
+        <button
+          key={opt.value}
+          type="button"
+          role="option"
+          data-selected={opt.value === value}
+          aria-selected={opt.value === value}
+          onClick={() => select(opt.value)}
+          className={cn(
+            'w-full flex items-center justify-between gap-2 px-3 py-2.5 text-sm transition-colors text-left',
+            opt.value === value
+              ? 'bg-indigo-50 text-indigo-700 font-medium'
+              : 'text-slate-700 hover:bg-slate-50',
+          )}
+        >
+          <span className="flex items-center gap-2 truncate">
+            {opt.color && (
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: opt.color }} />
+            )}
+            {opt.label}
+          </span>
+          {opt.value === value && <Check size={14} strokeWidth={2} className="text-indigo-500 flex-shrink-0" />}
+        </button>
+      ))}
+    </div>,
+    document.body,
+  )
+
+  return (
+    <div className={cn('relative', className)}>
+      <button
+        ref={triggerRef}
         id={id}
         type="button"
         role="combobox"
@@ -90,7 +186,6 @@ export default function Select({
             : 'border-slate-200 hover:border-slate-300',
         )}
       >
-        {/* Label */}
         <span className={cn('flex-1 truncate', selected ? 'text-slate-800' : 'text-slate-400')}>
           {selected ? (
             <span className="flex items-center gap-2">
@@ -101,8 +196,6 @@ export default function Select({
             </span>
           ) : placeholder}
         </span>
-
-        {/* Arrow — fixed right margin 4px */}
         <ChevronDown
           size={16}
           strokeWidth={1.5}
@@ -114,66 +207,7 @@ export default function Select({
         />
       </button>
 
-      {/* Dropdown — renders BELOW the trigger, never overlaps */}
-      {open && (
-        <div
-          ref={listRef}
-          role="listbox"
-          className={cn(
-            'absolute z-50 left-0 right-0 mt-1.5',
-            `bg-white rounded-2xl border border-slate-200 ${shadow.float}`,
-            'overflow-y-auto max-h-52',
-            // open from top-full so it always appears below
-            'top-full',
-          )}
-        >
-          {/* Placeholder row */}
-          <button
-            type="button"
-            role="option"
-            aria-selected={value === ''}
-            onClick={() => select('')}
-            className={cn(
-              'w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors text-left',
-              value === ''
-                ? 'bg-indigo-50 text-indigo-700 font-medium'
-                : 'text-slate-400 hover:bg-slate-50',
-            )}
-          >
-            <span>{placeholder}</span>
-            {value === '' && <Check size={14} strokeWidth={2} className="text-indigo-500" />}
-          </button>
-
-          {/* Divider */}
-          {options.length > 0 && <div className="border-t border-slate-100 mx-2" />}
-
-          {/* Options */}
-          {options.map(opt => (
-            <button
-              key={opt.value}
-              type="button"
-              role="option"
-              data-selected={opt.value === value}
-              aria-selected={opt.value === value}
-              onClick={() => select(opt.value)}
-              className={cn(
-                'w-full flex items-center justify-between gap-2 px-3 py-2.5 text-sm transition-colors text-left',
-                opt.value === value
-                  ? 'bg-indigo-50 text-indigo-700 font-medium'
-                  : 'text-slate-700 hover:bg-slate-50',
-              )}
-            >
-              <span className="flex items-center gap-2 truncate">
-                {opt.color && (
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: opt.color }} />
-                )}
-                {opt.label}
-              </span>
-              {opt.value === value && <Check size={14} strokeWidth={2} className="text-indigo-500 flex-shrink-0" />}
-            </button>
-          ))}
-        </div>
-      )}
+      {dropdown}
     </div>
   )
 }
