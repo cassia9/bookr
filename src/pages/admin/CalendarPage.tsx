@@ -7,7 +7,8 @@
  * - 所有登入用戶皆可編輯
  */
 import { useEffect, useState, useRef } from 'react'
-import { Phone, Clock, AlertTriangle } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Phone, Clock, AlertTriangle, Plus, ArrowRight, Check, X as XIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
 import { toast } from '@/components/ui/Snackbar'
@@ -61,6 +62,12 @@ interface CalendarPageProps {
   defaultDate?: Date
   startHour?: number
   endHour?: number
+  onNewBooking?: (date: Date) => void
+}
+
+interface DayPopover {
+  date: Date
+  style: React.CSSProperties
 }
 
 // ── 常數 ──────────────────────────────────────────────────────────────────────
@@ -91,6 +98,7 @@ export default function CalendarPage({
   defaultDate,
   startHour = 9,
   endHour = 21,
+  onNewBooking,
 }: CalendarPageProps) {
   const [view, setView] = useState<ViewMode>(defaultView)
   const [currentDate, setCurrentDate] = useState(defaultDate || new Date())
@@ -114,6 +122,9 @@ export default function CalendarPage({
 
   // Hover Tooltip
   const [hoverTooltip, setHoverTooltip] = useState<{ booking: Booking; x: number; y: number } | null>(null)
+
+  // Day Popover（月視圖點擊格子）
+  const [dayPopover, setDayPopover] = useState<DayPopover | null>(null)
 
   // 編輯中的欄位（local state，auto-save on change）
   const [editPractitionerId, setEditPractitionerId] = useState('')
@@ -154,7 +165,6 @@ export default function CalendarPage({
         service:services(id, name, duration_minutes, price)
       `)
       .eq('store_id', STORE_ID)
-      .neq('status', 'cancelled')
       .gte('start_time', start.toISOString())
       .lte('start_time', end.toISOString())
       .order('start_time')
@@ -406,16 +416,33 @@ export default function CalendarPage({
   const isToday = (d: Date) =>
     d.toDateString() === new Date().toDateString()
 
-  const bookingsOnDate = (d: Date) =>
+  // 全部（含 cancelled），用於月視圖 badge 統計與 popover
+  const allBookingsOnDate = (d: Date) =>
     bookings.filter(b => new Date(b.start_time).toDateString() === d.toDateString())
+
+  // 不含 cancelled，用於週/日視圖卡片顯示
+  const bookingsOnDate = (d: Date) =>
+    allBookingsOnDate(d).filter(b => b.status !== 'cancelled')
 
   const bookingsOnHour = (d: Date, h: number) =>
     bookings.filter(b => {
       const s = new Date(b.start_time)
-      return s.toDateString() === d.toDateString() && s.getHours() === h
+      return s.toDateString() === d.toDateString() && s.getHours() === h && b.status !== 'cancelled'
     })
 
   const isEditable = (status: string) => ['pending', 'confirmed'].includes(status)
+
+  function openDayPopover(date: Date, cellEl: HTMLElement) {
+    const rect = cellEl.getBoundingClientRect()
+    const pw = 288
+    let left = rect.left
+    if (left + pw > window.innerWidth - 12) left = window.innerWidth - pw - 12
+    const spaceBelow = window.innerHeight - rect.bottom
+    const style: React.CSSProperties = spaceBelow >= 280 || rect.top < 280
+      ? { position: 'fixed', top: rect.bottom + 4, left, width: pw, zIndex: 9999 }
+      : { position: 'fixed', bottom: window.innerHeight - rect.top + 4, left, width: pw, zIndex: 9999 }
+    setDayPopover({ date, style })
+  }
 
   // ── 拖曳換時段 ──────────────────────────────────────────────────────────────
 
@@ -488,25 +515,63 @@ export default function CalendarPage({
                     <div key={`empty-${i}`} />
                   ))}
                   {datesForView.map(date => {
-                    const dayBk = bookingsOnDate(date)
+                    const allBk   = allBookingsOnDate(date)
+                    const activeBk = allBk.filter(b => b.status !== 'cancelled')
+                    const completedCount = allBk.filter(b => b.status === 'completed').length
+                    const cancelledCount = allBk.filter(b => b.status === 'cancelled').length
+                    const overflowCount  = activeBk.length > 3 ? activeBk.length - 3 : 0
+                    const isPopoverOpen  = dayPopover?.date.toDateString() === date.toDateString()
                     return (
-                      <div key={date.toISOString()} className={cn(
-                        'min-h-20 p-2 rounded-xl border transition-colors',
-                        date.getMonth() === currentDate.getMonth()
-                          ? 'bg-white border-slate-100 hover:border-slate-200'
-                          : 'bg-slate-50/50 border-slate-50',
-                        isToday(date) && 'border-indigo-200 bg-indigo-50/30',
-                      )}>
-                        <div className={cn(
-                          'text-xs font-semibold mb-1.5 w-6 h-6 flex items-center justify-center rounded-full',
-                          isToday(date) ? 'bg-black text-white' : 'text-slate-600',
-                        )}>
-                          {date.getDate()}
+                      <div
+                        key={date.toISOString()}
+                        onClick={e => {
+                          if (allBk.length === 0) return
+                          if (isPopoverOpen) { setDayPopover(null); return }
+                          openDayPopover(date, e.currentTarget)
+                        }}
+                        className={cn(
+                          'min-h-20 p-2 rounded-xl border transition-colors',
+                          allBk.length > 0 ? 'cursor-pointer' : '',
+                          date.getMonth() === currentDate.getMonth()
+                            ? 'bg-white border-slate-100 hover:border-slate-200'
+                            : 'bg-slate-50/50 border-slate-50',
+                          isToday(date) && 'border-indigo-200 bg-indigo-50/30',
+                          isPopoverOpen && 'border-indigo-300 ring-2 ring-indigo-100',
+                        )}
+                      >
+                        {/* 日期數字 + 右上角 badge */}
+                        <div className="flex items-start justify-between mb-1">
+                          <div className={cn(
+                            'text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full shrink-0',
+                            isToday(date) ? 'bg-black text-white' : 'text-slate-600',
+                          )}>
+                            {date.getDate()}
+                          </div>
+                          {/* FR-D: 狀態 badge */}
+                          {(completedCount > 0 || cancelledCount > 0) && (
+                            <div className="flex items-center gap-1 flex-wrap justify-end">
+                              {completedCount > 0 && (
+                                <span className="flex items-center gap-0.5 text-[10px] font-medium text-emerald-600 bg-emerald-50 rounded-full px-1.5 py-0.5 leading-none">
+                                  <Check size={9} strokeWidth={2.5} />
+                                  {completedCount}
+                                </span>
+                              )}
+                              {cancelledCount > 0 && (
+                                <span className="flex items-center gap-0.5 text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-1.5 py-0.5 leading-none">
+                                  <XIcon size={9} strokeWidth={2.5} />
+                                  {cancelledCount}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
+
+                        {/* FR-A: 最多 3 筆卡片 */}
                         <div className="space-y-0.5">
-                          {dayBk.slice(0, 3).map(b => (
-                            <button key={b.id}
-                              onClick={() => openModal(b)}
+                          {activeBk.slice(0, 3).map(b => (
+                            <button
+                              key={b.id}
+                              onClick={e => { e.stopPropagation(); openModal(b) }}
                               onMouseEnter={e => {
                                 const rect = e.currentTarget.getBoundingClientRect()
                                 setHoverTooltip({ booking: b, x: rect.right + 8, y: rect.top })
@@ -518,8 +583,14 @@ export default function CalendarPage({
                               {b.client?.full_name}
                             </button>
                           ))}
-                          {dayBk.length > 3 && (
-                            <div className="text-xs text-slate-400 px-1">+{dayBk.length - 3}</div>
+                          {/* 溢出徽章 */}
+                          {overflowCount > 0 && (
+                            <button
+                              onClick={e => { e.stopPropagation(); openDayPopover(date, e.currentTarget.parentElement?.parentElement as HTMLElement ?? e.currentTarget) }}
+                              className="w-full text-left text-[10px] text-indigo-500 font-medium px-1.5 py-0.5 rounded-md hover:bg-indigo-50 transition-colors"
+                            >
+                              +{overflowCount} 筆預約
+                            </button>
                           )}
                         </div>
                       </div>
@@ -876,6 +947,97 @@ export default function CalendarPage({
           </div>
         )}
       </Modal>
+
+      {/* ── Day Popover（月視圖點擊格子） ── */}
+      {dayPopover && createPortal(
+        <>
+          {/* 背景遮罩（點外關閉） */}
+          <div className="fixed inset-0 z-[9998]" onClick={() => setDayPopover(null)} />
+          <div
+            className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden"
+            style={dayPopover.style}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+              <span className="text-sm font-semibold text-slate-800">
+                {format(dayPopover.date, 'M月 d日 (EEE)', { locale: zhTW })}
+              </span>
+              <div className="flex items-center gap-1.5">
+                {onNewBooking && (
+                  <button
+                    onClick={() => { onNewBooking(dayPopover.date); setDayPopover(null) }}
+                    className="flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors"
+                  >
+                    <Plus size={12} strokeWidth={2.5} />
+                    新增預約
+                  </button>
+                )}
+                <button
+                  onClick={() => { setView('day'); setCurrentDate(dayPopover.date); setDayPopover(null) }}
+                  className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  日視圖
+                  <ArrowRight size={11} strokeWidth={2} />
+                </button>
+              </div>
+            </div>
+
+            {/* 預約清單 */}
+            <div className="max-h-72 overflow-y-auto py-1">
+              {allBookingsOnDate(dayPopover.date)
+                .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+                .map(b => (
+                  <button
+                    key={b.id}
+                    onClick={() => { if (b.status !== 'cancelled') { openModal(b); setDayPopover(null) } }}
+                    className={cn(
+                      'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors',
+                      b.status === 'cancelled'
+                        ? 'opacity-40 cursor-default'
+                        : 'hover:bg-slate-50 cursor-pointer',
+                    )}
+                  >
+                    {/* 顏色條 */}
+                    <div
+                      className="w-1 h-8 rounded-full shrink-0"
+                      style={{ backgroundColor: b.status === 'cancelled' ? '#94a3b8' : (b.practitioner?.color ?? '#6366f1') }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-800 truncate">
+                          {b.client?.full_name}
+                        </span>
+                        <span className={cn(
+                          'text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0',
+                          b.status === 'completed' && 'bg-emerald-50 text-emerald-600',
+                          b.status === 'confirmed' && 'bg-blue-50 text-blue-600',
+                          b.status === 'pending'   && 'bg-amber-50 text-amber-600',
+                          b.status === 'cancelled' && 'bg-slate-100 text-slate-400',
+                          b.status === 'no_show'   && 'bg-red-50 text-red-500',
+                        )}>
+                          {STATUS_LABEL[b.status]}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] text-slate-400">
+                          {format(parseISO(b.start_time), 'HH:mm')}–{format(parseISO(b.end_time), 'HH:mm')}
+                        </span>
+                        {b.practitioner?.full_name && (
+                          <span className="text-[11px] text-slate-400 truncate">
+                            · {b.practitioner.full_name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              }
+            </div>
+          </div>
+        </>,
+        document.body,
+      )}
 
       {/* ── Hover Tooltip ── */}
       {hoverTooltip && !draggingId && (
