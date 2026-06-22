@@ -1,11 +1,12 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import {
-  CalendarDays, LayoutGrid, Users, UserCheck, Scissors, BarChart2,
-  Settings, LogOut, Menu, X, Layers
+  CalendarDays, Users, UserCheck, Scissors, BarChart2,
+  Settings, LogOut, Menu, X,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../../lib/auth'
 import { cn } from '../../lib/cn'
+import SidebarNavItem from '../ui/SidebarNavItem'
 
 const navItems = [
   { to: '/admin/bookings', icon: CalendarDays, label: '預約管理' },
@@ -40,7 +41,7 @@ export default function AdminLayout() {
 
       {/* Sidebar */}
       <aside className={cn(
-        'fixed inset-y-0 left-0 z-30 w-60 bg-white shadow-lg',
+        'fixed inset-y-0 left-0 z-30 w-56 bg-white border-r border-slate-100',
         'flex flex-col transition-transform duration-200',
         'lg:static lg:translate-x-0',
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -62,22 +63,15 @@ export default function AdminLayout() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {visibleItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
+        <nav className="flex-1 py-4 space-y-0.5">
+          {visibleItems.map(({ to, icon, label }) => (
+            <SidebarNavItem
               key={to}
               to={to}
+              icon={icon}
+              label={label}
               onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) => cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-accent-lightest text-black'
-                  : 'text-text-secondary hover:bg-surface-secondary hover:text-text-primary'
-              )}
-            >
-              <Icon size={17} />
-              {label}
-            </NavLink>
+            />
           ))}
         </nav>
 
