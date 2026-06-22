@@ -12,6 +12,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Check, X, UserPlus, Search } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { shadow } from '../../lib/styles'
+import Button from './Button'
 import type { Client } from '../../types/database'
 
 type Gender = 'male' | 'female' | 'unknown'
@@ -357,21 +358,22 @@ export default function ClientCombobox({
                     ))}
                   </div>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="flex-1"
                       onClick={() => setCreating(false)}
-                      className="flex-1 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-500 hover:bg-slate-50 transition"
                     >
                       返回
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="flex-1"
+                      loading={saving}
                       onClick={handleCreate}
-                      disabled={saving}
-                      className="flex-1 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-60 transition"
                     >
-                      {saving ? '建立中…' : '確認建立'}
-                    </button>
+                      確認建立
+                    </Button>
                   </div>
                 </div>
               )}
