@@ -14,12 +14,20 @@ import { cn } from '../../lib/cn'
 import { shadow } from '../../lib/styles'
 import type { Client } from '../../types/database'
 
+type Gender = 'male' | 'female' | 'unknown'
+
+const GENDER_OPTIONS: { value: Gender; label: string }[] = [
+  { value: 'unknown', label: '未知' },
+  { value: 'male',    label: '男' },
+  { value: 'female',  label: '女' },
+]
+
 interface Props {
   clients: Client[]
   value: string                // selected client_id
   onChange: (clientId: string) => void
   /** 呼叫時插入 DB，回傳新客戶的 id（失敗回傳 null） */
-  onCreateClient: (name: string, phone: string) => Promise<string | null>
+  onCreateClient: (name: string, phone: string, gender: Gender) => Promise<string | null>
   error?: boolean
   disabled?: boolean
   /** 鎖定模式：顯示客戶但無法更改（編輯預約 / 從客戶頁帶入） */
@@ -34,9 +42,10 @@ export default function ClientCombobox({
 }: Props) {
   const [query,     setQuery]     = useState('')
   const [open,      setOpen]      = useState(false)
-  const [creating,  setCreating]  = useState(false)   // 是否顯示電話輸入
-  const [newPhone,  setNewPhone]  = useState('')
-  const [saving,    setSaving]    = useState(false)
+  const [creating,   setCreating]   = useState(false)
+  const [newPhone,   setNewPhone]   = useState('')
+  const [newGender,  setNewGender]  = useState<Gender>('unknown')
+  const [saving,     setSaving]     = useState(false)
   const [highlight, setHighlight] = useState(-1)      // 鍵盤高亮 index
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -88,8 +97,8 @@ export default function ClientCombobox({
     setOpen(false)
     setCreating(false)
     setNewPhone('')
+    setNewGender('unknown')
     setHighlight(-1)
-    // 若無選定，清空 query
     if (!selectedClient) setQuery('')
   }
 
@@ -115,7 +124,7 @@ export default function ClientCombobox({
   async function handleCreate() {
     if (!query.trim() || saving) return
     setSaving(true)
-    const id = await onCreateClient(query.trim(), newPhone.trim())
+    const id = await onCreateClient(query.trim(), newPhone.trim(), newGender)
     setSaving(false)
     if (id) {
       onChange(id)
@@ -123,6 +132,7 @@ export default function ClientCombobox({
       setOpen(false)
       setCreating(false)
       setNewPhone('')
+      setNewGender('unknown')
     }
   }
 
@@ -328,6 +338,24 @@ export default function ClientCombobox({
                     placeholder="電話（選填）"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition bg-slate-50"
                   />
+                  {/* 性別快選 */}
+                  <div className="flex gap-1.5">
+                    {GENDER_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setNewGender(opt.value)}
+                        className={cn(
+                          'flex-1 py-1.5 rounded-xl text-xs font-medium border transition-colors',
+                          newGender === opt.value
+                            ? 'bg-indigo-500 text-white border-indigo-500'
+                            : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600',
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex gap-2">
                     <button
                       type="button"

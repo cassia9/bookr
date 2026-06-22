@@ -122,10 +122,11 @@ export default function NewBookingModal({
   }, [form.service_id])
 
   /** Combobox 呼叫：建立新客戶，回傳新 client_id */
-  async function handleCreateClient(name: string, phone: string): Promise<string | null> {
+  async function handleCreateClient(name: string, phone: string, gender: 'male' | 'female' | 'unknown'): Promise<string | null> {
     const { data, error } = await supabase.from('clients').insert({
       full_name: name,
       phone:     phone || null,
+      gender,
       store_id:  STORE_ID,
     }).select().single()
     if (error) { toast.error('新增客戶失敗', error.message); return null }

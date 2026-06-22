@@ -20,6 +20,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import FormField from '@/components/ui/FormField'
 import Textarea from '@/components/ui/Textarea'
+import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import Drawer from '@/components/ui/Drawer'
@@ -106,7 +107,7 @@ interface ClientFormProps {
 
 function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
   const isEdit = !!editing
-  const [form, setForm] = useState({ full_name: '', phone: '', email: '', notes: '' })
+  const [form, setForm] = useState({ full_name: '', phone: '', gender: 'unknown' as 'male'|'female'|'unknown', notes: '' })
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -115,7 +116,7 @@ function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
       setForm({
         full_name: editing?.full_name ?? '',
         phone:     editing?.phone     ?? '',
-        email:     editing?.email     ?? '',
+        gender:    editing?.gender    ?? 'unknown',
         notes:     editing?.notes     ?? '',
       })
       setErrors({})
@@ -139,7 +140,7 @@ function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
     const payload = {
       full_name: form.full_name.trim(),
       phone:     form.phone.trim(),
-      email:     form.email.trim() || null,
+      gender:    form.gender,
       notes:     form.notes.trim() || null,
       store_id:  STORE_ID,
     }
@@ -168,7 +169,7 @@ function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
   }
 
   const setField = (field: string, value: string) => {
-    setForm(f => ({ ...f, [field]: value }))
+    setForm(f => ({ ...f, [field]: value } as typeof f))
     setErrors(e => ({ ...e, [field]: '' }))
   }
 
@@ -208,13 +209,15 @@ function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
           />
         </FormField>
 
-        <FormField label="Email" hint="選填">
-          <Input
-            type="email"
-            value={form.email}
-            onChange={e => setField('email', e.target.value)}
-            placeholder="例：client@email.com"
-            prefix={<Mail size={14} className="text-slate-400" />}
+        <FormField label="性別">
+          <Select
+            value={form.gender}
+            onChange={v => setField('gender', v)}
+            options={[
+              { value: 'unknown', label: '未知' },
+              { value: 'male',    label: '男' },
+              { value: 'female',  label: '女' },
+            ]}
           />
         </FormField>
 

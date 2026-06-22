@@ -50,6 +50,7 @@ export interface Database {
           full_name: string
           phone: string
           email: string | null
+          gender: 'male' | 'female' | 'unknown'
           line_user_id: string | null
           notes: string | null
           store_id: string
