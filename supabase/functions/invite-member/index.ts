@@ -111,23 +111,7 @@ serve(async (req) => {
       )
     }
 
-    // 檢查該郵件是否已存在待定邀請或已註冊用戶
-    const { data: existingInvite } = await supabase
-      .from("pending_invitations")
-      .select("id")
-      .eq("store_id", currentUser.store_id)
-      .eq("email", payload.email)
-      .is("accepted_at", null)
-      .single()
-
-    if (existingInvite) {
-      return new Response(
-        JSON.stringify({ error: "An active invitation already exists for this email" }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
-    }
-
-    // 檢查郵件是否已註冊
+    // 檢查郵件是否已註冊為正式成員
     const { data: existingUser } = await supabase
       .from("users")
       .select("id")
@@ -142,6 +126,14 @@ serve(async (req) => {
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }
+
+    // 刪除同一 email 的舊邀請（不論狀態），避免 UNIQUE(store_id, email) 衝突
+    await supabase
+      .from("pending_invitations")
+      .delete()
+      .eq("store_id", currentUser.store_id)
+      .eq("email", payload.email)
+      .is("accepted_at", null)
 
     // 創建邀請記錄
     const { data: invitation, error: insertError } = await supabase
