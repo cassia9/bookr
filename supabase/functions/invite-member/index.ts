@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:5173",
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
@@ -164,7 +164,8 @@ serve(async (req) => {
     }
 
     // 生成邀請鏈接
-    const invitationLink = `${Deno.env.get("VITE_APP_URL") || "https://booking-system.example.com"}/auth/accept-invitation?token=${invitation.token}`
+    const appUrl = Deno.env.get("APP_URL") || req.headers.get("Origin") || "https://bookr-5ph.pages.dev"
+    const invitationLink = `${appUrl}/auth/accept-invitation?token=${invitation.token}`
 
     // 呼叫郵件發送函數
     const mailResponse = await fetch(`${supabaseUrl}/functions/v1/send-invitation-email`, {
