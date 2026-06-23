@@ -12,3 +12,15 @@ major_version = 15
 
 [storage]
 file_size_limit = 52428800
+
+[functions.invite-member]
+verify_jwt = false
+
+[functions.member-management]
+verify_jwt = false
+
+[functions.accept-invitation]
+verify_jwt = false
+
+[functions.send-invitation-email]
+verify_jwt = false
