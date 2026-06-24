@@ -41,7 +41,7 @@ async function sendEmailViaSendGrid(
         ],
         from: {
           email: Deno.env.get("SENDGRID_FROM_EMAIL") || "noreply@booking-system.com",
-          name: "預約系統",
+          name: `${storeName} 預約系統`,
         },
         content: [
           {
@@ -157,7 +157,7 @@ function generateInvitationEmailHtml(
               <p>親愛的團隊成員，</p>
             </div>
 
-            <p>${invitedByName} 邀請你加入 <strong>${storeName}</strong> 的預約管理系統。</p>
+            <p><strong>${storeName}</strong> 的管理員 ${invitedByName} 邀請你加入預約管理系統。</p>
 
             <p>通過這個平台，你可以：</p>
             <ul>
@@ -190,6 +190,7 @@ function generateInvitationEmailHtml(
             <p><strong>預約系統團隊</strong></p>
 
             <div class="footer">
+              <p>此邀請由 <strong>${storeName}</strong> 透過預約管理系統發送。</p>
               <p>這是一封自動郵件，請勿直接回覆。</p>
               <p>&copy; 2026 預約管理系統。保留所有權利。</p>
             </div>

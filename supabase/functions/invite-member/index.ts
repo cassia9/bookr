@@ -93,7 +93,7 @@ serve(async (req) => {
     // 驗證當前用戶是否為管理員
     const { data: currentUser, error: userError } = await supabase
       .from("users")
-      .select("id, store_id, role")
+      .select("id, store_id, role, name")
       .eq("id", authUser.user.id)
       .single()
 
@@ -170,7 +170,7 @@ serve(async (req) => {
         email: payload.email,
         storeName: payload.storeName,
         invitationLink: invitationLink,
-        invitedByName: currentUser.id, // 應該是用戶名，簡化版使用 ID
+        invitedByName: currentUser.name || currentUser.id,
       }),
     })
 
