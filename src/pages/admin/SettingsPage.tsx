@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send } from 'lucide-react'
+import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 import { useAuth } from '@/lib/auth'
@@ -25,6 +25,14 @@ interface Member {
   full_name: string
   role: 'member' | 'admin'
   created_at: string
+}
+
+interface PendingInvitation {
+  id: string
+  email: string
+  role: 'member' | 'admin'
+  created_at: string
+  expires_at: string
 }
 
 // ── 工具函式 ─────────────────────────────────────────────────────────────────
@@ -203,12 +211,16 @@ function BasicSettings() {
 // ── 成員管理 Tab ─────────────────────────────────────────────────────────────
 
 function MembersSettings() {
-  const { session, profile } = useAuth()
+  const { session } = useAuth()
 
+  const [storeName, setStoreName] = useState('')
   const [members, setMembers] = useState<Member[]>([])
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
   const [loading, setLoading] = useState(true)
   const [editingMember, setEditingMember] = useState<Member | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [revokingId, setRevokingId] = useState<string | null>(null)
+  const [resendingId, setResendingId] = useState<string | null>(null)
 
   // 邀請 Modal 狀態
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -241,7 +253,7 @@ function MembersSettings() {
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: inviteEmail, role: inviteRole, storeName: profile?.full_name || '預約系統' }),
+          body: JSON.stringify({ email: inviteEmail, role: inviteRole, storeName }),
         }
       )
       if (!res.ok) {
@@ -250,6 +262,7 @@ function MembersSettings() {
       }
       toast.success('邀請已發送', `邀請信已寄到 ${inviteEmail}`)
       setInviteOpen(false)
+      loadPendingInvitations()
     } catch (err: any) {
       toast.error('發送失敗', err.message)
     } finally {
@@ -257,7 +270,20 @@ function MembersSettings() {
     }
   }
 
-  useEffect(() => { loadMembers() }, [])
+  useEffect(() => {
+    loadStoreName()
+    loadMembers()
+    loadPendingInvitations()
+  }, [])
+
+  async function loadStoreName() {
+    const { data } = await supabase
+      .from('stores')
+      .select('name')
+      .eq('id', STORE_ID)
+      .single()
+    if (data?.name) setStoreName(data.name)
+  }
 
   async function loadMembers() {
     setLoading(true)
@@ -268,6 +294,55 @@ function MembersSettings() {
     if (error) toast.error('載入失敗', error.message)
     else setMembers(data || [])
     setLoading(false)
+  }
+
+  async function loadPendingInvitations() {
+    const { data } = await supabase
+      .from('pending_invitations')
+      .select('id, email, role, created_at, expires_at')
+      .is('accepted_at', null)
+      .order('created_at', { ascending: false })
+    setPendingInvitations(data || [])
+  }
+
+  async function handleResend(inv: PendingInvitation) {
+    if (!session) return
+    setResendingId(inv.id)
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-member`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: inv.email, role: inv.role, storeName }),
+        }
+      )
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error ?? `HTTP ${res.status}`)
+      }
+      toast.success('邀請已重新發送', `新的邀請信已寄到 ${inv.email}`)
+      loadPendingInvitations()
+    } catch (err: any) {
+      toast.error('重發失敗', err.message)
+    } finally {
+      setResendingId(null)
+    }
+  }
+
+  async function handleRevoke() {
+    if (!revokingId) return
+    const { error } = await supabase
+      .from('pending_invitations')
+      .delete()
+      .eq('id', revokingId)
+    if (error) {
+      toast.error('撤銷失敗', error.message)
+      return
+    }
+    setPendingInvitations(pendingInvitations.filter(i => i.id !== revokingId))
+    toast.success('邀請已撤銷')
+    setRevokingId(null)
   }
 
   async function handleEditRole(newRole: 'member' | 'admin') {
@@ -309,6 +384,13 @@ function MembersSettings() {
     setDeletingId(null)
   }
 
+  function expiryLabel(expiresAt: string) {
+    const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000)
+    if (days <= 0) return { text: '已過期', warn: true }
+    if (days <= 3) return { text: `還有 ${days} 天`, warn: true }
+    return { text: `還有 ${days} 天`, warn: false }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
@@ -322,6 +404,7 @@ function MembersSettings() {
         </Button>
       </div>
 
+      {/* 已加入成員 */}
       <section className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         {loading ? (
           <div className="flex justify-center items-center h-40">
@@ -384,6 +467,81 @@ function MembersSettings() {
         )}
       </section>
 
+      {/* 待接受邀請 */}
+      {pendingInvitations.length > 0 && (
+        <section>
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">
+            待接受邀請 · {pendingInvitations.length}
+          </h3>
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Email</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">角色</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">發出時間</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">到期</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {pendingInvitations.map(inv => {
+                  const expiry = expiryLabel(inv.expires_at)
+                  return (
+                    <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0">
+                            <Mail size={13} className="text-amber-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-slate-700">{inv.email}</p>
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                              邀請中
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <Badge variant={inv.role === 'admin' ? 'indigo' : 'slate'}>
+                          {inv.role === 'admin' ? '管理員' : '一般成員'}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-slate-400">
+                        {timeAgo(inv.created_at)}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`text-xs font-medium ${expiry.warn ? 'text-orange-500' : 'text-slate-400'}`}>
+                          <Clock size={11} className="inline mr-1" />
+                          {expiry.text}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost" size="sm"
+                            loading={resendingId === inv.id}
+                            onClick={() => handleResend(inv)}
+                          >
+                            <RefreshCw size={13} />
+                            重發
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setRevokingId(inv.id)}>
+                            <Trash2 size={13} className="text-red-400" />
+                            <span className="text-red-500">撤銷</span>
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {/* 編輯角色 Modal */}
       <Modal open={!!editingMember} onClose={() => setEditingMember(null)} title="編輯成員角色">
         {editingMember && (
@@ -425,6 +583,16 @@ function MembersSettings() {
         title="確認移除成員"
         description="你確定要移除此成員的存取權限？此操作無法撤銷。"
         confirmLabel="確認移除"
+      />
+
+      {/* 撤銷邀請確認 */}
+      <ConfirmModal
+        open={!!revokingId}
+        onClose={() => setRevokingId(null)}
+        onConfirm={handleRevoke}
+        title="確認撤銷邀請"
+        description="撤銷後，此邀請連結將立即失效，對方將無法使用原連結加入。"
+        confirmLabel="確認撤銷"
       />
 
       {/* 邀請新成員 Modal */}
