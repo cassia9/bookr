@@ -24,6 +24,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
+          <Route path="/auth/accept-invitation" element={<AcceptInvitationPage />} />
 
           <Route
             path="/admin"

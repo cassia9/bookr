@@ -1,28 +1,23 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { Eye, EyeOff, CheckCircle2, XCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
+import FormField from '@/components/ui/FormField'
 import { toast } from '@/components/ui/Snackbar'
 
-interface InvitationData {
+interface InvitationInfo {
   email: string
   storeName: string
+  role: string
 }
 
-interface FormData {
-  name: string
-  password: string
-  showPassword: boolean
-}
-
-interface PasswordStrength {
-  score: number
-  requirements: {
-    minLength: boolean
-    hasUppercase: boolean
-    hasLowercase: boolean
-    hasNumber: boolean
-  }
+interface PasswordReqs {
+  minLength: boolean
+  hasUppercase: boolean
+  hasLowercase: boolean
+  hasNumber: boolean
 }
 
 type PageState = 'loading' | 'valid' | 'invalid' | 'success'
@@ -33,360 +28,290 @@ export default function AcceptInvitationPage() {
   const token = searchParams.get('token')
 
   const [pageState, setPageState] = useState<PageState>('loading')
-  const [invitationData, setInvitationData] = useState<InvitationData | null>(null)
-  const [form, setForm] = useState<FormData>({
-    name: '',
-    password: '',
-    showPassword: false,
-  })
-  const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({
-    score: 0,
-    requirements: {
-      minLength: false,
-      hasUppercase: false,
-      hasLowercase: false,
-      hasNumber: false,
-    },
-  })
-  const [errors, setErrors] = useState<{ name?: string; password?: string }>({})
-  const [isLoading, setIsLoading] = useState(false)
+  const [invalidMessage, setInvalidMessage] = useState('')
+  const [info, setInfo] = useState<InvitationInfo | null>(null)
 
-  // 驗證 token
+  const [name, setName] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const passwordReqs: PasswordReqs = {
+    minLength: password.length >= 8,
+    hasUppercase: /[A-Z]/.test(password),
+    hasLowercase: /[a-z]/.test(password),
+    hasNumber: /\d/.test(password),
+  }
+  const passwordValid = Object.values(passwordReqs).every(Boolean)
+
   useEffect(() => {
     if (!token) {
+      setInvalidMessage('邀請連結無效，請確認連結是否完整。')
       setPageState('invalid')
       return
     }
-
     validateToken()
   }, [token])
 
-  const validateToken = async () => {
+  async function validateToken() {
     try {
-      // 呼叫後端驗證 token
-      const { data, error } = await (supabase.rpc as any)('validate_invitation_token', {
-        p_token: token,
-      })
+      const { data, error } = await supabase
+        .rpc('validate_invitation_token', { p_token: token })
+        .single()
 
       if (error || !data || !(data as any).valid) {
-        console.error('Token validation error:', error || (data as any)?.message)
+        const msg = (data as any)?.message
+        if (msg === 'Invitation already accepted') {
+          setInvalidMessage('此邀請連結已被使用，請直接登入。')
+        } else if (msg === 'Invitation expired') {
+          setInvalidMessage('邀請連結已過期，請聯絡管理員重新發送。')
+        } else {
+          setInvalidMessage('邀請連結無效，請確認連結是否完整。')
+        }
         setPageState('invalid')
         return
       }
 
-      // Token 有效，從資料庫取得邀請資訊
-      setInvitationData({
-        email: (data as any).email,
-        storeName: '預約系統', // TODO: 從 store 表取得店家名稱
+      const tokenData = data as any
+
+      // 取得店家名稱
+      const { data: storeData } = await supabase
+        .from('stores')
+        .select('name')
+        .eq('id', tokenData.store_id)
+        .single()
+
+      setInfo({
+        email: tokenData.email,
+        storeName: storeData?.name || '預約管理系統',
+        role: tokenData.role === 'admin' ? '管理員' : '成員',
       })
       setPageState('valid')
-    } catch (error) {
-      console.error('Unexpected error during token validation:', error)
+    } catch {
+      setInvalidMessage('驗證時發生錯誤，請稍後再試。')
       setPageState('invalid')
     }
   }
 
-  const checkPasswordStrength = (password: string) => {
-    const requirements = {
-      minLength: password.length >= 8,
-      hasUppercase: /[A-Z]/.test(password),
-      hasLowercase: /[a-z]/.test(password),
-      hasNumber: /\d/.test(password),
-    }
-
-    const score = Object.values(requirements).filter(Boolean).length
-
-    setPasswordStrength({ score, requirements })
-  }
-
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target
-    setForm({ ...form, password: value })
-    checkPasswordStrength(value)
-
-    if (errors.password) {
-      setErrors({ ...errors, password: undefined })
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    // 驗證
-    const newErrors: typeof errors = {}
-
-    if (!form.name.trim()) {
-      newErrors.name = 'Name is required'
-    }
-
-    if (form.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters'
-    }
-
-    if (!passwordStrength.requirements.hasUppercase ||
-        !passwordStrength.requirements.hasLowercase ||
-        !passwordStrength.requirements.hasNumber) {
-      newErrors.password = 'Password must contain uppercase, lowercase, and numbers'
-    }
-
+    const newErrors: Record<string, string> = {}
+    if (!name.trim()) newErrors.name = '請輸入你的姓名'
+    if (!passwordValid) newErrors.password = '密碼需符合所有要求'
+    if (password !== confirmPassword) newErrors.confirmPassword = '兩次密碼不一致'
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       return
     }
 
-    setIsLoading(true)
-
+    setIsSubmitting(true)
     try {
-      // 調用 accept-invitation Edge Function
-      const response = await fetch(
+      const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/accept-invitation`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            token,
-            email: invitationData?.email,
-            name: form.name,
-            password: form.password,
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, email: info?.email, name: name.trim(), password }),
         }
       )
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Registration failed')
+      if (!res.ok) {
+        const body = await res.json()
+        throw new Error(body.error || '加入失敗，請稍後再試')
       }
 
-      // 成功
+      // 自動登入
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: info!.email,
+        password,
+      })
+
       setPageState('success')
 
-      // 2秒後重定向
-      setTimeout(() => {
-        navigate('/login')
-      }, 2000)
-    } catch (error: any) {
-      toast.error(error.message)
+      if (!signInError) {
+        setTimeout(() => navigate('/admin/bookings'), 1500)
+      } else {
+        setTimeout(() => navigate('/login'), 1500)
+      }
+    } catch (err: any) {
+      toast.error(err.message)
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
   }
 
+  // ── Loading ──
   if (pageState === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
+  // ── Invalid ──
   if (pageState === 'invalid') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="max-w-sm w-full p-8 border border-red-200 rounded-lg bg-red-50">
-          <h2 className="text-lg font-semibold text-red-900 mb-2">
-            邀請連結無效或已過期
-          </h2>
-          <p className="text-red-700 text-sm mb-4">
-            邀請可能已過期（超過 30 天）或已被接受。請聯絡店家管理員重新邀請。
-          </p>
-          <button
-            onClick={() => navigate('/login')}
-            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-          >
-            返回登入
-          </button>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+        <div className="max-w-sm w-full bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-sm">
+          <XCircle className="w-12 h-12 text-red-400 mx-auto mb-4" strokeWidth={1.5} />
+          <h2 className="text-base font-semibold text-slate-900 mb-2">連結無法使用</h2>
+          <p className="text-sm text-slate-500 mb-6">{invalidMessage}</p>
+          <Button variant="secondary" className="w-full" onClick={() => navigate('/login')}>
+            前往登入
+          </Button>
         </div>
       </div>
     )
   }
 
+  // ── Success ──
   if (pageState === 'success') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="max-w-sm w-full p-8 border border-gray-200 rounded-lg bg-white text-center">
-          <div className="mb-4">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full">
-              <span className="text-3xl">✅</span>
-            </div>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            註冊成功！
-          </h2>
-          <p className="text-gray-600 mb-4">
-            正在轉向登入頁面...
-          </p>
-          <div className="animate-pulse text-gray-500 text-sm">
-            (2 秒後自動跳轉)
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+        <div className="max-w-sm w-full bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-sm">
+          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-4" strokeWidth={1.5} />
+          <h2 className="text-base font-semibold text-slate-900 mb-1">加入成功！</h2>
+          <p className="text-sm text-slate-500">正在進入系統…</p>
         </div>
       </div>
     )
   }
 
-  // pageState === 'valid'
+  // ── Valid：填寫表單 ──
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center px-4 py-12">
-      <div className="max-w-md w-full p-8 border border-gray-200 rounded-lg bg-white">
-        {/* 邀請標題 */}
-        <div className="text-center mb-8">
-          <div className="text-4xl mb-2">✨</div>
-          <h1 className="text-2xl font-bold text-blue-600 mb-1">歡迎加入</h1>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            {invitationData?.storeName}
-          </h2>
-          <p className="text-sm text-gray-600">
-            由管理員邀請
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-12">
+      <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* Header */}
+        <div className="px-8 pt-8 pb-6 border-b border-slate-100">
+          <p className="text-xs font-medium text-violet-600 uppercase tracking-widest mb-1">
+            你受到邀請
+          </p>
+          <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
+            加入 {info?.storeName}
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            身份：{info?.role}．設定密碼後即可開始使用
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Email 預填 */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email 地址
-            </label>
-            <input
-              id="email"
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="px-8 py-6 space-y-4">
+          {/* Email 唯讀 */}
+          <FormField label="受邀 Email">
+            <Input
               type="email"
-              value={invitationData?.email || ''}
+              value={info?.email || ''}
               disabled
-              className="w-full px-4 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 cursor-default"
+              suffix={<CheckCircle2 className="w-4 h-4 text-emerald-500" strokeWidth={1.5} />}
             />
-            <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
-              ✓ 已驗證
-            </p>
-          </div>
+          </FormField>
 
-          {/* 名字輸入 */}
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-              名字 *
-            </label>
-            <input
-              id="name"
+          {/* 姓名 */}
+          <FormField label="你的姓名" required error={errors.name}>
+            <Input
               type="text"
-              placeholder="請輸入你的名字"
-              value={form.name}
+              placeholder="請輸入姓名"
+              value={name}
+              error={!!errors.name}
               onChange={(e) => {
-                setForm({ ...form, name: e.target.value })
-                if (errors.name) setErrors({ ...errors, name: undefined })
+                setName(e.target.value)
+                setErrors((prev) => ({ ...prev, name: '' }))
               }}
-              className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.name ? 'border-red-500' : 'border-gray-300'
-              }`}
-              disabled={isLoading}
+              disabled={isSubmitting}
             />
-            {errors.name && (
-              <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-            )}
-          </div>
+          </FormField>
 
-          {/* 密碼輸入 */}
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              密碼 *
-            </label>
-            <div className="relative">
-              <input
-                id="password"
-                type={form.showPassword ? 'text' : 'password'}
-                placeholder="至少 8 個字符"
-                value={form.password}
-                onChange={handlePasswordChange}
-                className={`w-full px-4 py-2.5 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.password ? 'border-red-500' : 'border-gray-300'
-                }`}
-                disabled={isLoading}
-              />
-              <button
-                type="button"
-                onClick={() => setForm({ ...form, showPassword: !form.showPassword })}
-                className="absolute right-3 top-3 text-gray-600 hover:text-gray-800"
-              >
-                {form.showPassword ? '👁‍🗨' : '👁'}
-              </button>
-            </div>
-
-            {/* 密碼強度指示 */}
-            {form.password && (
-              <div className="mt-3 space-y-2">
-                {/* 強度條 */}
-                <div className="flex gap-1 h-1">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className={`flex-1 rounded-full ${
-                        i < passwordStrength.score ? 'bg-green-500' : 'bg-gray-300'
-                      }`}
-                    ></div>
-                  ))}
-                </div>
-
-                {/* 密碼要求 */}
-                <div className="text-xs space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className={passwordStrength.requirements.minLength ? 'text-green-600' : 'text-gray-400'}>
-                      ✓
-                    </span>
-                    <span className={passwordStrength.requirements.minLength ? 'text-gray-700' : 'text-gray-400'}>
-                      至少 8 個字符
-                    </span>
+          {/* 密碼 */}
+          <FormField label="設定密碼" required error={errors.password}>
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="至少 8 個字元，含大寫、小寫與數字"
+              value={password}
+              error={!!errors.password}
+              onChange={(e) => {
+                setPassword(e.target.value)
+                setErrors((prev) => ({ ...prev, password: '' }))
+              }}
+              disabled={isSubmitting}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="text-slate-400 hover:text-slate-600 pointer-events-auto"
+                >
+                  {showPassword
+                    ? <EyeOff className="w-4 h-4" strokeWidth={1.5} />
+                    : <Eye className="w-4 h-4" strokeWidth={1.5} />}
+                </button>
+              }
+            />
+            {/* 密碼要求 checklist */}
+            {password && (
+              <div className="mt-2 grid grid-cols-2 gap-1">
+                {[
+                  { ok: passwordReqs.minLength, label: '至少 8 字元' },
+                  { ok: passwordReqs.hasUppercase, label: '含大寫字母' },
+                  { ok: passwordReqs.hasLowercase, label: '含小寫字母' },
+                  { ok: passwordReqs.hasNumber, label: '含數字' },
+                ].map(({ ok, label }) => (
+                  <div key={label} className="flex items-center gap-1.5">
+                    <div className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                    <span className={`text-xs ${ok ? 'text-slate-600' : 'text-slate-400'}`}>{label}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={passwordStrength.requirements.hasUppercase ? 'text-green-600' : 'text-gray-400'}>
-                      ✓
-                    </span>
-                    <span className={passwordStrength.requirements.hasUppercase ? 'text-gray-700' : 'text-gray-400'}>
-                      包含大寫字母
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={passwordStrength.requirements.hasLowercase ? 'text-green-600' : 'text-gray-400'}>
-                      ✓
-                    </span>
-                    <span className={passwordStrength.requirements.hasLowercase ? 'text-gray-700' : 'text-gray-400'}>
-                      包含小寫字母
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={passwordStrength.requirements.hasNumber ? 'text-green-600' : 'text-gray-400'}>
-                      ✓
-                    </span>
-                    <span className={passwordStrength.requirements.hasNumber ? 'text-gray-700' : 'text-gray-400'}>
-                      包含數字
-                    </span>
-                  </div>
-                </div>
+                ))}
               </div>
             )}
+          </FormField>
 
-            {errors.password && (
-              <p className="mt-2 text-sm text-red-600">{errors.password}</p>
-            )}
+          {/* 確認密碼 */}
+          <FormField label="確認密碼" required error={errors.confirmPassword}>
+            <Input
+              type={showConfirm ? 'text' : 'password'}
+              placeholder="再次輸入密碼"
+              value={confirmPassword}
+              error={!!errors.confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value)
+                setErrors((prev) => ({ ...prev, confirmPassword: '' }))
+              }}
+              disabled={isSubmitting}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm((v) => !v)}
+                  className="text-slate-400 hover:text-slate-600 pointer-events-auto"
+                >
+                  {showConfirm
+                    ? <EyeOff className="w-4 h-4" strokeWidth={1.5} />
+                    : <Eye className="w-4 h-4" strokeWidth={1.5} />}
+                </button>
+              }
+            />
+          </FormField>
+
+          <div className="pt-2">
+            <Button type="submit" className="w-full" loading={isSubmitting}>
+              完成並加入
+            </Button>
           </div>
-
-          {/* 提交按鈕 */}
-          <Button
-            type="submit"
-            className="w-full py-2.5"
-            disabled={isLoading}
-          >
-            {isLoading ? '完成註冊中...' : '完成註冊'}
-          </Button>
         </form>
 
-        {/* 底部連結 */}
-        <p className="text-center text-sm text-gray-600 mt-6">
-          已有帳號？{' '}
-          <button
-            onClick={() => navigate('/login')}
-            className="text-blue-600 hover:text-blue-800 font-medium"
-          >
-            登入
-          </button>
-        </p>
+        <div className="px-8 pb-6 text-center">
+          <p className="text-xs text-slate-400">
+            已有帳號？{' '}
+            <button
+              onClick={() => navigate('/login')}
+              className="text-violet-600 hover:text-violet-700 font-medium"
+            >
+              前往登入
+            </button>
+          </p>
+        </div>
       </div>
     </div>
   )
