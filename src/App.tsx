@@ -15,6 +15,7 @@ import DashboardPage from './pages/admin/DashboardPage'
 // InviteMemberPage 已整合為 SettingsPage 內的 Modal
 // MembersPage 已整合進 SettingsPage
 import AcceptInvitationPage from './pages/auth/AcceptInvitationPage'
+import BookingPage from './pages/booking/BookingPage'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
           <Route path="/auth/accept-invitation" element={<AcceptInvitationPage />} />
+          <Route path="/book/:storeId" element={<BookingPage />} />
 
           <Route
             path="/admin"

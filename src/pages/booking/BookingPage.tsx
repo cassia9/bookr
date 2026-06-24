@@ -1,113 +1,161 @@
-/**
- * 客戶公開預約頁 — /book
- * Mobile-first，無需登入
- * 6 步驟：服務 → 從業人員 → 日期 → 時段 → 資料 → 成功
- */
 import { useState, useEffect, useCallback } from 'react'
-import { format, addDays, addMonths, startOfMonth, endOfMonth,
-         startOfWeek, endOfWeek, isSameDay, isSameMonth,
-         parseISO, addHours } from 'date-fns'
+import { useParams } from 'react-router-dom'
+import { format, addMonths, isSameDay, parseISO, addHours } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
 import { ChevronLeft, ChevronRight, CheckCircle, User, Clock,
-         CalendarDays, Phone, MessageSquare, MapPin } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
-import { cn } from '../../lib/cn'
-import type { Service, Practitioner } from '../../types/database'
+         CalendarDays, Phone, MessageSquare, MapPin, AlertCircle } from 'lucide-react'
+import liff from '@line/liff'
+import { supabase } from '@/lib/supabase'
+import { cn } from '@/lib/cn'
+import Input from '@/components/ui/Input'
+import FormField from '@/components/ui/FormField'
+import Button from '@/components/ui/Button'
+import type { Service, Practitioner } from '@/types/database'
 
-const STORE_ID = '00000000-0000-0000-0000-000000000001'
-const STEP_LABELS = ['服務', '人員', '日期', '時段', '資料', '完成']
+const STEP_LABELS = ['服務', '人員', '日期', '時段', '資料']
 
 // ── Types ──────────────────────────────────────────────────────────────
 
 interface SlotItem {
-  slot_time:          string  // "HH:MM"
+  slot_time:          string
   practitioner_id:    string
   practitioner_name:  string
   practitioner_color: string
 }
 
 interface StoreInfo {
-  name:       string
-  phone:      string | null
-  address:    string | null
-  open_time:  string
-  close_time: string
-  logo_url:   string | null
+  name:                     string
+  phone:                    string | null
+  address:                  string | null
+  open_time:                string
+  close_time:               string
+  logo_url:                 string | null
+  liff_id:                  string | null
+  booking_enabled:          boolean
+  booking_confirmation_mode: string
 }
 
 interface BookingDraft {
-  service:             Service | null
-  practitionerChoice:  Practitioner | null  // null = 不指定
-  date:                string   // yyyy-MM-dd
-  slot:                SlotItem | null
-  name:                string
-  phone:               string
-  notes:               string
+  service:            Service | null
+  practitionerChoice: Practitioner | null
+  date:               string
+  slot:               SlotItem | null
+  name:               string
+  phone:              string
+  notes:              string
 }
+
+type BookingSource = 'line' | 'messenger' | 'web'
 
 // ── Main Page ──────────────────────────────────────────────────────────
 
 export default function BookingPage() {
+  const { storeId } = useParams<{ storeId: string }>()
+
   const [step, setStep] = useState(1)
   const [store, setStore] = useState<StoreInfo | null>(null)
+  const [storeError, setStoreError] = useState('')
   const [services, setServices] = useState<Service[]>([])
   const [practitioners, setPractitioners] = useState<Practitioner[]>([])
+
+  // LINE LIFF state
+  const [lineAvatar, setLineAvatar] = useState<string | null>(null)
+  const [lineUserId, setLineUserId] = useState<string | null>(null)
+  const [source, setSource] = useState<BookingSource>('web')
+
   const [draft, setDraft] = useState<BookingDraft>({
     service: null, practitionerChoice: null,
     date: '', slot: null,
     name: '', phone: '', notes: '',
   })
   const [confirmedId, setConfirmedId] = useState('')
+  const [confirmedStatus, setConfirmedStatus] = useState<'pending' | 'confirmed'>('pending')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
+  // ── Load store + services + practitioners ──────────────────────────
   useEffect(() => {
+    if (!storeId) { setStoreError('無效的預約連結'); return }
+
     Promise.all([
-      supabase.from('stores').select('name,phone,address,open_time,close_time,logo_url').eq('id', STORE_ID).single(),
-      supabase.from('services').select('*').eq('store_id', STORE_ID).eq('active', true).order('name'),
-      supabase.from('practitioners').select('*').eq('store_id', STORE_ID).eq('active', true).order('created_at'),
-    ]).then(([{ data: s }, { data: sv }, { data: p }]) => {
-      if (s) setStore({
-        name:      s.name ?? '',
-        phone:     s.phone ?? null,
-        address:   s.address ?? null,
-        open_time: (s.open_time  ?? '09:00:00').slice(0, 5),
-        close_time:(s.close_time ?? '21:00:00').slice(0, 5),
-        logo_url:  s.logo_url ?? null,
+      supabase.from('stores')
+        .select('name,phone,address,open_time,close_time,logo_url,liff_id,booking_enabled,booking_confirmation_mode')
+        .eq('id', storeId).single(),
+      supabase.from('services')
+        .select('*').eq('store_id', storeId).eq('active', true).order('name'),
+      supabase.from('practitioners')
+        .select('*').eq('store_id', storeId).eq('active', true).order('created_at'),
+    ]).then(([{ data: s, error: sErr }, { data: sv }, { data: p }]) => {
+      if (sErr || !s) { setStoreError('找不到此預約頁面'); return }
+      if (!s.booking_enabled) { setStoreError('此店家目前暫停線上預約'); return }
+      setStore({
+        name:                     s.name ?? '',
+        phone:                    s.phone ?? null,
+        address:                  s.address ?? null,
+        open_time:               (s.open_time  ?? '09:00:00').slice(0, 5),
+        close_time:              (s.close_time ?? '21:00:00').slice(0, 5),
+        logo_url:                 s.logo_url ?? null,
+        liff_id:                  s.liff_id ?? null,
+        booking_enabled:          s.booking_enabled ?? true,
+        booking_confirmation_mode: s.booking_confirmation_mode ?? 'manual',
       })
       setServices(sv ?? [])
       setPractitioners(p ?? [])
-    })
-  }, [])
 
+      // 嘗試初始化 LINE LIFF
+      initLiff(s.liff_id)
+    })
+  }, [storeId])
+
+  // ── LINE LIFF 初始化 ────────────────────────────────────────────────
+  async function initLiff(liffId: string | null) {
+    if (!liffId) return
+    const isLiffEnv =
+      window.location.href.includes('liff.state') ||
+      navigator.userAgent.includes('Line')
+    if (!isLiffEnv) return
+    try {
+      await liff.init({ liffId })
+      if (!liff.isLoggedIn()) { liff.login(); return }
+      const profile = await liff.getProfile()
+      setDraft(d => ({ ...d, name: d.name || profile.displayName }))
+      setLineAvatar(profile.pictureUrl ?? null)
+      setLineUserId(profile.userId)
+      setSource('line')
+    } catch (err) {
+      console.warn('LIFF init failed:', err)
+    }
+  }
+
+  // ── Submit ─────────────────────────────────────────────────────────
   async function handleSubmit() {
-    if (!draft.service || !draft.slot || !draft.name.trim() || !draft.phone.trim()) return
+    if (!draft.service || !draft.slot || !draft.name.trim() || !draft.phone.trim() || !storeId) return
     setSubmitting(true)
     setSubmitError('')
 
-    // Convert "HH:MM" on selected date to TIMESTAMPTZ
     const startTs = new Date(`${draft.date}T${draft.slot.slot_time}:00`)
 
     const { data, error } = await supabase.rpc('create_booking_public', {
-      p_full_name:       draft.name.trim(),
-      p_phone:           draft.phone.trim(),
-      p_service_id:      draft.service.id,
-      p_practitioner_id: draft.slot.practitioner_id,
-      p_start_time:      startTs.toISOString(),
-      p_notes:           draft.notes.trim() || null,
-      p_store_id:        STORE_ID,
+      p_full_name:          draft.name.trim(),
+      p_phone:              draft.phone.trim(),
+      p_service_id:         draft.service.id,
+      p_practitioner_id:    draft.slot.practitioner_id,
+      p_start_time:         startTs.toISOString(),
+      p_notes:              draft.notes.trim() || null,
+      p_store_id:           storeId,
+      p_source:             source,
+      p_client_line_id:     lineUserId,
+      p_client_picture_url: lineAvatar,
     })
 
     setSubmitting(false)
 
     if (error) { setSubmitError('系統錯誤，請稍後再試'); return }
 
-    const result = data as { ok: boolean; error?: string; id?: string; conflict?: any }
+    const result = data as { ok: boolean; error?: string; id?: string; status?: string }
     if (!result.ok) {
-      if (result.error === 'TIME_CONFLICT') {
+      if (result.error === 'CONFLICT') {
         setSubmitError('此時段剛被預約，請返回重新選擇時段')
-      } else if (result.error === 'PRACTITIONER_BLOCKED') {
-        setSubmitError('從業人員此時段不可預約，請返回重新選擇')
       } else {
         setSubmitError('預約失敗，請稍後再試')
       }
@@ -115,22 +163,32 @@ export default function BookingPage() {
     }
 
     setConfirmedId(result.id ?? '')
+    setConfirmedStatus((result.status ?? 'pending') as 'pending' | 'confirmed')
     setStep(6)
   }
 
-  const canGoBack = step > 1 && step < 6
+  // ── Error / not found ──────────────────────────────────────────────
+  if (storeError) {
+    return (
+      <div className="min-h-dvh bg-slate-50 flex items-center justify-center px-6">
+        <div className="text-center">
+          <AlertCircle size={48} strokeWidth={1.5} className="mx-auto text-slate-300 mb-4" />
+          <p className="font-semibold text-slate-700 mb-1">{storeError}</p>
+          <p className="text-sm text-slate-400">請確認連結是否正確，或聯絡店家取得新連結</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-dvh bg-slate-50 flex flex-col">
-      {/* Store header — 淺灰色上帶 + 破格 logo 左齊 */}
+      {/* Store header */}
       <div className="bg-white pt-safe">
-        {/* 灰色裝飾帶 */}
-        <div className="h-24 bg-slate-100" />
-        {/* Logo 破格 + 店家資訊 — -mt-10 讓 logo 一半壓在灰色帶上 */}
+        <div className="h-20 bg-gradient-to-br from-indigo-50 to-violet-50" />
         <div className="max-w-md mx-auto px-4 pb-3 flex items-end gap-3 -mt-10">
           <div className="w-20 h-20 rounded-3xl overflow-hidden shadow-xl ring-4 ring-white shrink-0 relative z-10">
             {store?.logo_url ? (
-              <img src={store.logo_url} alt={store?.name ?? 'Logo'} className="w-full h-full object-cover" />
+              <img src={store.logo_url} alt={store.name} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-white font-bold text-3xl">
                 {store?.name?.[0] ?? ''}
@@ -138,7 +196,9 @@ export default function BookingPage() {
             )}
           </div>
           <div className="pb-1 min-w-0 flex-1">
-            <p className="font-bold text-slate-900 text-base leading-snug truncate">{store?.name ?? '預約系統'}</p>
+            <p className="font-bold text-slate-900 text-base leading-snug truncate">
+              {store?.name ?? '載入中…'}
+            </p>
             {store?.address && (
               <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5 truncate">
                 <MapPin size={10} strokeWidth={1.5} className="shrink-0" />{store.address}
@@ -154,8 +214,8 @@ export default function BookingPage() {
         <div className="bg-white border-b border-slate-100">
           <div className="max-w-md mx-auto px-4 py-3">
             <div className="flex items-center gap-1">
-              {STEP_LABELS.slice(0, 5).map((label, i) => {
-                const s = i + 1
+              {STEP_LABELS.map((label, i) => {
+                const s      = i + 1
                 const done   = step > s
                 const active = step === s
                 return (
@@ -212,8 +272,9 @@ export default function BookingPage() {
             onBack={() => setStep(2)}
           />
         )}
-        {step === 4 && draft.service && draft.date && (
+        {step === 4 && draft.service && draft.date && storeId && (
           <Step4Time
+            storeId={storeId}
             date={draft.date}
             serviceId={draft.service.id}
             practitionerId={draft.practitionerChoice?.id ?? null}
@@ -225,6 +286,7 @@ export default function BookingPage() {
         {step === 5 && (
           <Step5Info
             draft={draft}
+            lineAvatar={lineAvatar}
             onChange={(k, v) => setDraft(d => ({ ...d, [k]: v }))}
             onSubmit={handleSubmit}
             onBack={() => setStep(4)}
@@ -237,6 +299,7 @@ export default function BookingPage() {
             store={store}
             draft={draft}
             confirmedId={confirmedId}
+            confirmedStatus={confirmedStatus}
             onRebook={() => {
               setDraft({ service: null, practitionerChoice: null, date: '', slot: null, name: '', phone: '', notes: '' })
               setConfirmedId('')
@@ -287,7 +350,7 @@ function Step1Service({ services, onSelect }: {
                     )}
                   </div>
                 </div>
-                <ChevronRight size={18} strokeWidth={1.5} className="text-slate-300 flex-shrink-0" />
+                <ChevronRight size={18} strokeWidth={1.5} className="text-slate-300 shrink-0" />
               </div>
             </button>
           ))}
@@ -311,7 +374,6 @@ function Step2Practitioner({ practitioners, selected, onSelect, onBack }: {
       <h2 className="text-lg font-semibold text-slate-900 mb-1">選擇從業人員</h2>
       <p className="text-sm text-slate-400 mb-5">可指定特定人員，或讓系統依可用時段自動安排</p>
       <div className="space-y-3">
-        {/* 不指定選項 */}
         <button
           onClick={() => onSelect(null)}
           className={cn(
@@ -320,7 +382,7 @@ function Step2Practitioner({ practitioners, selected, onSelect, onBack }: {
           )}
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+            <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
               <User size={18} strokeWidth={1.5} className="text-slate-400" />
             </div>
             <div>
@@ -330,7 +392,6 @@ function Step2Practitioner({ practitioners, selected, onSelect, onBack }: {
           </div>
         </button>
 
-        {/* 各從業人員 */}
         {practitioners.map(p => (
           <button
             key={p.id}
@@ -341,13 +402,15 @@ function Step2Practitioner({ practitioners, selected, onSelect, onBack }: {
             )}
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0"
-                style={{ backgroundColor: p.color }}>
+              <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold shrink-0"
+                style={{ backgroundColor: p.color ?? '#6366f1' }}>
                 {p.full_name[0]}
               </div>
               <div>
                 <p className="font-semibold text-slate-900">{p.full_name}</p>
-                {p.title && <p className="text-xs text-slate-400 mt-0.5">{p.title}</p>}
+                {(p as any).title && (
+                  <p className="text-xs text-slate-400 mt-0.5">{(p as any).title}</p>
+                )}
               </div>
             </div>
           </button>
@@ -363,18 +426,14 @@ function Step3Date({ onSelect, onBack }: {
   onSelect: (date: string) => void
   onBack: () => void
 }) {
-  const today    = new Date()
-  const minDate  = addHours(today, 2)
-  const maxDate  = addMonths(today, 2)
+  const today   = new Date()
+  const minDate = addHours(today, 2)
+  const maxDate = addMonths(today, 2)
   const [view, setView] = useState({ y: today.getFullYear(), m: today.getMonth() })
 
-  const firstDay  = new Date(view.y, view.m, 1)
-  const lastDay   = new Date(view.y, view.m + 1, 0)
-  const startDow  = (firstDay.getDay() + 6) % 7  // Mon=0
-  const totalDays = lastDay.getDate()
-
-  const prevMonth = () => setView(v => v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 })
-  const nextMonth = () => setView(v => v.m === 11 ? { y: v.y + 1, m: 0 } : { y: v.y, m: v.m + 1 })
+  const firstDay = new Date(view.y, view.m, 1)
+  const startDow = (firstDay.getDay() + 6) % 7
+  const totalDays = new Date(view.y, view.m + 1, 0).getDate()
 
   const canPrev = !(view.y === today.getFullYear() && view.m === today.getMonth())
   const canNext = new Date(view.y, view.m + 1, 1) <= addMonths(today, 2)
@@ -386,53 +445,43 @@ function Step3Date({ onSelect, onBack }: {
       <p className="text-sm text-slate-400 mb-5">可預約範圍：2 小時後 ～ 2 個月內</p>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-        {/* Month nav */}
         <div className="flex items-center justify-between mb-4">
-          <button onClick={prevMonth} disabled={!canPrev}
+          <button onClick={() => setView(v => v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 })}
+            disabled={!canPrev}
             className="p-2 rounded-xl hover:bg-slate-100 transition disabled:opacity-30">
             <ChevronLeft size={18} strokeWidth={2} className="text-slate-600" />
           </button>
-          <span className="font-semibold text-slate-900">
-            {view.y} 年 {view.m + 1} 月
-          </span>
-          <button onClick={nextMonth} disabled={!canNext}
+          <span className="font-semibold text-slate-900">{view.y} 年 {view.m + 1} 月</span>
+          <button onClick={() => setView(v => v.m === 11 ? { y: v.y + 1, m: 0 } : { y: v.y, m: v.m + 1 })}
+            disabled={!canNext}
             className="p-2 rounded-xl hover:bg-slate-100 transition disabled:opacity-30">
             <ChevronRight size={18} strokeWidth={2} className="text-slate-600" />
           </button>
         </div>
 
-        {/* Weekday headers */}
         <div className="grid grid-cols-7 mb-2">
           {['一','二','三','四','五','六','日'].map(d => (
             <div key={d} className="text-center text-xs font-medium text-slate-400 py-1">{d}</div>
           ))}
         </div>
 
-        {/* Days */}
         <div className="grid grid-cols-7 gap-y-1">
-          {/* Leading empty cells */}
           {Array.from({ length: startDow }, (_, i) => <div key={`e${i}`} />)}
-          {/* Day cells */}
           {Array.from({ length: totalDays }, (_, i) => {
-            const d    = new Date(view.y, view.m, i + 1)
-            const dStr = format(d, 'yyyy-MM-dd')
-            const isToday    = isSameDay(d, today)
-            const isPast     = d < minDate && !isSameDay(d, today)
-            const isTooFar   = d > maxDate
-            const disabled   = isPast || isTooFar
-
+            const d      = new Date(view.y, view.m, i + 1)
+            const dStr   = format(d, 'yyyy-MM-dd')
+            const isToday = isSameDay(d, today)
+            const disabled = (d < minDate && !isToday) || d > maxDate
             return (
               <button
                 key={i}
                 disabled={disabled}
-                onClick={() => !disabled && onSelect(dStr)}
+                onClick={() => onSelect(dStr)}
                 className={cn(
                   'aspect-square flex items-center justify-center rounded-xl text-sm font-medium transition-all',
-                  disabled
-                    ? 'text-slate-200 cursor-not-allowed'
-                    : isToday
-                    ? 'bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100'
-                    : 'text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 active:scale-95',
+                  disabled  ? 'text-slate-200 cursor-not-allowed' :
+                  isToday   ? 'bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100' :
+                              'text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 active:scale-95',
                 )}
               >
                 {i + 1}
@@ -447,7 +496,8 @@ function Step3Date({ onSelect, onBack }: {
 
 // ── Step 4: 選擇時段 ───────────────────────────────────────────────────
 
-function Step4Time({ date, serviceId, practitionerId, selected, onSelect, onBack }: {
+function Step4Time({ storeId, date, serviceId, practitionerId, selected, onSelect, onBack }: {
+  storeId:          string
   date:             string
   serviceId:        string
   practitionerId:   string | null
@@ -455,31 +505,30 @@ function Step4Time({ date, serviceId, practitionerId, selected, onSelect, onBack
   onSelect:         (slot: SlotItem) => void
   onBack:           () => void
 }) {
-  const [slots, setSlots]   = useState<SlotItem[]>([])
+  const [slots, setSlots]     = useState<SlotItem[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchSlots = useCallback(async () => {
     setLoading(true)
     const { data } = await supabase.rpc('get_available_slots', {
-      p_date:             date,
-      p_service_id:       serviceId,
-      p_practitioner_id:  practitionerId ?? null,
-      p_store_id:         STORE_ID,
+      p_date:            date,
+      p_service_id:      serviceId,
+      p_practitioner_id: practitionerId,
+      p_store_id:        storeId,
     })
     setSlots((data ?? []) as SlotItem[])
     setLoading(false)
-  }, [date, serviceId, practitionerId])
+  }, [storeId, date, serviceId, practitionerId])
 
   useEffect(() => { fetchSlots() }, [fetchSlots])
 
   const dateLabel = format(parseISO(date), 'M月d日（EEE）', { locale: zhTW })
 
-  // Group slots into time periods
   const morning   = slots.filter(s => parseInt(s.slot_time) < 12)
   const afternoon = slots.filter(s => parseInt(s.slot_time) >= 12 && parseInt(s.slot_time) < 17)
   const evening   = slots.filter(s => parseInt(s.slot_time) >= 17)
 
-  const SlotGroup = ({ label, items }: { label: string; items: SlotItem[] }) => {
+  function SlotGroup({ label, items }: { label: string; items: SlotItem[] }) {
     if (items.length === 0) return null
     return (
       <div className="mb-5">
@@ -490,7 +539,7 @@ function Step4Time({ date, serviceId, practitionerId, selected, onSelect, onBack
               key={`${slot.slot_time}-${slot.practitioner_id}`}
               onClick={() => onSelect(slot)}
               className={cn(
-                'py-3 rounded-2xl border text-sm font-semibold transition-all active:scale-95',
+                'py-3.5 rounded-2xl border text-sm font-semibold transition-all active:scale-95',
                 selected?.slot_time === slot.slot_time && selected?.practitioner_id === slot.practitioner_id
                   ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200'
                   : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300 hover:text-indigo-600',
@@ -535,24 +584,32 @@ function Step4Time({ date, serviceId, practitionerId, selected, onSelect, onBack
   )
 }
 
-// ── Step 5: 填寫資料 ───────────────────────────────────────────────────
+// ── Step 5: 填寫資料 + 確認送出 ───────────────────────────────────────
 
-function Step5Info({ draft, onChange, onSubmit, onBack, submitting, error }: {
-  draft:      BookingDraft
-  onChange:   (k: string, v: string) => void
-  onSubmit:   () => void
-  onBack:     () => void
-  submitting: boolean
-  error:      string
+function Step5Info({ draft, lineAvatar, onChange, onSubmit, onBack, submitting, error }: {
+  draft:       BookingDraft
+  lineAvatar:  string | null
+  onChange:    (k: string, v: string) => void
+  onSubmit:    () => void
+  onBack:      () => void
+  submitting:  boolean
+  error:       string
 }) {
+  const [nameErr, setNameErr]   = useState('')
+  const [phoneErr, setPhoneErr] = useState('')
+
   const canSubmit = draft.name.trim().length > 0 && draft.phone.trim().length >= 8
 
-  const inputCls = 'w-full px-4 py-3.5 rounded-2xl border border-slate-200 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition bg-white'
-
-  // Booking summary
   const dateLabel = draft.date
     ? format(parseISO(draft.date), 'M月d日（EEE）', { locale: zhTW })
     : ''
+
+  function validate() {
+    let ok = true
+    if (!draft.name.trim()) { setNameErr('請輸入姓名'); ok = false }
+    if (draft.phone.trim().length < 8) { setPhoneErr('請輸入有效的電話號碼'); ok = false }
+    if (ok) onSubmit()
+  }
 
   return (
     <div>
@@ -563,7 +620,7 @@ function Step5Info({ draft, onChange, onSubmit, onBack, submitting, error }: {
       {/* Summary card */}
       <div className="bg-indigo-50 rounded-2xl p-4 mb-5 space-y-2">
         <div className="flex items-center gap-2 text-sm">
-          <div className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+          <div className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold"
             style={{ backgroundColor: draft.slot?.practitioner_color ?? '#6366f1' }}>
             {draft.slot?.practitioner_name?.[0] ?? '?'}
           </div>
@@ -577,78 +634,75 @@ function Step5Info({ draft, onChange, onSubmit, onBack, submitting, error }: {
         </p>
       </div>
 
+      {/* LINE 大頭照 */}
+      {lineAvatar && (
+        <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-2xl px-4 py-3 mb-4">
+          <img src={lineAvatar} alt="LINE 頭像" className="w-10 h-10 rounded-full object-cover" />
+          <div>
+            <p className="text-xs text-green-700 font-medium">已連結 LINE 帳號</p>
+            <p className="text-xs text-green-600">姓名已自動帶入，可視需要修改</p>
+          </div>
+        </div>
+      )}
+
       {/* Form */}
-      <div className="space-y-3">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            姓名 <span className="text-red-400">*</span>
-          </label>
-          <div className="relative">
-            <User size={16} strokeWidth={1.5} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              value={draft.name}
-              onChange={e => onChange('name', e.target.value)}
-              placeholder="請輸入您的姓名"
-              className={cn(inputCls, 'pl-10')}
-            />
-          </div>
-        </div>
+      <div className="space-y-4">
+        <FormField label="姓名" required error={nameErr}>
+          <Input
+            type="text"
+            placeholder="請輸入您的姓名"
+            value={draft.name}
+            error={!!nameErr}
+            onChange={e => { onChange('name', e.target.value); setNameErr('') }}
+            disabled={submitting}
+            prefix={<User size={15} strokeWidth={1.5} />}
+            className="h-12 text-base"
+          />
+        </FormField>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            電話 <span className="text-red-400">*</span>
-          </label>
-          <div className="relative">
-            <Phone size={16} strokeWidth={1.5} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="tel"
-              value={draft.phone}
-              onChange={e => onChange('phone', e.target.value)}
-              placeholder="09xx-xxx-xxx"
-              className={cn(inputCls, 'pl-10')}
-            />
-          </div>
-        </div>
+        <FormField label="電話" required error={phoneErr}>
+          <Input
+            type="tel"
+            placeholder="09xx-xxx-xxx"
+            value={draft.phone}
+            error={!!phoneErr}
+            onChange={e => { onChange('phone', e.target.value); setPhoneErr('') }}
+            disabled={submitting}
+            prefix={<Phone size={15} strokeWidth={1.5} />}
+            className="h-12 text-base"
+          />
+        </FormField>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            備注 <span className="text-slate-400 font-normal text-xs">（選填）</span>
-          </label>
+        <FormField label="備註" hint="（選填）">
           <div className="relative">
-            <MessageSquare size={16} strokeWidth={1.5} className="absolute left-3.5 top-3.5 text-slate-400" />
+            <MessageSquare size={15} strokeWidth={1.5} className="absolute left-3 top-3.5 text-slate-400 pointer-events-none" />
             <textarea
               value={draft.notes}
               onChange={e => onChange('notes', e.target.value)}
               rows={3}
               placeholder="如有特殊需求或想告知事項，請在此填寫"
-              className={cn(inputCls, 'pl-10 resize-none')}
+              disabled={submitting}
+              className="w-full pl-9 pr-3 py-3 rounded-2xl border border-slate-200 text-sm bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 focus:bg-white transition resize-none"
             />
           </div>
-        </div>
+        </FormField>
 
         {error && (
-          <div className="px-4 py-3 bg-red-50 rounded-2xl border border-red-200 text-sm text-red-600">
+          <div className="px-4 py-3 bg-red-50 rounded-2xl border border-red-200 text-sm text-red-600 flex items-center gap-2">
+            <AlertCircle size={15} strokeWidth={1.5} className="shrink-0" />
             {error}
           </div>
         )}
 
-        <button
-          onClick={onSubmit}
-          disabled={!canSubmit || submitting}
-          className={cn(
-            'w-full py-4 rounded-2xl font-semibold text-white text-sm transition-all',
-            canSubmit && !submitting
-              ? 'bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] shadow-lg shadow-indigo-200'
-              : 'bg-slate-300 cursor-not-allowed',
-          )}
+        <Button
+          variant="primary"
+          className="w-full h-12 text-base"
+          disabled={!canSubmit}
+          loading={submitting}
+          onClick={validate}
         >
-          {submitting ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              預約中…
-            </span>
-          ) : '確認預約'}
-        </button>
+          確認預約
+        </Button>
       </div>
     </div>
   )
@@ -656,68 +710,76 @@ function Step5Info({ draft, onChange, onSubmit, onBack, submitting, error }: {
 
 // ── Step 6: 預約成功 ───────────────────────────────────────────────────
 
-function Step6Success({ store, draft, confirmedId, onRebook }: {
-  store:       StoreInfo | null
-  draft:       BookingDraft
-  confirmedId: string
-  onRebook:    () => void
+function Step6Success({ store, draft, confirmedId, confirmedStatus, onRebook }: {
+  store:            StoreInfo | null
+  draft:            BookingDraft
+  confirmedId:      string
+  confirmedStatus:  'pending' | 'confirmed'
+  onRebook:         () => void
 }) {
   const dateLabel = draft.date
     ? format(parseISO(draft.date), 'yyyy 年 M 月 d 日（EEE）', { locale: zhTW })
     : ''
 
+  const isPending = confirmedStatus === 'pending'
+
   return (
     <div className="flex flex-col items-center">
-      {/* Success icon — CSS keyframe，只播一次 */}
       <style>{`
-        @keyframes sc-loop {
-          0%           { transform: scale(0);   opacity: 0; }
-          14%          { transform: scale(1.2); opacity: 1; }
-          22%          { transform: scale(1);   opacity: 1; }
-          68%          { transform: scale(1);   opacity: 1; }
-          82%          { transform: scale(0.7); opacity: 0; }
-          100%         { transform: scale(0);   opacity: 0; }
+        @keyframes pop-in {
+          0%   { transform: scale(0);   opacity: 0; }
+          70%  { transform: scale(1.15); opacity: 1; }
+          100% { transform: scale(1);   opacity: 1; }
         }
-        @keyframes sc-check-loop {
-          0%, 10%      { transform: scale(0.2); opacity: 0; }
-          26%          { transform: scale(1.1); opacity: 1; }
-          34%          { transform: scale(1);   opacity: 1; }
-          68%          { transform: scale(1);   opacity: 1; }
-          80%          { transform: scale(0.2); opacity: 0; }
-          100%         { transform: scale(0.2); opacity: 0; }
+        .pop-in { animation: pop-in 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+        @keyframes ripple-out {
+          0%   { transform: scale(1); opacity: 0.4; }
+          100% { transform: scale(2.5); opacity: 0; }
         }
-        @keyframes sc-ripple-loop {
-          0%           { transform: scale(1);   opacity: 0.45; }
-          45%          { transform: scale(2.8); opacity: 0;    }
-          100%         { transform: scale(1);   opacity: 0;    }
-        }
-        .sc-circle { animation: sc-loop        3s cubic-bezier(0.34,1.56,0.64,1) infinite; }
-        .sc-check  { animation: sc-check-loop  3s ease-out infinite; }
-        .sc-ripple { animation: sc-ripple-loop 3s ease-out infinite; }
+        .ripple { animation: ripple-out 1.2s ease-out forwards; }
       `}</style>
+
       <div className="mt-4 mb-6 relative flex items-center justify-center">
-        {/* Ripple — 同步擴散，跟著 loop */}
-        <div className="absolute w-20 h-20 rounded-full bg-green-200 sc-ripple" />
-        {/* Circle — spring 彈入 loop */}
-        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center sc-circle">
-          {/* Checkmark — 跟著 loop，略晚出現 */}
-          <CheckCircle size={44} strokeWidth={1.5} className="text-green-500 sc-check" />
+        <div className={cn(
+          'absolute w-20 h-20 rounded-full ripple',
+          isPending ? 'bg-amber-200' : 'bg-green-200',
+        )} />
+        <div className={cn(
+          'w-20 h-20 rounded-full flex items-center justify-center pop-in',
+          isPending ? 'bg-amber-100' : 'bg-green-100',
+        )}>
+          <CheckCircle size={44} strokeWidth={1.5}
+            className={isPending ? 'text-amber-500' : 'text-green-500'} />
         </div>
       </div>
 
       <h2 className="text-xl font-bold text-slate-900 mb-1">預約成功！</h2>
-      <p className="text-sm text-slate-400 mb-6">以下是您的預約資訊，建議截圖保存</p>
+
+      {/* 狀態說明 */}
+      <div className={cn(
+        'px-4 py-2 rounded-full text-sm font-medium mb-5',
+        isPending ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700',
+      )}>
+        {isPending ? '⏳ 待店家確認' : '✅ 已確認預約'}
+      </div>
+
+      {isPending && (
+        <p className="text-xs text-slate-400 text-center mb-4 -mt-2">
+          店家確認後您將收到通知，如急需確認請直接聯絡店家
+        </p>
+      )}
 
       {/* Confirmation card */}
       <div className="w-full bg-white rounded-3xl border border-slate-100 shadow-lg overflow-hidden">
-        {/* Card header */}
-        <div className="bg-indigo-600 px-5 py-4 text-white">
+        <div className={cn(
+          'px-5 py-4 text-white',
+          isPending ? 'bg-amber-500' : 'bg-indigo-600',
+        )}>
           <p className="text-xs opacity-70 mb-0.5">{store?.name}</p>
           <p className="font-bold text-lg">{draft.service?.name}</p>
           <p className="text-sm opacity-80 mt-0.5">{draft.service?.duration_minutes} 分鐘</p>
         </div>
 
-        {/* Card body */}
         <div className="px-5 py-4 space-y-3.5">
           <ConfirmRow label="日期時間">
             <p className="text-sm font-semibold text-slate-900">{dateLabel}</p>
@@ -737,13 +799,12 @@ function Step6Success({ store, draft, confirmedId, onRebook }: {
             <p className="text-sm text-slate-500">{draft.phone}</p>
           </ConfirmRow>
           {draft.notes && (
-            <ConfirmRow label="備注">
+            <ConfirmRow label="備註">
               <p className="text-sm text-slate-600">{draft.notes}</p>
             </ConfirmRow>
           )}
         </div>
 
-        {/* Booking ID */}
         <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
           <p className="text-xs text-slate-400 text-center">
             預約編號：<span className="font-mono text-slate-500">{confirmedId.slice(0, 8).toUpperCase()}</span>
@@ -754,13 +815,13 @@ function Step6Success({ store, draft, confirmedId, onRebook }: {
       <p className="text-xs text-slate-400 mt-4 text-center">
         如需更改或取消預約，請直接聯絡店家
         {store?.phone && (
-          <> <a href={`tel:${store.phone}`} className="text-indigo-500 font-medium">{store.phone}</a></>
+          <> <a href={`tel:${store.phone}`} className="text-indigo-500 font-medium ml-1">{store.phone}</a></>
         )}
       </p>
 
       <button
         onClick={onRebook}
-        className="mt-6 w-full py-3.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 active:scale-[0.98] transition-all"
+        className="mt-5 w-full py-3.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 active:scale-[0.98] transition-all"
       >
         再預約一次
       </button>
@@ -768,12 +829,12 @@ function Step6Success({ store, draft, confirmedId, onRebook }: {
   )
 }
 
-// ── Shared sub-components ──────────────────────────────────────────────
+// ── Shared ─────────────────────────────────────────────────────────────
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
     <button onClick={onClick}
-      className="flex items-center gap-1 text-sm text-slate-400 hover:text-indigo-600 transition-colors mb-5 -ml-1">
+      className="flex items-center gap-1 text-sm text-slate-400 hover:text-indigo-600 transition-colors mb-5 -ml-1 min-h-[44px]">
       <ChevronLeft size={18} strokeWidth={2} />
       返回
     </button>
@@ -783,7 +844,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
 function ConfirmRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-3">
-      <p className="text-xs text-slate-400 font-medium w-16 flex-shrink-0 pt-0.5">{label}</p>
+      <p className="text-xs text-slate-400 font-medium w-16 shrink-0 pt-0.5">{label}</p>
       <div className="flex-1">{children}</div>
     </div>
   )
