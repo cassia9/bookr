@@ -93,7 +93,7 @@ serve(async (req) => {
     // 驗證當前用戶是否為管理員
     const { data: currentUser, error: userError } = await supabase
       .from("users")
-      .select("id, store_id, role, name")
+      .select("id, store_id, role, full_name")
       .eq("id", authUser.user.id)
       .single()
 
@@ -170,7 +170,7 @@ serve(async (req) => {
         email: payload.email,
         storeName: payload.storeName,
         invitationLink: invitationLink,
-        invitedByName: currentUser.name || currentUser.id,
+        invitedByName: currentUser.full_name || currentUser.id,
       }),
     })
 
