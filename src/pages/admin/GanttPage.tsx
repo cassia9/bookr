@@ -63,7 +63,12 @@ function cardStyle(booking: Booking): React.CSSProperties {
   const color = booking.practitioner?.color ?? '#6366f1'
   if (booking.status === 'completed') return { backgroundColor: '#94a3b8' }
   if (booking.status === 'no_show')   return { backgroundColor: color, opacity: 0.4 }
+  if (booking.status === 'pending')   return { backgroundColor: color, opacity: 0.7 }
   return { backgroundColor: color }
+}
+
+function clientLabel(booking: Booking) {
+  return booking.status === 'pending' ? '待確認' : (booking.client?.full_name ?? '')
 }
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -418,7 +423,7 @@ export default function GanttPage({
                               onMouseLeave={() => { if (!dragState) setTooltip(null) }}
                             >
                               <div className="px-2 py-1 h-full flex flex-col justify-center leading-tight">
-                                <div className="font-semibold truncate text-[11px]">{b.client?.full_name}</div>
+                                <div className="font-semibold truncate text-[11px]">{clientLabel(b)}</div>
                                 {pos.width > 70 && (
                                   <div className="opacity-85 text-[10px] truncate">
                                     {formatTime(b.start_time)}·{durationMin}分
