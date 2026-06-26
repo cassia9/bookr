@@ -214,24 +214,28 @@ function BasicSettings() {
 const BOOKING_URL_BASE = 'https://bookr-5ph.pages.dev/book'
 
 function ChannelsSettings() {
-  const [loading, setLoading]       = useState(true)
-  const [saving, setSaving]         = useState(false)
-  const [liffId, setLiffId]         = useState('')
+  const [loading, setLoading]         = useState(true)
+  const [saving, setSaving]           = useState(false)
+  const [liffId, setLiffId]           = useState('')
+  const [storeCode, setStoreCode]     = useState('')
   const [confirmMode, setConfirmMode] = useState<'manual' | 'auto'>('manual')
   const [bookingEnabled, setBookingEnabled] = useState(true)
-  const [copied, setCopied]         = useState(false)
+  const [copied, setCopied]           = useState(false)
 
-  const bookingUrl = `${BOOKING_URL_BASE}/${STORE_ID}`
+  const bookingUrl = storeCode
+    ? `${BOOKING_URL_BASE}/${storeCode}`
+    : `${BOOKING_URL_BASE}/${STORE_ID}`
 
   useEffect(() => {
     supabase
       .from('stores')
-      .select('liff_id, booking_confirmation_mode, booking_enabled')
+      .select('liff_id, booking_confirmation_mode, booking_enabled, store_code')
       .eq('id', STORE_ID)
       .single()
       .then(({ data }) => {
         if (data) {
           setLiffId(data.liff_id ?? '')
+          setStoreCode(data.store_code ?? '')
           setConfirmMode((data.booking_confirmation_mode ?? 'manual') as 'manual' | 'auto')
           setBookingEnabled(data.booking_enabled ?? true)
         }

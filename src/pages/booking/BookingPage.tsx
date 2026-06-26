@@ -49,8 +49,11 @@ type BookingSource = 'line' | 'messenger' | 'web'
 
 // ── Main Page ──────────────────────────────────────────────────────────
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default function BookingPage() {
-  const { storeId } = useParams<{ storeId: string }>()
+  const { storeId: storeParam } = useParams<{ storeId: string }>()
+  const [resolvedStoreId, setResolvedStoreId] = useState<string | null>(null)
 
   const [step, setStep] = useState(1)
   const [store, setStore] = useState<StoreInfo | null>(null)
@@ -73,18 +76,31 @@ export default function BookingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
+  // ── 解析 storeParam（UUID 或 slug）──────────────────────────────────
+  useEffect(() => {
+    if (!storeParam) { setStoreError('無效的預約連結'); return }
+    if (UUID_RE.test(storeParam)) {
+      setResolvedStoreId(storeParam)
+    } else {
+      supabase.rpc('get_store_by_code', { p_code: storeParam }).then(({ data }) => {
+        if (!data) { setStoreError('找不到此預約頁面'); return }
+        setResolvedStoreId(data as string)
+      })
+    }
+  }, [storeParam])
+
   // ── Load store + services + practitioners ──────────────────────────
   useEffect(() => {
-    if (!storeId) { setStoreError('無效的預約連結'); return }
+    if (!resolvedStoreId) return
 
     Promise.all([
       supabase.from('stores')
         .select('name,phone,address,open_time,close_time,logo_url,liff_id,booking_enabled,booking_confirmation_mode')
-        .eq('id', storeId).single(),
+        .eq('id', resolvedStoreId).single(),
       supabase.from('services')
-        .select('*').eq('store_id', storeId).eq('active', true).order('name'),
+        .select('*').eq('store_id', resolvedStoreId).eq('active', true).order('name'),
       supabase.from('practitioners')
-        .select('*').eq('store_id', storeId).eq('active', true).order('created_at'),
+        .select('*').eq('store_id', resolvedStoreId).eq('active', true).order('created_at'),
     ]).then(([{ data: s, error: sErr }, { data: sv }, { data: p }]) => {
       if (sErr || !s) { setStoreError('找不到此預約頁面'); return }
       if (!s.booking_enabled) { setStoreError('此店家目前暫停線上預約'); return }
@@ -105,7 +121,7 @@ export default function BookingPage() {
       // 嘗試初始化 LINE LIFF
       initLiff(s.liff_id)
     })
-  }, [storeId])
+  }, [resolvedStoreId])
 
   // ── LINE LIFF 初始化 ────────────────────────────────────────────────
   async function initLiff(liffId: string | null) {
@@ -129,7 +145,7 @@ export default function BookingPage() {
 
   // ── Submit ─────────────────────────────────────────────────────────
   async function handleSubmit() {
-    if (!draft.service || !draft.slot || !draft.name.trim() || !draft.phone.trim() || !storeId) return
+    if (!draft.service || !draft.slot || !draft.name.trim() || !draft.phone.trim() || !resolvedStoreId) return
     setSubmitting(true)
     setSubmitError('')
 
@@ -142,7 +158,7 @@ export default function BookingPage() {
       p_practitioner_id:    draft.slot.practitioner_id,
       p_start_time:         startTs.toISOString(),
       p_notes:              draft.notes.trim() || null,
-      p_store_id:           storeId,
+      p_store_id:           resolvedStoreId,
       p_source:             source,
       p_client_line_id:     lineUserId,
       p_client_picture_url: lineAvatar,
