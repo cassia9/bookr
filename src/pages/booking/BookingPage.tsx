@@ -288,9 +288,9 @@ export default function BookingPage() {
             onBack={() => setStep(2)}
           />
         )}
-        {step === 4 && draft.service && draft.date && storeId && (
+        {step === 4 && draft.service && draft.date && resolvedStoreId && (
           <Step4Time
-            storeId={storeId}
+            storeId={resolvedStoreId}
             date={draft.date}
             serviceId={draft.service.id}
             practitionerId={draft.practitionerChoice?.id ?? null}
