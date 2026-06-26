@@ -397,7 +397,12 @@ export default function CalendarPage({
     const color = booking.practitioner?.color ?? '#6366f1'
     if (booking.status === 'completed') return { backgroundColor: '#94a3b8', opacity: 0.6 }
     if (booking.status === 'no_show')   return { backgroundColor: color, opacity: 0.35 }
+    if (booking.status === 'pending')   return { backgroundColor: color, opacity: 0.7 }
     return { backgroundColor: color }
+  }
+
+  function clientLabel(booking: Booking) {
+    return booking.status === 'pending' ? '待確認' : (booking.client?.full_name ?? '')
   }
 
   // ── 標題顯示 ────────────────────────────────────────────────────────────────
@@ -580,7 +585,7 @@ export default function CalendarPage({
                               className="w-full text-left text-xs px-1.5 py-0.5 rounded-md text-white font-medium truncate hover:brightness-110 transition-all"
                               style={cardStyle(b)}
                             >
-                              {b.client?.full_name}
+                              {clientLabel(b)}
                             </button>
                           ))}
                           {/* 溢出徽章 */}
@@ -670,7 +675,7 @@ export default function CalendarPage({
                               )}
                               style={cardStyle(b)}
                             >
-                              <div className="truncate">{b.client?.full_name}</div>
+                              <div className="truncate">{clientLabel(b)}</div>
                               <div className="opacity-75 text-[10px]">{b.service?.name}</div>
                             </button>
                           ))}
@@ -732,7 +737,7 @@ export default function CalendarPage({
                             )}
                             style={cardStyle(b)}
                           >
-                            <div className="font-semibold">{b.client?.full_name}</div>
+                            <div className="font-semibold">{clientLabel(b)}</div>
                             <div className="text-xs opacity-80">
                               {format(parseISO(b.start_time), 'HH:mm')}–{format(parseISO(b.end_time), 'HH:mm')} · {b.service?.name}
                             </div>
@@ -1006,7 +1011,7 @@ export default function CalendarPage({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-slate-800 truncate">
-                          {b.client?.full_name}
+                          {clientLabel(b)}
                         </span>
                         <span className={cn(
                           'text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0',
