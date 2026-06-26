@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2 } from 'lucide-react'
+import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2, Share2, Copy, Check, ToggleLeft, ToggleRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 import { useAuth } from '@/lib/auth'
@@ -17,7 +17,7 @@ const STORE_ID = '00000000-0000-0000-0000-000000000001'
 
 // ── 型別 ────────────────────────────────────────────────────────────────────
 
-type Tab = 'basic' | 'members'
+type Tab = 'basic' | 'members' | 'channels'
 
 interface Member {
   id: string
@@ -60,8 +60,9 @@ function timeAgo(dateString: string) {
 // ── 側欄標籤 ─────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: 'basic',   label: '基本設定', icon: Settings },
-  { id: 'members', label: '成員管理', icon: Users },
+  { id: 'basic',    label: '基本設定', icon: Settings },
+  { id: 'members',  label: '成員管理', icon: Users },
+  { id: 'channels', label: '渠道設定', icon: Share2 },
 ]
 
 // ── 基本設定 Tab ─────────────────────────────────────────────────────────────
@@ -195,6 +196,154 @@ function BasicSettings() {
               {min === 0 ? '無' : `${min}分`}
             </button>
           ))}
+        </div>
+      </section>
+
+      <div className="flex justify-end">
+        <Button variant="primary" loading={saving} onClick={handleSave}>
+          <Save size={15} />
+          儲存設定
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ── 渠道設定 Tab ─────────────────────────────────────────────────────────────
+
+const BOOKING_URL_BASE = 'https://bookr-5ph.pages.dev/book'
+
+function ChannelsSettings() {
+  const [loading, setLoading]       = useState(true)
+  const [saving, setSaving]         = useState(false)
+  const [liffId, setLiffId]         = useState('')
+  const [confirmMode, setConfirmMode] = useState<'manual' | 'auto'>('manual')
+  const [bookingEnabled, setBookingEnabled] = useState(true)
+  const [copied, setCopied]         = useState(false)
+
+  const bookingUrl = `${BOOKING_URL_BASE}/${STORE_ID}`
+
+  useEffect(() => {
+    supabase
+      .from('stores')
+      .select('liff_id, booking_confirmation_mode, booking_enabled')
+      .eq('id', STORE_ID)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setLiffId(data.liff_id ?? '')
+          setConfirmMode((data.booking_confirmation_mode ?? 'manual') as 'manual' | 'auto')
+          setBookingEnabled(data.booking_enabled ?? true)
+        }
+        setLoading(false)
+      })
+  }, [])
+
+  async function handleSave() {
+    setSaving(true)
+    const { error } = await supabase
+      .from('stores')
+      .update({
+        liff_id: liffId.trim() || null,
+        booking_confirmation_mode: confirmMode,
+        booking_enabled: bookingEnabled,
+      })
+      .eq('id', STORE_ID)
+    setSaving(false)
+    if (error) toast.error('儲存失敗', error.message)
+    else toast.success('渠道設定已儲存')
+  }
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(bookingUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  if (loading) return (
+    <div className="flex justify-center items-center h-40">
+      <Spinner size="md" />
+    </div>
+  )
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-base font-semibold text-slate-900">渠道設定</h2>
+        <p className="text-sm text-slate-500 mt-0.5">設定客戶端預約頁面的整合選項與行為</p>
+      </div>
+
+      {/* LINE 渠道 */}
+      <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#06C755] flex items-center justify-center shrink-0">
+            <span className="text-white text-xs font-bold leading-none">L</span>
+          </div>
+          <h3 className="text-sm font-semibold text-slate-700">LINE 渠道</h3>
+        </div>
+
+        <FormField
+          label="LIFF ID"
+          hint="在 LINE Developers Console 建立 LIFF App 後取得"
+        >
+          <Input
+            type="text"
+            value={liffId}
+            onChange={e => setLiffId(e.target.value)}
+            placeholder="1234567890-xxxxxxxx"
+          />
+        </FormField>
+
+        <div>
+          <p className="text-xs font-medium text-slate-500 mb-1.5">客戶預約連結</p>
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <span className="text-sm text-slate-600 flex-1 truncate font-mono text-xs">{bookingUrl}</span>
+            <button
+              onClick={handleCopy}
+              className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 transition-all"
+            >
+              {copied
+                ? <><Check size={12} className="text-green-500" /><span className="text-green-600">已複製！</span></>
+                : <><Copy size={12} /><span>複製</span></>
+              }
+            </button>
+          </div>
+          <p className="text-xs text-slate-400 mt-1.5">將此連結貼到 LINE 官方帳號的選單或訊息中</p>
+        </div>
+      </section>
+
+      {/* 預約設定 */}
+      <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
+        <h3 className="text-sm font-semibold text-slate-700">預約設定</h3>
+
+        <FormField label="確認模式">
+          <Select
+            value={confirmMode}
+            onChange={v => setConfirmMode(v as 'manual' | 'auto')}
+            options={[
+              { value: 'manual', label: '待確認 — 店家手動確認每筆預約' },
+              { value: 'auto',   label: '自動確認 — 客戶預約後立即確認' },
+            ]}
+          />
+        </FormField>
+
+        <div className="flex items-center justify-between py-1">
+          <div>
+            <p className="text-sm font-medium text-slate-700">開放線上預約</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {bookingEnabled ? '客戶可透過預約連結進行預約' : '預約頁將顯示「暫停接受預約」'}
+            </p>
+          </div>
+          <button
+            onClick={() => setBookingEnabled(v => !v)}
+            className="shrink-0 transition-transform active:scale-95"
+            aria-label="切換線上預約"
+          >
+            {bookingEnabled
+              ? <ToggleRight size={36} strokeWidth={1.5} className="text-indigo-600" />
+              : <ToggleLeft  size={36} strokeWidth={1.5} className="text-slate-300" />
+            }
+          </button>
         </div>
       </section>
 
@@ -676,8 +825,9 @@ export default function SettingsPage() {
 
         {/* 右側內容 */}
         <div className="flex-1 min-w-0">
-          {activeTab === 'basic'   && <BasicSettings />}
-          {activeTab === 'members' && <MembersSettings />}
+          {activeTab === 'basic'    && <BasicSettings />}
+          {activeTab === 'members'  && <MembersSettings />}
+          {activeTab === 'channels' && <ChannelsSettings />}
         </div>
       </div>
     </div>
