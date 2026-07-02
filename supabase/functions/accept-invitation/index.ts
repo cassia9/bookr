@@ -117,27 +117,25 @@ serve(async (req) => {
       )
     }
 
-    // 在 users 表中建立用戶記錄
-    const { data: userData, error: userInsertError } = await supabase
+    // 觸發器已建立基本記錄（id + email），補上邀請所需欄位
+    const { data: userData, error: userUpdateError } = await supabase
       .from("users")
-      .insert({
-        id: authData.user.id,
-        email: payload.email,
-        name: payload.name,
+      .update({
+        full_name: payload.name,
         store_id: tokenData.store_id,
         role: tokenData.role,
-        invited_by: null, // 將在下一步設定
         invited_at: new Date().toISOString(),
       })
+      .eq("id", authData.user.id)
       .select()
       .single()
 
-    if (userInsertError) {
-      console.error("User insert error:", userInsertError)
+    if (userUpdateError) {
+      console.error("User update error:", userUpdateError)
       // 清除已建立的 Auth 用戶
       await supabase.auth.admin.deleteUser(authData.user.id)
       return new Response(
-        JSON.stringify({ error: "Failed to create user profile", details: userInsertError.message }),
+        JSON.stringify({ error: "Failed to create user profile", details: userUpdateError.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }

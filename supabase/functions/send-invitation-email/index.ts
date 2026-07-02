@@ -41,7 +41,7 @@ async function sendEmailViaSendGrid(
         ],
         from: {
           email: Deno.env.get("SENDGRID_FROM_EMAIL") || "noreply@booking-system.com",
-          name: `${storeName} 預約系統`,
+          name: Deno.env.get("SENDGRID_FROM_NAME") || "預約管理系統",
         },
         content: [
           {
@@ -78,124 +78,121 @@ function generateInvitationEmailHtml(
 
   return `
     <!DOCTYPE html>
-    <html>
+    <html lang="zh-TW">
       <head>
         <meta charset="UTF-8">
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-          }
-          .container {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f9f9f9;
-          }
-          .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px 20px;
-            text-align: center;
-            border-radius: 8px 8px 0 0;
-          }
-          .header h1 {
-            margin: 0;
-            font-size: 28px;
-          }
-          .content {
-            background: white;
-            padding: 30px 20px;
-            border-radius: 0 0 8px 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          }
-          .greeting {
-            font-size: 16px;
-            margin-bottom: 20px;
-          }
-          .button {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 12px 30px;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: 600;
-            margin: 20px 0;
-            text-align: center;
-          }
-          .button:hover {
-            opacity: 0.9;
-          }
-          .footer {
-            color: #666;
-            font-size: 12px;
-            text-align: center;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-          }
-          .info-box {
-            background-color: #f0f7ff;
-            border-left: 4px solid #667eea;
-            padding: 15px;
-            margin: 15px 0;
-            border-radius: 4px;
-          }
-        </style>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>你受到邀請加入 ${storeName}</title>
       </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>✨ 歡迎加入</h1>
-            <p>${storeName}</p>
-          </div>
+      <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 16px;">
+          <tr>
+            <td align="center">
+              <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
 
-          <div class="content">
-            <div class="greeting">
-              <p>親愛的團隊成員，</p>
-            </div>
+                <!-- Wordmark -->
+                <tr>
+                  <td style="padding-bottom:28px;text-align:center;">
+                    <span style="font-size:13px;font-weight:600;letter-spacing:0.08em;color:#6366f1;text-transform:uppercase;">預約管理系統</span>
+                  </td>
+                </tr>
 
-            <p><strong>${storeName}</strong> 的管理員 ${invitedByName} 邀請你加入預約管理系統。</p>
+                <!-- Card -->
+                <tr>
+                  <td style="background:#ffffff;border-radius:12px;border:1px solid #e4e4e7;overflow:hidden;">
 
-            <p>通過這個平台，你可以：</p>
-            <ul>
-              <li>✅ 管理客戶預約</li>
-              <li>✅ 查看個人工作行程</li>
-              <li>✅ 標記課程完成</li>
-              <li>✅ 協作管理客戶資訊</li>
-            </ul>
+                    <!-- Accent bar -->
+                    <div style="height:4px;background:linear-gradient(90deg,#6366f1,#8b5cf6);"></div>
 
-            <p style="text-align: center;">
-              <a href="${invitationLink}" class="button">完成註冊</a>
-            </p>
+                    <!-- Body -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding:40px 40px 32px;">
 
-            <div class="info-box">
-              <strong>⏰ 重要提醒：</strong><br>
-              此邀請連結將在 <strong>${expirationDate}</strong> 過期。<br>
-              請在此日期前完成註冊。
-            </div>
+                          <p style="margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#a1a1aa;">邀請</p>
+                          <h1 style="margin:0 0 24px;font-size:22px;font-weight:700;color:#09090b;letter-spacing:-0.02em;line-height:1.3;">
+                            加入 ${storeName}
+                          </h1>
 
-            <p>
-              <strong>連結無效或過期？</strong><br>
-              請聯絡你的店家管理員 ${invitedByName} 重新發送邀請。
-            </p>
+                          <p style="margin:0 0 20px;font-size:15px;color:#52525b;line-height:1.7;">
+                            管理員 <strong style="color:#18181b;">${invitedByName}</strong> 邀請你加入預約管理系統，開始協作管理客戶預約與工作行程。
+                          </p>
 
-            <p>
-              有任何問題，歡迎回覆此郵件或聯絡支援團隊。
-            </p>
+                          <!-- CTA Button -->
+                          <table cellpadding="0" cellspacing="0" style="margin:28px 0;">
+                            <tr>
+                              <td>
+                                <a href="${invitationLink}"
+                                   style="display:inline-block;background-color:#18181b;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 32px;border-radius:8px;letter-spacing:-0.01em;">
+                                  完成註冊 →
+                                </a>
+                              </td>
+                            </tr>
+                          </table>
 
-            <p>祝營運順利！</p>
-            <p><strong>預約系統團隊</strong></p>
+                          <!-- Divider -->
+                          <hr style="border:none;border-top:1px solid #f0f0f0;margin:28px 0;">
 
-            <div class="footer">
-              <p>此邀請由 <strong>${storeName}</strong> 透過預約管理系統發送。</p>
-              <p>這是一封自動郵件，請勿直接回覆。</p>
-              <p>&copy; 2026 預約管理系統。保留所有權利。</p>
-            </div>
-          </div>
-        </div>
+                          <!-- Features -->
+                          <p style="margin:0 0 14px;font-size:13px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:0.05em;">加入後你可以</p>
+                          <table cellpadding="0" cellspacing="0" width="100%">
+                            <tr>
+                              <td style="padding:6px 0;font-size:14px;color:#52525b;">
+                                <span style="color:#6366f1;font-weight:700;margin-right:10px;">—</span>管理客戶預約與行程
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding:6px 0;font-size:14px;color:#52525b;">
+                                <span style="color:#6366f1;font-weight:700;margin-right:10px;">—</span>查看個人工作時程表
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding:6px 0;font-size:14px;color:#52525b;">
+                                <span style="color:#6366f1;font-weight:700;margin-right:10px;">—</span>標記課程完成狀態
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding:6px 0;font-size:14px;color:#52525b;">
+                                <span style="color:#6366f1;font-weight:700;margin-right:10px;">—</span>協作管理客戶資訊
+                              </td>
+                            </tr>
+                          </table>
+
+                          <!-- Expiry notice -->
+                          <div style="margin-top:28px;padding:14px 16px;background:#fafafa;border:1px solid #e4e4e7;border-radius:8px;">
+                            <p style="margin:0;font-size:13px;color:#71717a;line-height:1.6;">
+                              此邀請連結將於 <strong style="color:#18181b;">${expirationDate}</strong> 到期。
+                              若連結失效，請聯絡管理員 ${invitedByName} 重新發送。
+                            </p>
+                          </div>
+
+                          <!-- Link fallback -->
+                          <p style="margin:24px 0 0;font-size:12px;color:#a1a1aa;word-break:break-all;">
+                            無法點擊按鈕？複製以下連結到瀏覽器：<br>
+                            <a href="${invitationLink}" style="color:#6366f1;text-decoration:none;">${invitationLink}</a>
+                          </p>
+
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="padding:24px 0;text-align:center;">
+                    <p style="margin:0;font-size:12px;color:#a1a1aa;line-height:1.8;">
+                      由 <strong style="color:#71717a;">${storeName}</strong> 透過預約管理系統發送<br>
+                      這是一封自動郵件，請勿直接回覆<br>
+                      &copy; 2026 預約管理系統
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
       </body>
     </html>
   `

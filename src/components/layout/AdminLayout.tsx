@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useAuth } from '../../lib/auth'
 import { cn } from '../../lib/cn'
 import SidebarNavItem from '../ui/SidebarNavItem'
+import BookrLogo from '../ui/BookrLogo'
 
 const navItems = [
   { to: '/admin/bookings', icon: CalendarDays, label: '預約管理' },
@@ -49,10 +50,10 @@ export default function AdminLayout() {
         {/* Logo */}
         <div className="h-16 flex items-center px-5 border-b border-slate-200">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm">✦</span>
+            <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center shrink-0">
+              <BookrLogo size={22} />
             </div>
-            <span className="font-semibold text-text-primary text-sm">預約管理系統</span>
+            <span className="font-bold text-text-primary text-base tracking-tight">Bookr</span>
           </div>
           <button
             onClick={() => setSidebarOpen(false)}
@@ -108,7 +109,7 @@ export default function AdminLayout() {
           >
             <Menu size={20} />
           </button>
-          <span className="ml-3 font-semibold text-text-primary">預約管理系統</span>
+          <span className="ml-3 font-bold text-text-primary tracking-tight">Bookr</span>
         </header>
 
         <main className="flex-1 overflow-auto bg-slate-50">
