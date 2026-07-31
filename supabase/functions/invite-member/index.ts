@@ -10,7 +10,6 @@ const corsHeaders = {
 interface InvitePayload {
   email: string
   role: "member" | "admin"
-  storeName: string
 }
 
 serve(async (req) => {
@@ -40,9 +39,9 @@ serve(async (req) => {
     const payload: InvitePayload = await req.json()
 
     // 驗證必要字段
-    if (!payload.email || !payload.role || !payload.storeName) {
+    if (!payload.email || !payload.role) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: email, role, storeName" }),
+        JSON.stringify({ error: "Missing required fields: email, role" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }
@@ -95,6 +94,7 @@ serve(async (req) => {
       .from("users")
       .select("id, store_id, role, full_name")
       .eq("id", authUser.user.id)
+      .is("deleted_at", null)
       .single()
 
     if (userError || !currentUser) {
@@ -155,22 +155,16 @@ serve(async (req) => {
       )
     }
 
-    // 生成邀請鏈接
-    const appUrl = Deno.env.get("APP_URL") || req.headers.get("Origin") || "https://bookr-5ph.pages.dev"
-    const invitationLink = `${appUrl}/auth/accept-invitation?token=${invitation.token}`
-
-    // 呼叫郵件發送函數
+    // 由受保護的寄信函數依 invitation id 取得收件者與連結資料，
+    // 不接受瀏覽器傳入任意寄件內容或網址。
     const mailResponse = await fetch(`${supabaseUrl}/functions/v1/send-invitation-email`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${supabaseServiceKey}`,
+        "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        email: payload.email,
-        storeName: payload.storeName,
-        invitationLink: invitationLink,
-        invitedByName: currentUser.full_name || currentUser.id,
+        invitationId: invitation.id,
       }),
     })
 
@@ -184,7 +178,6 @@ serve(async (req) => {
           warning: "Invitation created but email delivery may have failed",
           invitation: {
             id: invitation.id,
-            token: invitation.token,
             email: invitation.email,
             expires_at: invitation.expires_at,
           },
@@ -204,7 +197,6 @@ serve(async (req) => {
         new_values: {
           email: invitation.email,
           role: invitation.role,
-          token: invitation.token,
         },
         store_id: currentUser.store_id,
       })
