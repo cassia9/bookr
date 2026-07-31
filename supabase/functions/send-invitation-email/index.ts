@@ -8,10 +8,16 @@ const corsHeaders = {
 }
 
 interface InvitationPayload {
-  email: string
-  storeName: string
-  invitationLink: string
-  invitedByName: string
+  invitationId: string
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;")
 }
 
 // SendGrid 郵件發送函數
@@ -213,7 +219,7 @@ serve(async (req) => {
       )
     }
 
-    // 驗證授權
+    // Edge Function Gateway 會先驗證 JWT；這裡再次驗證使用者與管理員權限。
     const authHeader = req.headers.get("Authorization")
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
@@ -222,43 +228,108 @@ serve(async (req) => {
       )
     }
 
+    const token = authHeader.slice(7)
     const payload: InvitationPayload = await req.json()
 
-    // 驗證必要字段
-    if (!payload.email || !payload.storeName || !payload.invitationLink || !payload.invitedByName) {
+    if (!payload.invitationId) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
+        JSON.stringify({ error: "Invitation ID is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }
 
-    // 驗證郵件格式
-    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
-    if (!emailRegex.test(payload.email)) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")
+    const appUrl = Deno.env.get("APP_URL")
+
+    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey || !appUrl) {
       return new Response(
-        JSON.stringify({ error: "Invalid email format" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Server configuration missing" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }
+
+    const anonSupabase = createClient(supabaseUrl, supabaseAnonKey)
+    const { data: authData, error: authError } = await anonSupabase.auth.getUser(token)
+
+    if (authError || !authData.user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const { data: currentUser, error: userError } = await supabase
+      .from("users")
+      .select("id, store_id, role, full_name")
+      .eq("id", authData.user.id)
+      .is("deleted_at", null)
+      .single()
+
+    if (userError || !currentUser || currentUser.role !== "admin") {
+      return new Response(
+        JSON.stringify({ error: "Admin access required" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    }
+
+    const { data: invitation, error: invitationError } = await supabase
+      .from("pending_invitations")
+      .select("id, email, token, store_id, expires_at")
+      .eq("id", payload.invitationId)
+      .eq("store_id", currentUser.store_id)
+      .is("accepted_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .single()
+
+    if (invitationError || !invitation) {
+      return new Response(
+        JSON.stringify({ error: "Invitation not found or expired" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    }
+
+    const { data: store, error: storeError } = await supabase
+      .from("stores")
+      .select("name")
+      .eq("id", currentUser.store_id)
+      .single()
+
+    if (storeError || !store) {
+      return new Response(
+        JSON.stringify({ error: "Store not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    }
+
+    const trustedBaseUrl = new URL(appUrl)
+    const invitationUrl = new URL("/auth/accept-invitation", trustedBaseUrl)
+    invitationUrl.searchParams.set("token", invitation.token)
+
+    const storeName = escapeHtml(store.name)
+    const invitedByName = escapeHtml(currentUser.full_name || "管理員")
+    const invitationLink = escapeHtml(invitationUrl.toString())
 
     // 生成 HTML 內容
     const htmlContent = generateInvitationEmailHtml(
-      payload.storeName,
-      payload.invitationLink,
-      payload.invitedByName
+      storeName,
+      invitationLink,
+      invitedByName
     )
 
     // 發送郵件
     const result = await sendEmailViaSendGrid(
-      payload.email,
-      `[${payload.storeName}] 邀請你加入預約管理系統`,
+      invitation.email,
+      `[${store.name.replaceAll(/[\r\n]/g, " ")}] 邀請你加入預約管理系統`,
       htmlContent
     )
 
     if (!result.success) {
       console.error("Email send failed:", result.error)
       return new Response(
-        JSON.stringify({ error: "Failed to send email", details: result.error }),
+        JSON.stringify({ error: "Failed to send email" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }
@@ -267,14 +338,14 @@ serve(async (req) => {
       JSON.stringify({
         ok: true,
         message: "Invitation email sent successfully",
-        email: payload.email,
+        invitationId: invitation.id,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     )
   } catch (error) {
     console.error("Unexpected error:", error)
     return new Response(
-      JSON.stringify({ error: "Internal server error", details: error.message }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     )
   }
