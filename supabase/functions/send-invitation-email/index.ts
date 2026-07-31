@@ -241,9 +241,9 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")
-    const appUrl = Deno.env.get("APP_URL")
+    const appUrl = Deno.env.get("APP_URL") || "https://bookr-5ph.pages.dev"
 
-    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey || !appUrl) {
+    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
       return new Response(
         JSON.stringify({ error: "Server configuration missing" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
