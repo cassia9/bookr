@@ -26,6 +26,9 @@ export interface Database {
           practitioner_id: string | null
           store_id: string
           created_at: string
+          invited_by: string | null
+          invited_at: string | null
+          deleted_at: string | null
         }
         Insert: Omit<Database['public']['Tables']['users']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['users']['Insert']>
@@ -116,6 +119,43 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['notification_templates']['Row'], 'id' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['notification_templates']['Insert']>
       }
+      pending_invitations: {
+        Row: {
+          id: string
+          store_id: string
+          email: string
+          role: UserRole
+          token: string
+          created_by: string
+          created_at: string
+          expires_at: string
+          accepted_at: string | null
+          accepted_user_id: string | null
+          processing_at: string | null
+          email_sending_at: string | null
+          email_sent_at: string | null
+          email_send_attempts: number
+          email_last_error: string | null
+        }
+        Insert: {
+          id?: string
+          store_id: string
+          email: string
+          role?: UserRole
+          token?: string
+          created_by: string
+          created_at?: string
+          expires_at?: string
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          processing_at?: string | null
+          email_sending_at?: string | null
+          email_sent_at?: string | null
+          email_send_attempts?: number
+          email_last_error?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['pending_invitations']['Insert']>
+      }
     }
     Views: {
       client_stats: {
@@ -140,6 +180,16 @@ export interface Database {
       }
     }
     Functions: {
+      validate_invitation_token: {
+        Args: { p_token: string }
+        Returns: Array<{
+          valid: boolean
+          store_id: string
+          email: string
+          role: UserRole
+          message: string
+        }>
+      }
       search_clients: {
         Args: { p_query: string; p_store_id?: string; p_limit?: number }
         Returns: Array<{ id: string; full_name: string; phone: string; email: string | null }>
