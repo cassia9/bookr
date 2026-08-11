@@ -13,6 +13,14 @@ interface InvitationInfo {
   role: string
 }
 
+interface InvitationTokenData {
+  valid: boolean
+  store_id: string
+  email: string
+  role: 'member' | 'admin'
+  message: string
+}
+
 interface PasswordReqs {
   minLength: boolean
   hasUppercase: boolean
@@ -22,13 +30,27 @@ interface PasswordReqs {
 
 type PageState = 'loading' | 'valid' | 'invalid' | 'success'
 
+async function functionErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'context' in error) {
+    const context = (error as { context?: unknown }).context
+    if (context instanceof Response) {
+      const body = await context.clone().json().catch(() => null) as { error?: string } | null
+      if (body?.error) return body.error
+    }
+  }
+
+  return error instanceof Error ? error.message : fallback
+}
+
 export default function AcceptInvitationPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const token = searchParams.get('token')
 
-  const [pageState, setPageState] = useState<PageState>('loading')
-  const [invalidMessage, setInvalidMessage] = useState('')
+  const [pageState, setPageState] = useState<PageState>(token ? 'loading' : 'invalid')
+  const [invalidMessage, setInvalidMessage] = useState(
+    token ? '' : '邀請連結無效，請確認連結是否完整。',
+  )
   const [info, setInfo] = useState<InvitationInfo | null>(null)
 
   const [name, setName] = useState('')
@@ -48,53 +70,58 @@ export default function AcceptInvitationPage() {
   const passwordValid = Object.values(passwordReqs).every(Boolean)
 
   useEffect(() => {
-    if (!token) {
-      setInvalidMessage('邀請連結無效，請確認連結是否完整。')
-      setPageState('invalid')
-      return
-    }
-    validateToken()
-  }, [token])
+    if (!token) return
 
-  async function validateToken() {
-    try {
-      const { data, error } = await supabase
-        .rpc('validate_invitation_token', { p_token: token })
-        .single()
+    let cancelled = false
 
-      if (error || !data || !(data as any).valid) {
-        const msg = (data as any)?.message
-        if (msg === 'Invitation already accepted') {
-          setInvalidMessage('此邀請連結已被使用，請直接登入。')
-        } else if (msg === 'Invitation expired') {
-          setInvalidMessage('邀請連結已過期，請聯絡管理員重新發送。')
-        } else {
-          setInvalidMessage('邀請連結無效，請確認連結是否完整。')
+    async function runValidation() {
+      try {
+        const { data, error } = await supabase
+          .rpc('validate_invitation_token', { p_token: token! })
+          .single()
+
+        if (cancelled) return
+
+        const tokenData = data as InvitationTokenData | null
+        if (error || !tokenData?.valid) {
+          const msg = tokenData?.message
+          if (msg === 'Invitation already accepted') {
+            setInvalidMessage('此邀請連結已被使用，請直接登入。')
+          } else if (msg === 'Invitation expired') {
+            setInvalidMessage('邀請連結已過期，請聯絡管理員重新發送。')
+          } else if (msg === 'Invitation is being processed') {
+            setInvalidMessage('此邀請正在處理中，請稍候片刻再試。')
+          } else {
+            setInvalidMessage('邀請連結無效，請確認連結是否完整。')
+          }
+          setPageState('invalid')
+          return
         }
+
+        const { data: storeData } = await supabase
+          .from('stores')
+          .select('name')
+          .eq('id', tokenData.store_id)
+          .single()
+
+        if (cancelled) return
+
+        setInfo({
+          email: tokenData.email,
+          storeName: storeData?.name || '預約管理系統',
+          role: tokenData.role === 'admin' ? '管理員' : '成員',
+        })
+        setPageState('valid')
+      } catch {
+        if (cancelled) return
+        setInvalidMessage('驗證時發生錯誤，請稍後再試。')
         setPageState('invalid')
-        return
       }
-
-      const tokenData = data as any
-
-      // 取得店家名稱
-      const { data: storeData } = await supabase
-        .from('stores')
-        .select('name')
-        .eq('id', tokenData.store_id)
-        .single()
-
-      setInfo({
-        email: tokenData.email,
-        storeName: storeData?.name || '預約管理系統',
-        role: tokenData.role === 'admin' ? '管理員' : '成員',
-      })
-      setPageState('valid')
-    } catch {
-      setInvalidMessage('驗證時發生錯誤，請稍後再試。')
-      setPageState('invalid')
     }
-  }
+
+    void runValidation()
+    return () => { cancelled = true }
+  }, [token])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -110,18 +137,12 @@ export default function AcceptInvitationPage() {
 
     setIsSubmitting(true)
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/accept-invitation`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, email: info?.email, name: name.trim(), password }),
-        }
-      )
+      const { error } = await supabase.functions.invoke('accept-invitation', {
+        body: { token, name: name.trim(), password },
+      })
 
-      if (!res.ok) {
-        const body = await res.json()
-        throw new Error(body.error || '加入失敗，請稍後再試')
+      if (error) {
+        throw new Error(await functionErrorMessage(error, '加入失敗，請稍後再試'))
       }
 
       // 自動登入
@@ -137,8 +158,8 @@ export default function AcceptInvitationPage() {
       } else {
         setTimeout(() => navigate('/login'), 1500)
       }
-    } catch (err: any) {
-      toast.error(err.message)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '加入失敗，請稍後再試')
     } finally {
       setIsSubmitting(false)
     }
@@ -217,6 +238,7 @@ export default function AcceptInvitationPage() {
               type="text"
               placeholder="請輸入姓名"
               value={name}
+              maxLength={100}
               error={!!errors.name}
               onChange={(e) => {
                 setName(e.target.value)
@@ -232,6 +254,7 @@ export default function AcceptInvitationPage() {
               type={showPassword ? 'text' : 'password'}
               placeholder="至少 8 個字元，含大寫、小寫與數字"
               value={password}
+              maxLength={128}
               error={!!errors.password}
               onChange={(e) => {
                 setPassword(e.target.value)
@@ -274,6 +297,7 @@ export default function AcceptInvitationPage() {
               type={showConfirm ? 'text' : 'password'}
               placeholder="再次輸入密碼"
               value={confirmPassword}
+              maxLength={128}
               error={!!errors.confirmPassword}
               onChange={(e) => {
                 setConfirmPassword(e.target.value)
