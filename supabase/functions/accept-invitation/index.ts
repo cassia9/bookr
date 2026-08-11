@@ -9,7 +9,6 @@ const corsHeaders = {
 
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" }
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const controlCharacterRegex = /[\u0000-\u001f\u007f]/
 
 interface AcceptInvitationPayload {
   token?: unknown
@@ -46,6 +45,13 @@ function invitationErrorStatus(message?: string) {
   return 400
 }
 
+function containsControlCharacter(value: string) {
+  return Array.from(value).some(character => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return codePoint < 32 || codePoint === 127
+  })
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
@@ -55,7 +61,7 @@ serve(async (req) => {
     return jsonResponse({ error: "Method not allowed", code: "METHOD_NOT_ALLOWED" }, 405)
   }
 
-  let adminClient: SupabaseClient<any> | null = null
+  let adminClient: SupabaseClient | null = null
   let claimedInvitationId: string | null = null
   let createdAuthUserId: string | null = null
 
@@ -85,7 +91,7 @@ serve(async (req) => {
     }
 
     const name = payload.name.trim()
-    if (!name || name.length > 100 || controlCharacterRegex.test(name)) {
+    if (!name || name.length > 100 || containsControlCharacter(name)) {
       return jsonResponse({ error: "Invalid name", code: "INVALID_NAME" }, 400)
     }
 

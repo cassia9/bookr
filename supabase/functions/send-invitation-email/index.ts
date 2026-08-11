@@ -184,7 +184,7 @@ serve(async (req) => {
     return jsonResponse({ error: "Method not allowed", code: "METHOD_NOT_ALLOWED" }, 405)
   }
 
-  let adminClient: SupabaseClient<any> | null = null
+  let adminClient: SupabaseClient | null = null
   let claimedInvitationId: string | null = null
 
   try {
