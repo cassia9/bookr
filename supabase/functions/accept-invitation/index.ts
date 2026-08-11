@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.112.3"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,192 +7,246 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
+const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" }
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const controlCharacterRegex = /[\u0000-\u001f\u007f]/
+
 interface AcceptInvitationPayload {
-  token: string
+  token?: unknown
+  password?: unknown
+  name?: unknown
+  // 舊版前端仍可能傳 email；伺服器一律忽略並以邀請內容為準。
+  email?: unknown
+}
+
+interface ClaimedMemberInvitation {
+  invitation_id: string
   email: string
-  password: string
-  name: string
+  store_id: string
+  role: "member" | "admin"
+  created_by: string
+}
+
+interface InvitationTokenState {
+  message: string
+}
+
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: jsonHeaders })
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function invitationErrorStatus(message?: string) {
+  if (message === "Invitation already accepted") return 409
+  if (message === "Invitation expired") return 410
+  if (message === "Invitation is being processed") return 409
+  return 400
 }
 
 serve(async (req) => {
-  // CORS
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
 
+  if (req.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed", code: "METHOD_NOT_ALLOWED" }, 405)
+  }
+
+  let adminClient: SupabaseClient<any> | null = null
+  let claimedInvitationId: string | null = null
+  let createdAuthUserId: string | null = null
+
   try {
-    if (req.method !== "POST") {
-      return new Response(
-        JSON.stringify({ error: "Method not allowed" }),
-        { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+    const contentLength = Number(req.headers.get("content-length") || "0")
+    if (contentLength > 32_768) {
+      return jsonResponse({ error: "Request body is too large", code: "PAYLOAD_TOO_LARGE" }, 413)
     }
 
-    const payload: AcceptInvitationPayload = await req.json()
-
-    // 驗證必要字段
-    if (!payload.token || !payload.email || !payload.password || !payload.name) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: token, email, password, name" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+    let payload: AcceptInvitationPayload
+    try {
+      payload = await req.json()
+    } catch {
+      return jsonResponse({ error: "Invalid JSON body", code: "INVALID_JSON" }, 400)
     }
 
-    // 驗證郵件格式
-    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
-    if (!emailRegex.test(payload.email)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid email format" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+    if (
+      typeof payload.token !== "string"
+      || typeof payload.password !== "string"
+      || typeof payload.name !== "string"
+    ) {
+      return jsonResponse({ error: "Token, password and name are required", code: "INVALID_INPUT" }, 400)
     }
 
-    // 驗證密碼複雜度：至少 8 字符，包含大寫、小寫、數字
-    if (payload.password.length < 8) {
-      return new Response(
-        JSON.stringify({ error: "Password must be at least 8 characters" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+    if (!uuidRegex.test(payload.token)) {
+      return jsonResponse({ error: "Invalid invitation token", code: "INVALID_INVITATION" }, 400)
+    }
+
+    const name = payload.name.trim()
+    if (!name || name.length > 100 || controlCharacterRegex.test(name)) {
+      return jsonResponse({ error: "Invalid name", code: "INVALID_NAME" }, 400)
+    }
+
+    if (payload.password.length < 8 || payload.password.length > 128) {
+      return jsonResponse({ error: "Password must be 8 to 128 characters", code: "INVALID_PASSWORD" }, 400)
     }
 
     const hasUppercase = /[A-Z]/.test(payload.password)
     const hasLowercase = /[a-z]/.test(payload.password)
     const hasNumber = /\d/.test(payload.password)
-
     if (!hasUppercase || !hasLowercase || !hasNumber) {
-      return new Response(
-        JSON.stringify({
-          error: "Password must contain uppercase, lowercase, and numbers",
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+      return jsonResponse({
+        error: "Password must contain uppercase, lowercase, and numbers",
+        code: "INVALID_PASSWORD",
+      }, 400)
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")
-
-    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
-      return new Response(
-        JSON.stringify({ error: "Supabase configuration missing" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("Accept invitation configuration is incomplete")
+      return jsonResponse({ error: "Server configuration missing", code: "SERVER_CONFIG_ERROR" }, 500)
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    adminClient = createClient(supabaseUrl, supabaseServiceKey)
 
-    // 驗證邀請 token
-    const { data: tokenData, error: tokenError } = await supabase
-      .rpc("validate_invitation_token", { p_token: payload.token })
+    // 單一 UPDATE ... RETURNING 原子領取邀請；同一 Token 同時只能有一個請求成功。
+    const { data: claimedData, error: claimError } = await adminClient
+      .rpc("claim_member_invitation", { p_token: payload.token })
       .single()
 
-    if (tokenError || !tokenData || !tokenData.valid) {
-      const message = tokenData?.message || "Invalid or expired invitation token"
-      return new Response(
-        JSON.stringify({ error: message }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    if (claimError || !claimedData) {
+      const { data: tokenState } = await adminClient
+        .rpc("validate_invitation_token", { p_token: payload.token })
+        .maybeSingle()
+      const message = (tokenState as InvitationTokenState | null)?.message
+        || "Invalid invitation token"
+      return jsonResponse(
+        { error: message, code: "INVITATION_UNAVAILABLE" },
+        invitationErrorStatus(message),
       )
     }
 
-    // 驗證郵件是否匹配邀請中的郵件
-    if (tokenData.email !== payload.email) {
-      return new Response(
-        JSON.stringify({ error: "Email does not match invitation" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
-    }
+    const invitation = claimedData as ClaimedMemberInvitation
+    claimedInvitationId = invitation.invitation_id
 
-    // 建立 Auth 用戶
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: payload.email,
+    const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
+      email: invitation.email,
       password: payload.password,
-      email_confirm: true, // 自動確認郵件
+      email_confirm: true,
     })
 
     if (authError || !authData.user) {
-      console.error("Auth creation error:", authError)
-      return new Response(
-        JSON.stringify({ error: "Failed to create user account", details: authError?.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      console.error("Auth user creation failed:", authError)
+      await adminClient.rpc("release_member_invitation_claim", {
+        p_invitation_id: claimedInvitationId,
+      })
+      claimedInvitationId = null
+
+      const duplicateEmail = authError?.code === "email_exists"
+        || authError?.message?.toLowerCase().includes("already")
+      return jsonResponse(
+        {
+          error: duplicateEmail ? "An account with this email already exists" : "Failed to create user account",
+          code: duplicateEmail ? "ACCOUNT_ALREADY_EXISTS" : "AUTH_USER_CREATE_FAILED",
+        },
+        duplicateEmail ? 409 : 500,
       )
     }
 
-    // 觸發器已建立基本記錄（id + email），補上邀請所需欄位
-    const { data: userData, error: userUpdateError } = await supabase
+    createdAuthUserId = authData.user.id
+
+    const { data: userData, error: userUpdateError } = await adminClient
       .from("users")
       .update({
-        full_name: payload.name,
-        store_id: tokenData.store_id,
-        role: tokenData.role,
+        email: invitation.email,
+        full_name: name,
+        store_id: invitation.store_id,
+        role: invitation.role,
+        invited_by: invitation.created_by,
         invited_at: new Date().toISOString(),
       })
-      .eq("id", authData.user.id)
-      .select()
+      .eq("id", createdAuthUserId)
+      .select("id, email, full_name, role")
       .single()
 
-    if (userUpdateError) {
-      console.error("User update error:", userUpdateError)
-      // 清除已建立的 Auth 用戶
-      await supabase.auth.admin.deleteUser(authData.user.id)
-      return new Response(
-        JSON.stringify({ error: "Failed to create user profile", details: userUpdateError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
-    }
-
-    // 更新邀請記錄為已接受
-    const { error: updateError } = await supabase
-      .from("pending_invitations")
-      .update({
-        accepted_at: new Date().toISOString(),
-        accepted_user_id: authData.user.id,
+    if (userUpdateError || !userData) {
+      console.error("User profile update failed:", userUpdateError)
+      const { error: deleteError } = await adminClient.auth.admin.deleteUser(createdAuthUserId)
+      if (deleteError) console.error("Auth user compensation failed:", deleteError)
+      await adminClient.rpc("release_member_invitation_claim", {
+        p_invitation_id: claimedInvitationId,
       })
-      .eq("token", payload.token)
-
-    if (updateError) {
-      console.error("Invitation update error:", updateError)
-      // 即使更新失敗，用戶已建立，返回成功
+      createdAuthUserId = null
+      claimedInvitationId = null
+      return jsonResponse({ error: "Failed to create user profile", code: "USER_PROFILE_CREATE_FAILED" }, 500)
     }
 
-    // 記錄審計日誌
-    const { error: auditError } = await supabase
+    const { data: completed, error: completeError } = await adminClient.rpc(
+      "complete_member_invitation",
+      {
+        p_invitation_id: claimedInvitationId,
+        p_user_id: createdAuthUserId,
+      },
+    )
+
+    if (completeError || !completed) {
+      console.error("Invitation completion failed:", completeError)
+      const { error: deleteError } = await adminClient.auth.admin.deleteUser(createdAuthUserId)
+      if (deleteError) console.error("Auth user compensation failed:", deleteError)
+      await adminClient.rpc("release_member_invitation_claim", {
+        p_invitation_id: claimedInvitationId,
+      })
+      createdAuthUserId = null
+      claimedInvitationId = null
+      return jsonResponse({ error: "Failed to complete invitation", code: "INVITATION_COMPLETE_FAILED" }, 500)
+    }
+
+    // 關鍵狀態已完成，後續審計失敗不回滾使用者帳號。
+    createdAuthUserId = null
+    claimedInvitationId = null
+
+    const { error: auditError } = await adminClient
       .from("audit_logs")
       .insert({
-        user_id: authData.user.id,
+        user_id: userData.id,
         action: "USER_REGISTERED",
         table_name: "users",
         record_id: userData.id,
         new_values: {
           email: userData.email,
-          name: userData.name,
+          full_name: userData.full_name,
           role: userData.role,
         },
-        store_id: userData.store_id,
+        store_id: invitation.store_id,
       })
 
     if (auditError) {
-      console.warn("Failed to create audit log:", auditError)
+      console.warn("User registration audit failed:", auditError)
     }
 
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        message: "Invitation accepted and user account created successfully",
-        user: {
-          id: userData.id,
-          email: userData.email,
-          name: userData.name,
-          role: userData.role,
-          store_id: userData.store_id,
-        },
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    )
+    return jsonResponse({
+      ok: true,
+      message: "Invitation accepted and user account created successfully",
+      user: userData,
+    })
   } catch (error) {
-    console.error("Unexpected error:", error)
-    return new Response(
-      JSON.stringify({ error: "Internal server error", details: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    )
+    console.error("Unexpected accept-invitation error:", errorMessage(error))
+
+    if (adminClient && createdAuthUserId) {
+      const { error: deleteError } = await adminClient.auth.admin.deleteUser(createdAuthUserId)
+      if (deleteError) console.error("Auth user cleanup failed:", deleteError)
+    }
+
+    if (adminClient && claimedInvitationId) {
+      const { error: releaseError } = await adminClient.rpc("release_member_invitation_claim", {
+        p_invitation_id: claimedInvitationId,
+      })
+      if (releaseError) console.error("Invitation claim release failed:", releaseError)
+    }
+
+    return jsonResponse({ error: "Internal server error", code: "INTERNAL_ERROR" }, 500)
   }
 })
