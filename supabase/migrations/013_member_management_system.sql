@@ -30,7 +30,8 @@ CREATE INDEX idx_pending_invitations_expires_at ON pending_invitations(expires_a
 
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS invited_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS invited_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS invited_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- ── Step 3: 啟用 pending_invitations 的 RLS ──
 
