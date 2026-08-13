@@ -10,15 +10,18 @@
 -- 說明：當前 member_read_active_services 策略要求 store_id 匹配
 -- 導致某些用戶無法看到課程列表
 
--- 步驟 1：保持所有現有策略不變（不刪除）
--- 步驟 2：添加新的策略讓成員能讀取活躍課程
+-- 步驟 1：保持既有策略不變
+-- 步驟 2：以可重複執行的方式補上認證用戶讀取策略
 
--- 新增：允許所有認證用戶讀取活躍課程
--- 這不會刪除 member_read_active_services，而是補充它
-CREATE POLICY IF NOT EXISTS "auth_read_active_services" ON services
+-- 新增：允許認證用戶讀取自己店家的活躍課程
+-- PostgreSQL 不支援 CREATE POLICY IF NOT EXISTS，因此先明確移除同名策略。
+DROP POLICY IF EXISTS "auth_read_active_services" ON public.services;
+
+CREATE POLICY "auth_read_active_services" ON public.services
   FOR SELECT
+  TO authenticated
   USING (
-    auth.role() = 'authenticated'
+    store_id = (SELECT public.current_store_id())
     AND active = TRUE
     AND deleted_at IS NULL
   );
