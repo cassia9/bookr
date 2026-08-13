@@ -34,18 +34,16 @@ DECLARE
   v_new_buffered_end TIMESTAMPTZ;
   v_conflict         RECORD;
   v_result_id        UUID;
-  v_block_id         UUID;
   v_price            INT;
 BEGIN
   -- 封鎖時段檢查
-  SELECT id INTO v_block_id
-  FROM practitioner_blocks
-  WHERE practitioner_id = p_practitioner_id
-    AND start_time < p_end_time + (p_buffer_minutes || ' minutes')::INTERVAL
-    AND end_time   > p_start_time
-  LIMIT 1;
-
-  IF FOUND THEN
+  IF EXISTS (
+    SELECT 1
+    FROM practitioner_blocks
+    WHERE practitioner_id = p_practitioner_id
+      AND start_time < p_end_time + (p_buffer_minutes || ' minutes')::INTERVAL
+      AND end_time   > p_start_time
+  ) THEN
     RETURN json_build_object('ok', false, 'error', 'PRACTITIONER_BLOCKED');
   END IF;
 
