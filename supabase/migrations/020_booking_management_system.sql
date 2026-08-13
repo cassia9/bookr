@@ -3,28 +3,27 @@
 -- 2026-06-10
 
 -- ============================================================
--- 1. 建立 clients 表
+-- 1. 延伸既有 clients 表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS clients (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  store_id UUID NOT NULL REFERENCES stores(id),
-  name TEXT NOT NULL,
-  phone TEXT,
-  email TEXT,
-  notes TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  deleted_at TIMESTAMP,
+-- clients 已由 001_initial_schema.sql 建立；沿用 full_name 等正式欄位，
+-- 明確補上管理功能需要的欄位，避免 CREATE TABLE IF NOT EXISTS 跳過它們。
+ALTER TABLE public.clients
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
-  CONSTRAINT clients_name_not_empty CHECK (name != ''),
-  CONSTRAINT clients_phone_format CHECK (phone IS NULL OR phone ~ '^\d{10,}$')
-);
+-- 姓名搜尋使用 ILIKE，pg_trgm 的 GIN 索引可支援非前綴搜尋。
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
 
 -- 索引：用於搜尋和查詢
-CREATE INDEX IF NOT EXISTS idx_clients_store_id ON clients(store_id);
-CREATE INDEX IF NOT EXISTS idx_clients_store_id_deleted_at ON clients(store_id, deleted_at);
-CREATE INDEX IF NOT EXISTS idx_clients_phone ON clients(phone) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_clients_name_trgm ON clients USING GIST(name gist_trgm_ops) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_clients_store_id ON public.clients(store_id);
+CREATE INDEX IF NOT EXISTS idx_clients_store_id_deleted_at
+  ON public.clients(store_id, deleted_at);
+CREATE INDEX IF NOT EXISTS idx_clients_phone
+  ON public.clients(phone)
+  WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_clients_name_trgm
+  ON public.clients USING GIN (full_name extensions.gin_trgm_ops)
+  WHERE deleted_at IS NULL;
 
 -- ============================================================
 -- 2. 擴展 bookings 表（檢查並添加缺失欄位）
@@ -120,59 +119,55 @@ $$ LANGUAGE plpgsql STABLE;
 
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
 
+-- 移除 001 與本遷移可能已建立的舊政策，確保可安全重跑，且不讓
+-- permissive policy 以 OR 組合後繞過 deleted_at 條件。
+DROP POLICY IF EXISTS "clients_store_isolation" ON clients;
+DROP POLICY IF EXISTS "admin_view_all_clients" ON clients;
+DROP POLICY IF EXISTS "member_view_store_clients" ON clients;
+DROP POLICY IF EXISTS "admin_insert_clients" ON clients;
+DROP POLICY IF EXISTS "admin_update_clients" ON clients;
+
 -- 管理員可查看所有客戶
 CREATE POLICY "admin_view_all_clients" ON clients
   FOR SELECT
+  TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'admin'
-      AND users.store_id = clients.store_id
-    )
+    store_id = (SELECT current_store_id())
+    AND (SELECT is_admin())
+    AND deleted_at IS NULL
   );
 
 -- 普通成員只能查看該店的客戶
 CREATE POLICY "member_view_store_clients" ON clients
   FOR SELECT
+  TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.store_id = clients.store_id
-    )
+    store_id = (SELECT current_store_id())
+    AND deleted_at IS NULL
   );
 
 -- 管理員可新增客戶
 CREATE POLICY "admin_insert_clients" ON clients
   FOR INSERT
+  TO authenticated
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'admin'
-      AND users.store_id = clients.store_id
-    )
+    store_id = (SELECT current_store_id())
+    AND (SELECT is_admin())
+    AND deleted_at IS NULL
   );
 
 -- 管理員可更新客戶
 CREATE POLICY "admin_update_clients" ON clients
   FOR UPDATE
+  TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'admin'
-      AND users.store_id = clients.store_id
-    )
+    store_id = (SELECT current_store_id())
+    AND (SELECT is_admin())
+    AND deleted_at IS NULL
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'admin'
-      AND users.store_id = clients.store_id
-    )
+    store_id = (SELECT current_store_id())
+    AND (SELECT is_admin())
   );
 
 -- ============================================================
@@ -182,62 +177,53 @@ CREATE POLICY "admin_update_clients" ON clients
 -- 移除舊政策（如果存在）
 DROP POLICY IF EXISTS "admin_view_all_bookings" ON bookings;
 DROP POLICY IF EXISTS "member_view_own_bookings" ON bookings;
+DROP POLICY IF EXISTS "member_view_bookings" ON bookings;
+DROP POLICY IF EXISTS "admin_insert_bookings" ON bookings;
+DROP POLICY IF EXISTS "admin_update_bookings" ON bookings;
 
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 
 -- 管理員可查看所有預約
 CREATE POLICY "admin_view_all_bookings" ON bookings
   FOR SELECT
+  TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'admin'
-      AND users.store_id = bookings.store_id
-    )
+    store_id = (SELECT current_store_id())
+    AND (SELECT is_admin())
+    AND deleted_at IS NULL
   );
 
 -- 普通成員只能查看自己的預約或該店的預約
 CREATE POLICY "member_view_bookings" ON bookings
   FOR SELECT
+  TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.store_id = bookings.store_id
-    )
+    store_id = (SELECT current_store_id())
+    AND deleted_at IS NULL
   );
 
 -- 管理員可新增預約
 CREATE POLICY "admin_insert_bookings" ON bookings
   FOR INSERT
+  TO authenticated
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'admin'
-      AND users.store_id = bookings.store_id
-    )
+    store_id = (SELECT current_store_id())
+    AND (SELECT is_admin())
+    AND deleted_at IS NULL
   );
 
 -- 管理員可更新預約
 CREATE POLICY "admin_update_bookings" ON bookings
   FOR UPDATE
+  TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'admin'
-      AND users.store_id = bookings.store_id
-    )
+    store_id = (SELECT current_store_id())
+    AND (SELECT is_admin())
+    AND deleted_at IS NULL
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'admin'
-      AND users.store_id = bookings.store_id
-    )
+    store_id = (SELECT current_store_id())
+    AND (SELECT is_admin())
   );
 
 -- ============================================================
