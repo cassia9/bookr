@@ -2,7 +2,7 @@
 -- C 端預約系統支援
 -- 1. bookings 新增 source / client_line_id / client_picture_url
 -- 2. stores 新增 liff_id / booking_confirmation_mode / booking_enabled
--- 3. anon 可 SELECT 自己的預約（確認頁用）
+-- 3. 公開確認只經由明確 RPC，不開放 anon 直接 SELECT bookings
 -- 4. 更新 create_booking_public：支援 source、LINE 資訊、確認模式
 -- =============================================
 
@@ -24,23 +24,22 @@ ALTER TABLE stores
     CHECK (booking_confirmation_mode IN ('manual', 'auto')),
   ADD COLUMN IF NOT EXISTS booking_enabled           BOOLEAN NOT NULL DEFAULT TRUE;
 
--- ── 3. anon SELECT bookings（僅能查自己的 booking，用 id 當憑證）────
+-- ── 3. 禁止 anon 直接 SELECT bookings ──────────────────────────────
 
--- 公開預約確認頁：anon 用 booking id 查詢自己剛建立的預約
--- 不透漏其他欄位（client_id 等），故只開放 SELECT 不做 RLS bypass
+-- RLS 無法根據查詢 WHERE id 判斷呼叫者是否持有該 id；若只檢查 source，
+-- 匿名者仍能列出所有 C 端預約。公開確認僅能經下方受限 RPC 進行。
 DROP POLICY IF EXISTS "anon read own booking by id" ON bookings;
-CREATE POLICY "anon read own booking by id"
-  ON bookings FOR SELECT TO anon
-  USING (
-    -- anon 只能透過 RPC（SECURITY DEFINER）取得 booking，
-    -- 此 policy 搭配 create_booking_public 回傳 id 後前端查詢
-    -- 用 source 限縮：只有 C 端預約才允許 anon 讀取
-    source IN ('line', 'messenger', 'web')
-  );
+REVOKE ALL PRIVILEGES ON TABLE public.bookings FROM anon;
 
 -- ── 4. 更新 create_booking_public ────────────────────────────────────
 -- 新增參數：p_source、p_client_line_id、p_client_picture_url
 -- 依店家 booking_confirmation_mode 決定初始 status
+
+-- 移除 006 建立的 7 參數舊版本，避免與新版形成多載函式後造成
+-- PostgREST 選擇歧義及未指定簽名的 GRANT 失敗。
+DROP FUNCTION IF EXISTS public.create_booking_public(
+  TEXT, TEXT, UUID, UUID, TIMESTAMPTZ, TEXT, UUID
+);
 
 CREATE OR REPLACE FUNCTION create_booking_public(
   p_full_name           TEXT,
@@ -57,6 +56,7 @@ CREATE OR REPLACE FUNCTION create_booking_public(
 RETURNS JSON
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, extensions
 AS $$
 DECLARE
   v_client_id    UUID;
@@ -79,9 +79,25 @@ BEGIN
 
   -- 取得服務時長
   SELECT duration_minutes INTO v_duration
-  FROM services WHERE id = p_service_id AND active = TRUE;
+  FROM services
+  WHERE id = p_service_id
+    AND store_id = p_store_id
+    AND active = TRUE
+    AND deleted_at IS NULL;
   IF NOT FOUND THEN
     RETURN json_build_object('ok', false, 'error', 'SERVICE_NOT_FOUND');
+  END IF;
+
+  -- 從業人員必須屬於同一店家且可預約，避免跨店組合資料。
+  IF NOT EXISTS (
+    SELECT 1
+    FROM practitioners
+    WHERE id = p_practitioner_id
+      AND store_id = p_store_id
+      AND active = TRUE
+      AND deleted_at IS NULL
+  ) THEN
+    RETURN json_build_object('ok', false, 'error', 'PRACTITIONER_NOT_FOUND');
   END IF;
 
   -- 取得店家設定（緩衝 + 確認模式）
@@ -104,7 +120,9 @@ BEGIN
   -- 找或建客戶（以電話 + 店家為唯一鍵）
   SELECT id INTO v_client_id
   FROM clients
-  WHERE phone = trim(p_phone) AND store_id = p_store_id
+  WHERE phone = trim(p_phone)
+    AND store_id = p_store_id
+    AND deleted_at IS NULL
   LIMIT 1;
 
   IF NOT FOUND THEN
@@ -119,7 +137,9 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM bookings
     WHERE practitioner_id = p_practitioner_id
+      AND store_id = p_store_id
       AND status NOT IN ('cancelled')
+      AND deleted_at IS NULL
       AND start_time < v_end_time + (v_buffer || ' minutes')::INTERVAL
       AND (end_time + (COALESCE(buffer_minutes, 0) || ' minutes')::INTERVAL) > p_start_time
   ) THEN
@@ -149,7 +169,17 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION create_booking_public TO anon, authenticated;
+REVOKE ALL PRIVILEGES
+  ON FUNCTION public.create_booking_public(
+    TEXT, TEXT, UUID, UUID, TIMESTAMPTZ, TEXT, UUID, TEXT, TEXT, TEXT
+  )
+  FROM PUBLIC;
+
+GRANT EXECUTE
+  ON FUNCTION public.create_booking_public(
+    TEXT, TEXT, UUID, UUID, TIMESTAMPTZ, TEXT, UUID, TEXT, TEXT, TEXT
+  )
+  TO anon, authenticated;
 
 -- ── 5. anon 查詢單筆預約（確認頁）────────────────────────────────────
 -- 前端持有 booking id → 查詢 bookings JOIN services JOIN practitioners
@@ -161,6 +191,7 @@ CREATE OR REPLACE FUNCTION get_booking_confirmation(
 RETURNS JSON
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, extensions
 AS $$
 DECLARE
   v_rec RECORD;
@@ -212,4 +243,10 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION get_booking_confirmation TO anon, authenticated;
+REVOKE ALL PRIVILEGES
+  ON FUNCTION public.get_booking_confirmation(UUID)
+  FROM PUBLIC;
+
+GRANT EXECUTE
+  ON FUNCTION public.get_booking_confirmation(UUID)
+  TO anon, authenticated;
