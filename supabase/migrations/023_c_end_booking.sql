@@ -66,7 +66,6 @@ DECLARE
   v_booking_id   UUID;
   v_conf_mode    TEXT;
   v_init_status  booking_status;
-  v_result       JSON;
 BEGIN
   -- 基本驗證
   IF trim(p_full_name) = '' OR trim(p_phone) = '' THEN
