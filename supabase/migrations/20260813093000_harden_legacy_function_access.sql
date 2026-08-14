@@ -415,46 +415,53 @@ GRANT EXECUTE
 -- public schema 已不允許 anon/authenticated/service_role 建立物件。
 -- ============================================================
 
-ALTER FUNCTION public.get_current_store_id()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.cleanup_practitioner_services_on_delete()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.ensure_min_one_service()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.update_practitioners_timestamp()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.check_service_not_deleted()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.set_updated_at()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.current_store_id()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.is_admin()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.current_practitioner_id()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.handle_new_auth_user()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.check_booking_conflict(
-  UUID, UUID, TIMESTAMP, TIMESTAMP, UUID
-)
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.update_clients_updated_at()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.set_clients_updated_at()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.get_available_slots(DATE, UUID, UUID, UUID)
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.update_users_updated_at()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.generate_store_code()
-  SET search_path TO public, pg_temp;
-ALTER FUNCTION public.get_store_by_code(TEXT)
-  SET search_path TO public, pg_temp;
+-- 舊正式環境的輔助函式集合不完全一致；只強化實際存在的簽章。
+DO $migration$
+DECLARE
+  function_signature TEXT;
+  function_oid OID;
+BEGIN
+  FOREACH function_signature IN ARRAY ARRAY[
+    'public.get_current_store_id()',
+    'public.cleanup_practitioner_services_on_delete()',
+    'public.ensure_min_one_service()',
+    'public.update_practitioners_timestamp()',
+    'public.check_service_not_deleted()',
+    'public.set_updated_at()',
+    'public.current_store_id()',
+    'public.is_admin()',
+    'public.current_practitioner_id()',
+    'public.handle_new_auth_user()',
+    'public.check_booking_conflict(uuid,uuid,timestamp without time zone,timestamp without time zone,uuid)',
+    'public.update_clients_updated_at()',
+    'public.set_clients_updated_at()',
+    'public.get_available_slots(date,uuid,uuid,uuid)',
+    'public.update_users_updated_at()',
+    'public.generate_store_code()',
+    'public.get_store_by_code(text)'
+  ]
+  LOOP
+    function_oid := to_regprocedure(function_signature);
 
--- 觸發器函式不應被 API 角色直接呼叫。
-REVOKE ALL PRIVILEGES
-  ON FUNCTION public.handle_new_auth_user()
-  FROM PUBLIC, anon, authenticated, service_role;
+    IF function_oid IS NOT NULL THEN
+      EXECUTE format(
+        'ALTER FUNCTION %s SET search_path TO public, pg_temp',
+        function_oid::regprocedure
+      );
+    END IF;
+  END LOOP;
+
+  -- 觸發器函式不應被 API 角色直接呼叫。
+  function_oid := to_regprocedure('public.handle_new_auth_user()');
+
+  IF function_oid IS NOT NULL THEN
+    EXECUTE format(
+      'REVOKE ALL PRIVILEGES ON FUNCTION %s '
+      'FROM PUBLIC, anon, authenticated, service_role',
+      function_oid::regprocedure
+    );
+  END IF;
+END
+$migration$;
 
 COMMIT;
