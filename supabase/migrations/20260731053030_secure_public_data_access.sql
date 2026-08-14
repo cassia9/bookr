@@ -83,9 +83,17 @@ REVOKE ALL PRIVILEGES
   FROM anon;
 
 -- 此舊確認 RPC 只靠 booking id 即回傳客戶電話，目前前端未使用，先停用。
-REVOKE ALL PRIVILEGES
-  ON FUNCTION public.get_booking_confirmation(UUID)
-  FROM PUBLIC, anon, authenticated;
+-- 部分既有環境從未建立此函式，因此先確認簽章存在，避免部署中斷。
+DO $migration$
+BEGIN
+  IF to_regprocedure('public.get_booking_confirmation(uuid)') IS NOT NULL THEN
+    EXECUTE
+      'REVOKE ALL PRIVILEGES '
+      'ON FUNCTION public.get_booking_confirmation(uuid) '
+      'FROM PUBLIC, anon, authenticated';
+  END IF;
+END
+$migration$;
 
 -- ============================================================
 -- 3. audit_logs：僅允許受信任的伺服器端角色存取
