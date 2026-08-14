@@ -7,6 +7,13 @@ ALTER TABLE bookings
   ADD COLUMN IF NOT EXISTS price INT NOT NULL DEFAULT 0;
 
 -- 2. 更新 upsert_booking，接受 p_price 參數
+-- PostgreSQL 以「函式名稱 + 輸入參數型別」識別函式；若不先移除舊的
+-- 9 參數版本，這裡會建立成多載函式，後續未指定簽名的 GRANT 便會失敗。
+DROP FUNCTION IF EXISTS public.upsert_booking(
+  UUID, UUID, UUID, UUID, TIMESTAMPTZ,
+  TIMESTAMPTZ, INT, TEXT, UUID
+);
+
 CREATE OR REPLACE FUNCTION upsert_booking(
   p_booking_id       UUID,
   p_client_id        UUID,
@@ -27,18 +34,16 @@ DECLARE
   v_new_buffered_end TIMESTAMPTZ;
   v_conflict         RECORD;
   v_result_id        UUID;
-  v_block_id         UUID;
   v_price            INT;
 BEGIN
   -- 封鎖時段檢查
-  SELECT id INTO v_block_id
-  FROM practitioner_blocks
-  WHERE practitioner_id = p_practitioner_id
-    AND start_time < p_end_time + (p_buffer_minutes || ' minutes')::INTERVAL
-    AND end_time   > p_start_time
-  LIMIT 1;
-
-  IF FOUND THEN
+  IF EXISTS (
+    SELECT 1
+    FROM practitioner_blocks
+    WHERE practitioner_id = p_practitioner_id
+      AND start_time < p_end_time + (p_buffer_minutes || ' minutes')::INTERVAL
+      AND end_time   > p_start_time
+  ) THEN
     RETURN json_build_object('ok', false, 'error', 'PRACTITIONER_BLOCKED');
   END IF;
 
@@ -114,4 +119,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION upsert_booking TO authenticated;
+GRANT EXECUTE ON FUNCTION public.upsert_booking(
+  UUID, UUID, UUID, UUID, TIMESTAMPTZ,
+  TIMESTAMPTZ, INT, TEXT, UUID, INT
+) TO authenticated;

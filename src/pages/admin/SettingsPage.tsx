@@ -35,6 +35,12 @@ interface PendingInvitation {
   expires_at: string
 }
 
+interface InviteFunctionResponse {
+  ok?: boolean
+  warning?: string
+  deliveryStatus?: 'sent' | 'failed'
+}
+
 // ── 工具函式 ─────────────────────────────────────────────────────────────────
 
 function hourOptions(start = 0, end = 23) {
@@ -55,6 +61,18 @@ function timeAgo(dateString: string) {
   if (hours < 24) return `${hours}小時前`
   if (days < 30) return `${days}天前`
   return date.toLocaleDateString('zh-TW')
+}
+
+async function functionErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'context' in error) {
+    const context = (error as { context?: unknown }).context
+    if (context instanceof Response) {
+      const body = await context.clone().json().catch(() => null) as { error?: string } | null
+      if (body?.error) return body.error
+    }
+  }
+
+  return error instanceof Error ? error.message : fallback
 }
 
 // ── 側欄標籤 ─────────────────────────────────────────────────────────────────
@@ -366,7 +384,6 @@ function ChannelsSettings() {
 function MembersSettings() {
   const { session } = useAuth()
 
-  const [storeName, setStoreName] = useState('')
   const [members, setMembers] = useState<Member[]>([])
   const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
   const [loading, setLoading] = useState(true)
@@ -395,48 +412,38 @@ function MembersSettings() {
 
   async function handleInviteSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!inviteEmail) { setInviteEmailError('請輸入 Email'); return }
-    if (!validateEmail(inviteEmail)) { setInviteEmailError('請輸入有效的 Email 格式'); return }
+    const normalizedEmail = inviteEmail.trim().toLowerCase()
+    if (!normalizedEmail) { setInviteEmailError('請輸入 Email'); return }
+    if (!validateEmail(normalizedEmail)) { setInviteEmailError('請輸入有效的 Email 格式'); return }
     if (!session) return
 
     setInviteSending(true)
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-member`,
-        {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: inviteEmail, role: inviteRole, storeName }),
-        }
-      )
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error(d.error ?? `HTTP ${res.status}`)
+      const { data, error } = await supabase.functions.invoke<InviteFunctionResponse>('invite-member', {
+        body: { email: normalizedEmail, role: inviteRole },
+      })
+      if (error) {
+        throw new Error(await functionErrorMessage(error, '邀請發送失敗'))
       }
-      toast.success('邀請已發送', `邀請信已寄到 ${inviteEmail}`)
+
+      if (data?.deliveryStatus === 'failed' || data?.warning) {
+        toast.warning('邀請已建立', '信件暫時未寄出，可稍後從待接受名單重新發送')
+      } else {
+        toast.success('邀請已發送', `邀請信已寄到 ${normalizedEmail}`)
+      }
       setInviteOpen(false)
-      loadPendingInvitations()
-    } catch (err: any) {
-      toast.error('發送失敗', err.message)
+      await loadPendingInvitations()
+    } catch (error) {
+      toast.error('發送失敗', error instanceof Error ? error.message : '請稍後再試')
     } finally {
       setInviteSending(false)
     }
   }
 
   useEffect(() => {
-    loadStoreName()
     loadMembers()
     loadPendingInvitations()
   }, [])
-
-  async function loadStoreName() {
-    const { data } = await supabase
-      .from('stores')
-      .select('name')
-      .eq('id', STORE_ID)
-      .single()
-    if (data?.name) setStoreName(data.name)
-  }
 
   async function loadMembers() {
     setLoading(true)
@@ -450,11 +457,16 @@ function MembersSettings() {
   }
 
   async function loadPendingInvitations() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('pending_invitations')
       .select('id, email, role, created_at, expires_at')
       .is('accepted_at', null)
       .order('created_at', { ascending: false })
+
+    if (error) {
+      toast.error('載入邀請失敗', error.message)
+      return
+    }
     setPendingInvitations(data || [])
   }
 
@@ -462,22 +474,21 @@ function MembersSettings() {
     if (!session) return
     setResendingId(inv.id)
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-member`,
-        {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: inv.email, role: inv.role, storeName }),
-        }
-      )
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error(d.error ?? `HTTP ${res.status}`)
+      const { data, error } = await supabase.functions.invoke<InviteFunctionResponse>('invite-member', {
+        body: { email: inv.email, role: inv.role },
+      })
+      if (error) {
+        throw new Error(await functionErrorMessage(error, '邀請重新發送失敗'))
       }
-      toast.success('邀請已重新發送', `新的邀請信已寄到 ${inv.email}`)
-      loadPendingInvitations()
-    } catch (err: any) {
-      toast.error('重發失敗', err.message)
+
+      if (data?.deliveryStatus === 'failed' || data?.warning) {
+        toast.warning('邀請已更新', '信件暫時未寄出，請稍後再試')
+      } else {
+        toast.success('邀請已重新發送', `新的邀請信已寄到 ${inv.email}`)
+      }
+      await loadPendingInvitations()
+    } catch (error) {
+      toast.error('重發失敗', error instanceof Error ? error.message : '請稍後再試')
     } finally {
       setResendingId(null)
     }
@@ -485,15 +496,18 @@ function MembersSettings() {
 
   async function handleRevoke() {
     if (!revokingId) return
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('pending_invitations')
       .delete()
       .eq('id', revokingId)
+      .is('accepted_at', null)
+      .select('id')
+      .single()
     if (error) {
       toast.error('撤銷失敗', error.message)
       return
     }
-    setPendingInvitations(pendingInvitations.filter(i => i.id !== revokingId))
+    setPendingInvitations(previous => previous.filter(invitation => invitation.id !== data.id))
     toast.success('邀請已撤銷')
     setRevokingId(null)
   }

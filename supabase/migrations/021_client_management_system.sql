@@ -75,7 +75,8 @@ CREATE POLICY "clients_update"
 -- 使用 LEFT JOIN 避免無預約客戶被過濾
 -- FILTER (WHERE ...) 比 CASE WHEN 更高效（PostgreSQL 9.4+）
 
-CREATE OR REPLACE VIEW client_stats AS
+CREATE OR REPLACE VIEW client_stats
+WITH (security_invoker = true) AS
 SELECT
   c.id,
   c.store_id,
@@ -114,7 +115,7 @@ WHERE c.deleted_at IS NULL
 GROUP BY c.id;
 
 -- View 開啟 RLS（繼承底層表的 RLS）
--- client_stats 是 VIEW，不能直接加 RLS，需透過 SECURITY INVOKER（預設）
+-- client_stats 是 VIEW，不能直接加 RLS，需明確使用 SECURITY INVOKER
 -- 底層 clients 的 RLS 會自動套用
 
 -- ── 6. 搜尋 RPC：autocomplete 用（預約管理選客戶）──────────────
