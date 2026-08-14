@@ -357,6 +357,11 @@ GRANT EXECUTE
   ON FUNCTION public.search_clients(TEXT, UUID, INT)
   TO authenticated;
 
+-- 正式舊環境可能已有同參數、不同 TABLE 回傳欄位的版本。
+-- PostgreSQL 無法用 CREATE OR REPLACE 改變 OUT 參數，因此明確重建；
+-- 已確認此函式沒有 View、Trigger 或其他資料庫物件依賴。
+DROP FUNCTION IF EXISTS public.get_client_bookings(UUID, INT);
+
 CREATE OR REPLACE FUNCTION public.get_client_bookings(
   p_client_id UUID,
   p_limit INT DEFAULT 50
