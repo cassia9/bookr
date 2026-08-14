@@ -390,6 +390,48 @@ git commit ...
 
 ---
 
+### 規則 1️⃣1️⃣：合併、部署與正式環境 QA 流程
+
+**適用時機**：任何會合併到 `main` 並部署至 Supabase 或 Cloudflare Pages 的改動。
+
+#### Gate 1：合併前驗證
+
+1. 僅從隔離工作目錄操作，確認工作目錄乾淨且 Branch 已推送。
+2. 建立 Pull Request，確認實際差異、目標分支、提交紀錄與機密掃描結果。
+3. 執行完整品質檢查：前端 Build／Lint、Supabase 本地 Migration reset、Database lint 與 Security advisors。
+4. 只在所有必要檢查通過後合併；禁止跳過失敗檢查或直接強推 `main`。
+
+#### Gate 2：部署順序
+
+1. 先比對本地與遠端 Migration 狀態，確認沒有歷史分歧。
+2. 先執行 Supabase Database Migration，再部署本次有修改的 Edge Functions。
+3. 確認 Database 與 Edge Functions 正常後，才讓 `main` 觸發 Cloudflare Pages 正式部署。
+4. 禁止輸出、提交或在指令中硬編碼 `service_role`、secret key、access token。
+5. 任一部署步驟失敗時立即停止，不可繼續下一層；先保留錯誤證據並評估回復方式。
+
+#### Gate 3：部署後 QA（強制）
+
+部署完成後必須針對正式環境重新測試，不得以本地測試取代：
+
+- [ ] 正式站可開啟、靜態資源載入成功，沒有白屏或重大 Console 錯誤。
+- [ ] 後台桌面版可登入，預約、成員與設定頁面可正常開啟。
+- [ ] 手機尺寸可完成公開預約主要流程，版面無溢出或無法操作項目。
+- [ ] 邀請成員、查看邀請與刪除邀請維持原有功能。
+- [ ] 未登入或權限不足的邀請／管理請求會被拒絕，且不洩漏敏感資料。
+- [ ] Supabase Migration、Edge Function 版本與 Cloudflare 正式部署皆對應同一個 `main` Commit。
+- [ ] 對 Database 再執行 lint／Security advisors，確認沒有新增安全警告。
+
+#### 完成與回報
+
+只有在 Gate 1～3 全數通過後，才能回報「合併與部署完成」。回報必須包含：
+
+- Pull Request 與 Merge Commit
+- Supabase Migration／Edge Function 部署結果
+- Cloudflare Pages 正式部署網址與版本
+- 正式環境 QA 測試項目、結果與尚存風險
+
+---
+
 ## 📋 現有資源清單
 
 ### 安全相關
@@ -502,7 +544,8 @@ SELECT is_admin();
 
 ---
 
-**最後更新**: 2026-06-08  
+**最後更新**: 2026-08-14
 **維護者**: Development Team  
 **新增**: 規則 🔟 - 功能完成驗證流程 (/qc)  
 **新增**: 🌐 通訊規則 - 繁體中文為默認語言
+**新增**: 規則 1️⃣1️⃣ - 合併、部署與正式環境 QA 流程
