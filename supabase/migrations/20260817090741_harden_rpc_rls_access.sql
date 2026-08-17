@@ -13,6 +13,11 @@ BEGIN;
 ALTER TABLE public.stores
   ADD COLUMN IF NOT EXISTS booking_slug TEXT;
 
+-- 正式舊環境已記錄 014/018 migration，但實際缺少此軟刪除欄位。
+-- 既有關聯保持 NULL（有效），不需回填或更新任何業務資料。
+ALTER TABLE public.practitioner_services
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_booking_slug_unique
   ON public.stores (LOWER(booking_slug))
   WHERE booking_slug IS NOT NULL;
