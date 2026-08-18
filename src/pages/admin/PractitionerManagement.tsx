@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Plus, Download, Filter } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { cn } from '@/lib/cn'
 import PractitionerTable from '@/components/practitioners/PractitionerTable'
 import PractitionerForm from '@/components/practitioners/PractitionerForm'
 import PractitionerLeaveManager from '@/components/practitioners/PractitionerLeaveManager'
@@ -16,6 +15,12 @@ interface PractitionerStats {
   active: number
   inactive: number
   onLeaveToday: number
+}
+
+interface PractitionerDetails {
+  id: string
+  name: string
+  profession: string
 }
 
 export default function PractitionerManagement() {
@@ -33,13 +38,9 @@ export default function PractitionerManagement() {
   })
   const [isLoadingStats, setIsLoadingStats] = useState(true)
   const [showDrawer, setShowDrawer] = useState(false)
-  const [selectedPractitioner, setSelectedPractitioner] = useState<any>(null)
+  const [selectedPractitioner, setSelectedPractitioner] = useState<PractitionerDetails>()
 
-  useEffect(() => {
-    loadStats()
-  }, [])
-
-  const loadStats = async () => {
+  async function loadStats() {
     try {
       setIsLoadingStats(true)
 
@@ -88,6 +89,14 @@ export default function PractitionerManagement() {
     }
   }
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadStats()
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [])
+
   const handleAddPractitioner = () => {
     setEditingPractitionerId(null)
     setShowForm(true)
@@ -115,20 +124,14 @@ export default function PractitionerManagement() {
       <div className="bg-white px-6 py-6 shadow-md border-b border-slate-200/50">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-text-primary">從業人員管理</h1>
+            <h1 className="text-3xl font-bold text-text-primary">老師管理</h1>
             <p className="text-sm text-text-secondary mt-2">管理老師、課程指派和休假時間</p>
           </div>
 
           {/* 操作按鈕 */}
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => {}} title="篩選">
-              <Filter className="w-5 h-5" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => {}} title="匯出">
-              <Download className="w-5 h-5" />
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleAddPractitioner}>
-              <Plus className="w-4 h-4" />
+            <Button onClick={handleAddPractitioner}>
+              <Plus size={16} strokeWidth={2} />
               新增老師
             </Button>
           </div>
@@ -221,7 +224,11 @@ export default function PractitionerManagement() {
             onEdit={handleEditPractitioner}
             onManageLeaves={handleManageLeaves}
             onViewDetails={(practitioner) => {
-              setSelectedPractitioner(practitioner)
+              setSelectedPractitioner({
+                id: practitioner.id,
+                name: practitioner.full_name,
+                profession: '老師',
+              })
               setShowDrawer(true)
             }}
             onRefresh={loadStats}
@@ -259,7 +266,7 @@ export default function PractitionerManagement() {
         practitioner={selectedPractitioner}
         onClose={() => {
           setShowDrawer(false)
-          setSelectedPractitioner(null)
+          setSelectedPractitioner(undefined)
         }}
       />
     </div>
