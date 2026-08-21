@@ -1,26 +1,26 @@
 # LINE 串接本機 QA 報告
 
 **日期**：2026-08-21  
-**分支**：`codex/line-integration`  
-**範圍**：LINE 身分驗證、公開預約隔離、官方 LINE 串接生命週期、客戶 LINE 資訊、手機版預約
+**分支**：`codex/line-messaging-notifications`（疊加於 `codex/line-integration`）
+**範圍**：LINE 身分驗證、官方 LINE 串接生命週期、Messaging API 通知、Webhook、outbox／Worker、客戶 LINE 資訊、手機版預約
 
 ## 結論
 
 本次 LINE 串接修改已通過本機資料庫、安全、Edge Function、前端建置與瀏覽器情境測試。一般網頁預約不會信任或建立 LINE 身分；只有經後端向 LINE 驗證的 ID token 才能進入 LINE 專用預約流程。店家可安全解除並重綁官方 LINE；解除不會停用一般網頁預約，也不會刪除歷史預約或客戶資料。
 
-目前尚未部署正式環境。真正的 LINE App 內端到端驗證需要正式 LIFF ID 與 LINE Login Channel ID，應於部署後使用測試 LINE 帳號完成一次驗證，再開放 Rich Menu 入口。
+目前尚未部署正式環境。Messaging API 已完成每店 Vault 憑證、交易通知 outbox、重試 Worker、follow／unfollow Webhook、五種通知開關／範本、管理員測試推播與 LIFF 好友提示。真正的 LINE App 端到端發送仍需要正式 LIFF、LINE Login Channel 與 Messaging API Channel，應於部署後使用測試 LINE 帳號完成一次驗證，再開放 Rich Menu 入口。
 
 ## 自動化檢查
 
 | 項目 | 結果 | 證據 |
 |---|---|---|
-| 從零重建本機資料庫 | 通過 | 所有 migration 成功套用至 `20260821095659_store_line_connection_lifecycle.sql` |
-| pgTAP 資料庫安全測試 | 通過 | 3 個檔案、77 項測試，全部成功 |
-| LINE token 驗證單元測試 | 通過 | 6 項測試、0 失敗 |
+| 從零重建本機資料庫 | 通過 | 所有 migration 成功套用至 `20260821110500_line_messaging_notifications.sql` |
+| pgTAP 資料庫安全測試 | 通過 | 4 個檔案、120 項測試，全部成功 |
+| LINE Edge 共用模組單元測試 | 通過 | 40 項 Deno 測試含型別檢查、0 失敗 |
 | TypeScript | 通過 | `tsc --noEmit` 結束碼 0 |
-| 最新生命週期前端 ESLint | 通過 | 3 個修改檔案，0 錯誤 |
-| 正式前端建置 | 通過 | Vite 完成 2,827 個模組轉換與產物輸出 |
-| Edge Runtime | 通過 | Supabase Edge Runtime 成功載入 `line-booking` |
+| 本次前端 ESLint | 通過 | 設定、客戶渠道、LIFF 與預約頁修改檔案 0 錯誤 |
+| 正式前端建置 | 通過 | Vite 完成 2,828 個模組轉換與產物輸出 |
+| Edge Function 型別檢查 | 通過 | `line-messaging-settings`、`line-webhook`、`line-notification-worker` 全部通過 |
 | Function CORS／輸入防護 | 通過 | 合法來源預檢 200；未知來源 403；空白 payload 400 |
 | 資料庫 lint | 通過（有預期警告） | 只警告公開 RPC 為相容舊簽名而保留、但刻意忽略 3 個不可信 LINE 參數 |
 
@@ -52,6 +52,17 @@
 - 客戶列表可顯示 LINE 標籤與 LINE 顯示名稱。
 - 客戶詳情可顯示驗證狀態、最近驗證時間與遮罩後的 Provider User ID。
 - 電話與渠道身分分開保存；修改電話不會解除 LINE 連結。
+- 客戶詳情會區分「可接收推播」、「未加好友或已封鎖」及「狀態待確認」。
+
+### Messaging API 通知
+
+- Channel Access Token 與 Channel Secret 只會送到 Edge Function，驗證後分別進入 Supabase Vault；公開狀態 RPC 不回傳秘密。
+- 人工預約申請、確認、取消、時間／服務／老師異動及 24 小時提醒都只建立 outbox 工作，不在預約交易中呼叫 LINE。
+- Worker 使用 `FOR UPDATE SKIP LOCKED` 領取工作、工作 UUID 作為 LINE retry key，並將 429／5xx 排入退避重試；不可重試 4xx 與非好友會安全略過。
+- Webhook 在解析 JSON 前先以原始 body 驗證 HMAC-SHA256，並以 event ID 去重 follow／unfollow。
+- 管理員測試推播只能選同店、已驗證且可送達的 LINE 身分；瀏覽器情境已確認建立本機 `pending` outbox 與 `SEND_TEST` 審計紀錄，沒有執行外部 LINE 發送。
+- 設定頁桌機 1280px 與手機 390px 均無水平溢位，通知開關沿用既有 Toggle 元件。
+- LIFF 預約頁會讀取好友狀態；非好友可開啟 LINE 官方加好友／解除封鎖提示，但不會阻擋預約。
 
 ### 手機版一般網頁預約
 
@@ -70,8 +81,9 @@
 ## 上版前／上版後關卡
 
 1. 合併前從 LINE Developers Console 核對正式 Provider ID、LIFF ID 與 LINE Login Channel ID；三者必須屬於同一個 Provider。
-2. 先部署 migration，再部署 `line-booking` Edge Function，最後部署前端。
+2. 先部署 migration，再部署 `line-booking`、`line-messaging-settings`、`line-webhook`、`line-notification-worker`，最後部署前端。
 3. migration 會把既有 LIFF／Channel 設定建立為 V1 且標示「資料待補」；部署後由管理員在後台補齊 Provider 與官方帳號公開資料，不填入 Channel Secret 或 Access Token。
 4. 使用 LINE App 開啟 LIFF 網址，完成一筆測試預約。
 5. 確認正式資料庫只新增該測試客戶的已驗證 LINE 身分與預約，並確認其他店家不可讀取。
 6. 完成正式環境唯讀回歸後，再開放 Rich Menu 給一般客戶。
+7. 依 `LINE_SETUP.md` 建立 Worker secret、Vault secret 與每分鐘 Cron；先使用測試 LINE 身分完成一筆測試推播，再保留排程。
