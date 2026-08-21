@@ -784,14 +784,14 @@ function ChannelsSettings() {
             ariaLabel="切換線上預約"
           />
         </div>
-      </section>
 
-      <div className="flex justify-end">
-        <Button variant="primary" loading={saving} onClick={handleSave}>
-          <Save size={15} />
-          儲存預約設定
-        </Button>
-      </div>
+        <div className="flex justify-end border-t border-slate-100 pt-5">
+          <Button variant="primary" loading={saving} onClick={handleSave}>
+            <Save size={15} />
+            儲存此區設定
+          </Button>
+        </div>
+      </section>
 
       <ConfirmModal
         open={disconnectOpen}
