@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2, Share2, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2, Share2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 import { useAuth } from '@/lib/auth'
@@ -11,6 +11,7 @@ import Modal from '@/components/ui/Modal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import Badge from '@/components/ui/Badge'
 import Spinner from '@/components/ui/Spinner'
+import Toggle from '@/components/ui/Toggle'
 import { toast } from '@/components/ui/Snackbar'
 import LineChannelCard from '@/components/settings/LineChannelCard'
 
@@ -333,16 +334,11 @@ function ChannelsSettings() {
               {bookingEnabled ? '客戶可透過預約連結進行預約' : '預約頁將顯示「暫停接受預約」'}
             </p>
           </div>
-          <button
-            onClick={() => setBookingEnabled(v => !v)}
-            className="shrink-0 transition-transform active:scale-95"
-            aria-label="切換線上預約"
-          >
-            {bookingEnabled
-              ? <ToggleRight size={36} strokeWidth={1.5} className="text-indigo-600" />
-              : <ToggleLeft  size={36} strokeWidth={1.5} className="text-slate-300" />
-            }
-          </button>
+          <Toggle
+            checked={bookingEnabled}
+            onChange={setBookingEnabled}
+            ariaLabel="切換線上預約"
+          />
         </div>
       </section>
 
