@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle, Link2, MessageCircle } from 'lucide-react'
+import { BellOff, CheckCircle, CircleHelp, Link2, MessageCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Badge from '@/components/ui/Badge'
 import Spinner from '@/components/ui/Spinner'
@@ -89,11 +89,22 @@ export default function CustomerChannelIdentities({
         </div>
       ) : (
         <div className="space-y-2">
-          {identities.map(identity => (
-            <div
-              key={identity.id}
-              className="flex items-center gap-3 rounded-2xl border border-green-100 bg-green-50/70 px-4 py-3"
-            >
+          {identities.map(identity => {
+            const notificationState = identity.notifications_reachable === true
+              ? 'reachable'
+              : identity.friend_status === 'not_friend' || identity.notifications_reachable === false
+                ? 'unreachable'
+                : 'unknown'
+
+            return (
+              <div
+                key={identity.id}
+                className={notificationState === 'reachable'
+                  ? 'flex items-center gap-3 rounded-2xl border border-green-100 bg-green-50/70 px-4 py-3'
+                  : notificationState === 'unreachable'
+                    ? 'flex items-center gap-3 rounded-2xl border border-amber-100 bg-amber-50/70 px-4 py-3'
+                    : 'flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3'}
+              >
               {identity.avatar_url ? (
                 <img
                   src={identity.avatar_url}
@@ -114,6 +125,26 @@ export default function CustomerChannelIdentities({
                   </p>
                   <Badge variant="green">{CHANNEL_LABELS[identity.channel]}</Badge>
                 </div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <Badge variant={
+                    notificationState === 'reachable'
+                      ? 'green'
+                      : notificationState === 'unreachable'
+                        ? 'amber'
+                        : 'slate'
+                  }>
+                    {notificationState === 'reachable'
+                      ? '可接收推播'
+                      : notificationState === 'unreachable'
+                        ? '未加好友或已封鎖'
+                        : '推播狀態待確認'}
+                  </Badge>
+                  {identity.friend_status_updated_at && (
+                    <span className="text-[11px] text-slate-400">
+                      更新：{formatLastSeen(identity.friend_status_updated_at)}
+                    </span>
+                  )}
+                </div>
                 <p className="mt-1 font-mono text-[11px] text-slate-400">
                   {maskedProviderUserId(identity.provider_user_id)}
                 </p>
@@ -122,9 +153,16 @@ export default function CustomerChannelIdentities({
                 </p>
               </div>
 
-              <CheckCircle size={17} className="shrink-0 text-green-600" aria-label="身分已驗證" />
-            </div>
-          ))}
+                {notificationState === 'reachable' ? (
+                  <CheckCircle size={17} className="shrink-0 text-green-600" aria-label="可接收推播" />
+                ) : notificationState === 'unreachable' ? (
+                  <BellOff size={17} className="shrink-0 text-amber-600" aria-label="目前無法接收推播" />
+                ) : (
+                  <CircleHelp size={17} className="shrink-0 text-slate-400" aria-label="推播狀態待確認" />
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
