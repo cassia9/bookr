@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2, Share2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -14,6 +14,7 @@ import Spinner from '@/components/ui/Spinner'
 import Toggle from '@/components/ui/Toggle'
 import { toast } from '@/components/ui/Snackbar'
 import LineChannelCard from '@/components/settings/LineChannelCard'
+import type { StoreChannelConnection } from '@/types/database'
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -234,61 +235,195 @@ function BasicSettings() {
 const BOOKING_URL_BASE = 'https://bookr-5ph.pages.dev/book'
 
 function ChannelsSettings() {
-  const [loading, setLoading]         = useState(true)
-  const [saving, setSaving]           = useState(false)
-  const [liffId, setLiffId]           = useState('')
+  const { isAdmin, profile } = useAuth()
+  const storeId = profile?.store_id ?? STORE_ID
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [lineSaving, setLineSaving] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
+  const [providerId, setProviderId] = useState('')
+  const [providerName, setProviderName] = useState('')
+  const [officialAccountName, setOfficialAccountName] = useState('')
+  const [officialAccountBasicId, setOfficialAccountBasicId] = useState('')
+  const [liffId, setLiffId] = useState('')
   const [lineChannelId, setLineChannelId] = useState('')
-  const [storeCode, setStoreCode]     = useState('')
+  const [connectionHistory, setConnectionHistory] = useState<StoreChannelConnection[]>([])
+  const [storeCode, setStoreCode] = useState('')
   const [confirmMode, setConfirmMode] = useState<'manual' | 'auto'>('manual')
   const [bookingEnabled, setBookingEnabled] = useState(true)
 
+  const activeConnection = connectionHistory.find(connection => connection.status === 'active') ?? null
   const bookingUrl = storeCode
     ? `${BOOKING_URL_BASE}/${storeCode}`
-    : `${BOOKING_URL_BASE}/${STORE_ID}`
+    : `${BOOKING_URL_BASE}/${storeId}`
 
-  useEffect(() => {
-    supabase
+  const loadSettings = useCallback(async () => {
+    const { data: store, error: storeError } = await supabase
       .from('stores')
       .select('liff_id, line_login_channel_id, booking_confirmation_mode, booking_enabled, store_code')
-      .eq('id', STORE_ID)
+      .eq('id', storeId)
       .single()
-      .then(({ data }) => {
-        if (data) {
-          setLiffId(data.liff_id ?? '')
-          setLineChannelId(data.line_login_channel_id ?? '')
-          setStoreCode(data.store_code ?? '')
-          setConfirmMode((data.booking_confirmation_mode ?? 'manual') as 'manual' | 'auto')
-          setBookingEnabled(data.booking_enabled ?? true)
-        }
-        setLoading(false)
-      })
-  }, [])
 
-  async function handleSave() {
+    if (storeError) {
+      toast.error('載入渠道設定失敗', storeError.message)
+      setLoading(false)
+      return
+    }
+
+    setStoreCode(store.store_code ?? '')
+    setConfirmMode((store.booking_confirmation_mode ?? 'manual') as 'manual' | 'auto')
+    setBookingEnabled(store.booking_enabled ?? true)
+
+    if (!isAdmin) {
+      setConnectionHistory([])
+      setProviderId('')
+      setProviderName('')
+      setOfficialAccountName('')
+      setOfficialAccountBasicId('')
+      setLiffId('')
+      setLineChannelId('')
+      setLoading(false)
+      return
+    }
+
+    const { data: connections, error: connectionError } = await supabase
+      .from('store_channel_connections')
+      .select('*')
+      .eq('channel', 'line')
+      .order('connection_version', { ascending: false })
+
+    if (connectionError) {
+      toast.error('載入 LINE 串接失敗', connectionError.message)
+      setLoading(false)
+      return
+    }
+
+    const history = connections ?? []
+    const formSource = history.find(connection => connection.status === 'active') ?? history[0]
+    setConnectionHistory(history)
+    setProviderId(formSource?.provider_id ?? '')
+    setProviderName(formSource?.provider_name ?? '')
+    setOfficialAccountName(formSource?.official_account_name ?? '')
+    setOfficialAccountBasicId(formSource?.official_account_basic_id ?? '')
+    setLiffId(formSource?.liff_id ?? store.liff_id ?? '')
+    setLineChannelId(formSource?.login_channel_id ?? store.line_login_channel_id ?? '')
+    setLoading(false)
+  }, [isAdmin, storeId])
+
+  useEffect(() => {
+    // Supabase 是外部資料源；loadSettings 僅在查詢完成後同步畫面狀態。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadSettings()
+  }, [loadSettings])
+
+  function lineConnectionErrorMessage(code: string) {
+    const messages: Record<string, string> = {
+      FORBIDDEN: '只有店家管理員能變更官方 LINE 串接',
+      INVALID_ACTION: '不支援的串接操作',
+      INVALID_INPUT: '請確認 Provider、官方帳號、Channel ID 與 LIFF ID 格式',
+      DISCONNECT_REQUIRED: '更換 Provider、Channel 或 LIFF 前，請先解除目前串接',
+      NOT_CONNECTED: '目前沒有可解除的 LINE 串接',
+    }
+    return messages[code] ?? 'LINE 串接操作失敗，請稍後再試'
+  }
+
+  async function handleLineSave() {
+    const normalizedProviderId = providerId.trim()
+    const normalizedProviderName = providerName.trim()
+    const normalizedOfficialAccountName = officialAccountName.trim()
+    const normalizedOfficialAccountBasicId = officialAccountBasicId.trim()
     const normalizedLiffId = liffId.trim()
     const normalizedChannelId = lineChannelId.trim()
-    if (normalizedLiffId && !/^[0-9]+-[A-Za-z0-9_-]+$/.test(normalizedLiffId)) {
-      toast.error('LINE 設定格式錯誤', '請確認 LIFF ID 格式')
+
+    if (!/^[0-9]{1,32}$/.test(normalizedProviderId)) {
+      toast.error('Provider ID 格式錯誤', 'Provider ID 必須是 1～32 位純數字')
       return
     }
-    if (normalizedChannelId && !/^[0-9]{5,32}$/.test(normalizedChannelId)) {
-      toast.error('LINE 設定格式錯誤', 'LINE Login Channel ID 必須是純數字')
+    if (!normalizedProviderName || !normalizedOfficialAccountName) {
+      toast.error('串接資料未完整', '請填寫 Provider 名稱與官方帳號名稱')
+      return
+    }
+    if (!/^[0-9]{5,32}$/.test(normalizedChannelId)) {
+      toast.error('Channel ID 格式錯誤', 'LINE Login Channel ID 必須是 5～32 位純數字')
+      return
+    }
+    if (!/^[0-9]+-[A-Za-z0-9_-]+$/.test(normalizedLiffId)) {
+      toast.error('LIFF ID 格式錯誤', '請確認 LIFF ID 格式，例如 1234567890-AbCdEfGh')
       return
     }
 
+    setLineSaving(true)
+    const { data, error } = await supabase.rpc('manage_store_line_connection', {
+      p_action: 'connect',
+      p_provider_id: normalizedProviderId,
+      p_provider_name: normalizedProviderName,
+      p_official_account_name: normalizedOfficialAccountName,
+      p_official_account_basic_id: normalizedOfficialAccountBasicId || null,
+      p_line_login_channel_id: normalizedChannelId,
+      p_liff_id: normalizedLiffId,
+    })
+    setLineSaving(false)
+
+    if (error) {
+      toast.error('LINE 串接失敗', error.message)
+      return
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.ok !== true) {
+      const code = data && typeof data === 'object' && !Array.isArray(data)
+        ? String(data.error ?? '')
+        : ''
+      toast.error('LINE 串接失敗', lineConnectionErrorMessage(code))
+      return
+    }
+
+    const detail = data.mode === 'reconnected'
+      ? data.same_provider === true
+        ? '已辨識為相同 Provider，既有客戶 LINE 身分會延續使用'
+        : '已切換至不同 Provider，舊 LINE 身分已安全封存'
+      : activeConnection
+        ? '官方帳號顯示資料已更新'
+        : '官方 LINE 預約入口已啟用'
+    toast.success('LINE 串接已儲存', detail)
+    await loadSettings()
+  }
+
+  async function handleDisconnect() {
+    setDisconnecting(true)
+    const { data, error } = await supabase.rpc('manage_store_line_connection', {
+      p_action: 'disconnect',
+    })
+    setDisconnecting(false)
+
+    if (error) {
+      toast.error('解除串接失敗', error.message)
+      return
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.ok !== true) {
+      const code = data && typeof data === 'object' && !Array.isArray(data)
+        ? String(data.error ?? '')
+        : ''
+      toast.error('解除串接失敗', lineConnectionErrorMessage(code))
+      return
+    }
+
+    setDisconnectOpen(false)
+    toast.success('官方 LINE 已解除', 'LINE 預約入口已停止；一般預約與歷史資料不受影響')
+    await loadSettings()
+  }
+
+  async function handleSave() {
     setSaving(true)
     const { error } = await supabase
       .from('stores')
       .update({
-        liff_id: normalizedLiffId || null,
-        line_login_channel_id: normalizedChannelId || null,
         booking_confirmation_mode: confirmMode,
         booking_enabled: bookingEnabled,
       })
-      .eq('id', STORE_ID)
+      .eq('id', storeId)
     setSaving(false)
     if (error) toast.error('儲存失敗', error.message)
-    else toast.success('渠道設定已儲存')
+    else toast.success('預約設定已儲存')
   }
 
   if (loading) return (
@@ -305,11 +440,25 @@ function ChannelsSettings() {
       </div>
 
       <LineChannelCard
+        providerId={providerId}
+        providerName={providerName}
+        officialAccountName={officialAccountName}
+        officialAccountBasicId={officialAccountBasicId}
         liffId={liffId}
         channelId={lineChannelId}
         bookingUrl={bookingUrl}
+        activeConnection={activeConnection}
+        connectionHistory={connectionHistory}
+        isAdmin={isAdmin}
+        saving={lineSaving}
+        onProviderIdChange={setProviderId}
+        onProviderNameChange={setProviderName}
+        onOfficialAccountNameChange={setOfficialAccountName}
+        onOfficialAccountBasicIdChange={setOfficialAccountBasicId}
         onLiffIdChange={setLiffId}
         onChannelIdChange={setLineChannelId}
+        onSave={handleLineSave}
+        onDisconnect={() => setDisconnectOpen(true)}
       />
 
       {/* 預約設定 */}
@@ -345,9 +494,19 @@ function ChannelsSettings() {
       <div className="flex justify-end">
         <Button variant="primary" loading={saving} onClick={handleSave}>
           <Save size={15} />
-          儲存設定
+          儲存預約設定
         </Button>
       </div>
+
+      <ConfirmModal
+        open={disconnectOpen}
+        onClose={() => setDisconnectOpen(false)}
+        onConfirm={handleDisconnect}
+        loading={disconnecting}
+        title="解除官方 LINE 串接？"
+        description="解除後，客人將無法從目前的 LINE LIFF 入口帶入身分預約。一般網頁預約、歷史預約、客戶資料與舊 LINE 身分紀錄都會保留。"
+        confirmLabel="確認解除串接"
+      />
     </div>
   )
 }
@@ -787,21 +946,21 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* 頁首 */}
-      <div className="bg-white border-b border-slate-200 px-8 py-6">
+      <div className="border-b border-slate-200 bg-white px-4 py-5 sm:px-8 sm:py-6">
         <h1 className="text-2xl font-bold text-slate-900">設定</h1>
         <p className="text-sm text-slate-500 mt-0.5">管理店家設定與成員權限</p>
       </div>
 
-      <div className="flex gap-8 px-8 py-8 max-w-5xl">
+      <div className="flex max-w-5xl flex-col gap-5 px-4 py-6 sm:px-8 lg:flex-row lg:gap-8 lg:py-8">
         {/* 左側分類導航 */}
-        <aside className="w-44 shrink-0">
-          <nav className="space-y-0.5">
+        <aside className="w-full shrink-0 lg:w-44">
+          <nav className="grid grid-cols-3 gap-1 lg:block lg:space-y-0.5">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
                 className={[
-                  'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-colors',
+                  'flex w-full items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-center text-xs font-medium transition-colors sm:text-sm lg:justify-start lg:px-3 lg:text-left',
                   activeTab === id
                     ? 'bg-black text-white'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',

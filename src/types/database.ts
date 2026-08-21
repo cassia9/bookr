@@ -199,6 +199,47 @@ export interface Database {
         }
         Update: Partial<Database['public']['Tables']['customer_channel_identities']['Insert']>
       }
+      store_channel_connections: {
+        Row: {
+          id: string
+          store_id: string
+          channel: 'line' | 'messenger' | 'instagram'
+          provider_id: string | null
+          provider_name: string | null
+          official_account_name: string | null
+          official_account_basic_id: string | null
+          login_channel_id: string
+          liff_id: string
+          connection_version: number
+          status: 'active' | 'disconnected'
+          connected_at: string
+          disconnected_at: string | null
+          created_by: string | null
+          disconnected_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          store_id: string
+          channel: 'line' | 'messenger' | 'instagram'
+          provider_id?: string | null
+          provider_name?: string | null
+          official_account_name?: string | null
+          official_account_basic_id?: string | null
+          login_channel_id: string
+          liff_id: string
+          connection_version?: number
+          status?: 'active' | 'disconnected'
+          connected_at?: string
+          disconnected_at?: string | null
+          created_by?: string | null
+          disconnected_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['store_channel_connections']['Insert']>
+      }
     }
     Views: {
       client_stats: {
@@ -251,6 +292,18 @@ export interface Database {
           service_duration: number
         }>
       }
+      manage_store_line_connection: {
+        Args: {
+          p_action: 'connect' | 'disconnect'
+          p_provider_id?: string | null
+          p_provider_name?: string | null
+          p_official_account_name?: string | null
+          p_official_account_basic_id?: string | null
+          p_line_login_channel_id?: string | null
+          p_liff_id?: string | null
+        }
+        Returns: Json
+      }
     }
   }
 }
@@ -260,6 +313,7 @@ export type Store = Database['public']['Tables']['stores']['Row']
 export type User = Database['public']['Tables']['users']['Row']
 export type Practitioner = Database['public']['Tables']['practitioners']['Row']
 export type Client = Database['public']['Tables']['clients']['Row']
+export type StoreChannelConnection = Database['public']['Tables']['store_channel_connections']['Row']
 export type Service = Database['public']['Tables']['services']['Row']
 export type Booking = Database['public']['Tables']['bookings']['Row']
 
