@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT extensions.plan(33);
+SELECT extensions.plan(34);
 
 -- ------------------------------------------------------------
 -- 權限與 RLS
@@ -544,6 +544,22 @@ SELECT extensions.is(
 );
 
 RESET ROLE;
+
+UPDATE public.notification_settings
+SET booking_rescheduled_enabled = FALSE
+WHERE store_id = '00000000-0000-0000-0000-000000000001';
+
+SELECT extensions.is(
+  (
+    SELECT COUNT(*)
+    FROM public.line_notification_outbox
+    WHERE store_id = '00000000-0000-0000-0000-000000000001'
+      AND event_type = 'booking_rescheduled'
+      AND status IN ('pending', 'retry', 'processing')
+  ),
+  0::BIGINT,
+  '關閉通知開關會略過同類型既有待送工作'
+);
 
 -- 解除官方 LINE 連線後，秘密停用且未送工作全部略過。
 UPDATE public.store_channel_connections

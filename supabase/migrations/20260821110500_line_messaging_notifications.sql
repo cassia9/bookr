@@ -476,6 +476,57 @@ ON public.store_channel_connections
 FOR EACH ROW
 EXECUTE FUNCTION private.disable_line_messaging_on_disconnect();
 
+-- 店家關閉某類通知時，既有待送工作也必須立即失效。
+CREATE OR REPLACE FUNCTION private.skip_disabled_line_notifications()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  UPDATE public.line_notification_outbox AS job
+  SET
+    status = 'skipped',
+    skipped_at = NOW(),
+    error_code = 'notification_disabled',
+    locked_at = NULL,
+    updated_at = NOW()
+  WHERE job.store_id = NEW.store_id
+    AND job.status IN ('pending', 'retry', 'processing')
+    AND (
+      (job.event_type = 'booking_received'::public.notification_type
+        AND OLD.booking_received_enabled AND NOT NEW.booking_received_enabled)
+      OR (job.event_type = 'booking_confirmed'::public.notification_type
+        AND OLD.booking_confirmed_enabled AND NOT NEW.booking_confirmed_enabled)
+      OR (job.event_type = 'booking_cancelled'::public.notification_type
+        AND OLD.booking_cancelled_enabled AND NOT NEW.booking_cancelled_enabled)
+      OR (job.event_type = 'booking_rescheduled'::public.notification_type
+        AND OLD.booking_rescheduled_enabled AND NOT NEW.booking_rescheduled_enabled)
+      OR (job.event_type = 'reminder'::public.notification_type
+        AND OLD.reminder_enabled AND NOT NEW.reminder_enabled)
+    );
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION private.skip_disabled_line_notifications()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+DROP TRIGGER IF EXISTS trg_skip_disabled_line_notifications
+  ON public.notification_settings;
+
+CREATE TRIGGER trg_skip_disabled_line_notifications
+AFTER UPDATE OF
+  booking_received_enabled,
+  booking_confirmed_enabled,
+  booking_cancelled_enabled,
+  booking_rescheduled_enabled,
+  reminder_enabled
+ON public.notification_settings
+FOR EACH ROW
+EXECUTE FUNCTION private.skip_disabled_line_notifications();
+
 -- ------------------------------------------------------------
 -- 憑證設定與去敏狀態 RPC
 -- ------------------------------------------------------------
@@ -842,20 +893,25 @@ AS $$
     store.name,
     store.timezone
   FROM claimed
-  JOIN private.store_line_messaging_credentials AS credential
+  LEFT JOIN private.store_line_messaging_credentials AS credential
     ON credential.store_id = claimed.store_id
-   AND credential.connection_id = claimed.connection_id
-  JOIN vault.decrypted_secrets AS access_secret
+    AND credential.connection_id = claimed.connection_id
+   AND credential.status = 'active'
+   AND credential.disconnected_at IS NULL
+  LEFT JOIN vault.decrypted_secrets AS access_secret
     ON access_secret.id = credential.access_token_secret_id
-  JOIN public.customer_channel_identities AS identity
+  LEFT JOIN public.customer_channel_identities AS identity
     ON identity.id = claimed.identity_id
-   AND identity.store_id = claimed.store_id
-  JOIN public.clients AS client
+    AND identity.store_id = claimed.store_id
+   AND identity.deleted_at IS NULL
+  LEFT JOIN public.clients AS client
     ON client.id = claimed.client_id
-   AND client.store_id = claimed.store_id
+    AND client.store_id = claimed.store_id
+   AND client.deleted_at IS NULL
   LEFT JOIN public.bookings AS booking
     ON booking.id = claimed.booking_id
-   AND booking.store_id = claimed.store_id
+    AND booking.store_id = claimed.store_id
+   AND booking.deleted_at IS NULL
   LEFT JOIN public.services AS service
     ON service.id = booking.service_id
    AND service.store_id = claimed.store_id
@@ -864,9 +920,9 @@ AS $$
    AND practitioner.store_id = claimed.store_id
   JOIN public.stores AS store
     ON store.id = claimed.store_id
-  JOIN public.notification_templates AS template
+  LEFT JOIN public.notification_templates AS template
     ON template.store_id = claimed.store_id
-   AND template.type = claimed.event_type;
+    AND template.type = claimed.event_type;
 $$;
 
 CREATE OR REPLACE FUNCTION public.complete_line_notification_job(
