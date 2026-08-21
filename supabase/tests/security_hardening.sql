@@ -103,8 +103,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('service_role', p.oid, 'EXECUTE')
   ),
-  6::BIGINT,
-  'service_role 只有六支邀請流程 RPC'
+  7::BIGINT,
+  'service_role 只有六支邀請流程 RPC 與一支 LINE 預約 RPC'
 );
 
 SELECT extensions.ok(
@@ -120,7 +120,8 @@ SELECT extensions.ok(
         'release_member_invitation_claim',
         'complete_member_invitation',
         'claim_invitation_email_send',
-        'finish_invitation_email_send'
+        'finish_invitation_email_send',
+        'create_line_booking'
       ])
   ),
   'service_role RPC 全部位於邀請白名單'
@@ -272,14 +273,15 @@ SELECT extensions.is(
         'get_store_by_code',
         'get_store_by_slug',
         'get_available_slots',
-        'create_booking_public'
+        'create_booking_public',
+        'create_line_booking'
       ])
       AND p.prosecdef
       AND COALESCE(p.proconfig, ARRAY[]::TEXT[])
         @> ARRAY['search_path=""']
   ),
-  4::BIGINT,
-  '公開預約 RPC 均為固定安全路徑的 SECURITY DEFINER'
+  5::BIGINT,
+  '公開查詢與兩支預約 RPC 均為固定安全路徑的 SECURITY DEFINER'
 );
 
 SELECT extensions.ok(
