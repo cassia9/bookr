@@ -14,6 +14,13 @@ import Spinner from '@/components/ui/Spinner'
 import Toggle from '@/components/ui/Toggle'
 import { toast } from '@/components/ui/Snackbar'
 import LineChannelCard from '@/components/settings/LineChannelCard'
+import LineMessagingCard from '@/components/settings/LineMessagingCard'
+import type {
+  LineMessagingStatus,
+  TransactionNotificationSettings,
+  TransactionNotificationTemplates,
+  TransactionNotificationType,
+} from '@/components/settings/LineMessagingCard'
 import type { StoreChannelConnection } from '@/types/database'
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
@@ -233,6 +240,36 @@ function BasicSettings() {
 // ── 渠道設定 Tab ─────────────────────────────────────────────────────────────
 
 const BOOKING_URL_BASE = 'https://bookr-5ph.pages.dev/book'
+const TRANSACTION_NOTIFICATION_TYPES: TransactionNotificationType[] = [
+  'booking_received',
+  'booking_confirmed',
+  'booking_cancelled',
+  'booking_rescheduled',
+  'reminder',
+]
+
+const DEFAULT_NOTIFICATION_SETTINGS: TransactionNotificationSettings = {
+  booking_received_enabled: true,
+  booking_confirmed_enabled: true,
+  booking_cancelled_enabled: true,
+  booking_rescheduled_enabled: true,
+  reminder_enabled: true,
+  reminder_minutes_before: 1440,
+}
+
+const DEFAULT_NOTIFICATION_TEMPLATES: TransactionNotificationTemplates = {
+  booking_received: '您好 {{customer_name}}，我們已收到您的預約申請。\n課程：{{service_name}}\n老師：{{practitioner_name}}\n時間：{{start_time}}\n確認後會再通知您。',
+  booking_confirmed: '您好 {{customer_name}}，您的預約已確認。\n課程：{{service_name}}\n老師：{{practitioner_name}}\n時間：{{start_time}}',
+  booking_cancelled: '您好 {{customer_name}}，您的預約已取消。\n課程：{{service_name}}\n原預約時間：{{start_time}}\n如需重新預約，歡迎再次使用預約連結。',
+  booking_rescheduled: '您好 {{customer_name}}，您的預約資料已更新。\n課程：{{service_name}}\n老師：{{practitioner_name}}\n新時間：{{start_time}}',
+  reminder: '提醒您明天的預約！\n課程：{{service_name}}\n老師：{{practitioner_name}}\n時間：{{start_time}}\n請準時到來 😊',
+}
+
+interface MessagingFunctionResponse {
+  ok?: boolean
+  code?: string
+  error?: string
+}
 
 function ChannelsSettings() {
   const { isAdmin, profile } = useAuth()
@@ -240,6 +277,8 @@ function ChannelsSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [lineSaving, setLineSaving] = useState(false)
+  const [messagingConnecting, setMessagingConnecting] = useState(false)
+  const [notificationsSaving, setNotificationsSaving] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
   const [providerId, setProviderId] = useState('')
@@ -249,6 +288,13 @@ function ChannelsSettings() {
   const [liffId, setLiffId] = useState('')
   const [lineChannelId, setLineChannelId] = useState('')
   const [connectionHistory, setConnectionHistory] = useState<StoreChannelConnection[]>([])
+  const [messagingStatus, setMessagingStatus] = useState<LineMessagingStatus | null>(null)
+  const [notificationSettings, setNotificationSettings] = useState<TransactionNotificationSettings>(
+    DEFAULT_NOTIFICATION_SETTINGS,
+  )
+  const [notificationTemplates, setNotificationTemplates] = useState<TransactionNotificationTemplates>(
+    DEFAULT_NOTIFICATION_TEMPLATES,
+  )
   const [storeCode, setStoreCode] = useState('')
   const [confirmMode, setConfirmMode] = useState<'manual' | 'auto'>('manual')
   const [bookingEnabled, setBookingEnabled] = useState(true)
@@ -283,6 +329,7 @@ function ChannelsSettings() {
       setOfficialAccountBasicId('')
       setLiffId('')
       setLineChannelId('')
+      setMessagingStatus(null)
       setLoading(false)
       return
     }
@@ -308,6 +355,57 @@ function ChannelsSettings() {
     setOfficialAccountBasicId(formSource?.official_account_basic_id ?? '')
     setLiffId(formSource?.liff_id ?? store.liff_id ?? '')
     setLineChannelId(formSource?.login_channel_id ?? store.line_login_channel_id ?? '')
+
+    const [messagingResult, notificationSettingResult, notificationTemplateResult] = await Promise.all([
+      supabase.rpc('get_store_line_messaging_status'),
+      supabase
+        .from('notification_settings')
+        .select([
+          'booking_received_enabled',
+          'booking_confirmed_enabled',
+          'booking_cancelled_enabled',
+          'booking_rescheduled_enabled',
+          'reminder_enabled',
+          'reminder_minutes_before',
+        ].join(','))
+        .eq('store_id', storeId)
+        .maybeSingle(),
+      supabase
+        .from('notification_templates')
+        .select('type, content')
+        .in('type', TRANSACTION_NOTIFICATION_TYPES),
+    ])
+
+    if (messagingResult.error) {
+      toast.error('載入 LINE 通知狀態失敗', messagingResult.error.message)
+    } else {
+      setMessagingStatus(messagingResult.data?.[0] ?? null)
+    }
+
+    if (notificationSettingResult.error) {
+      toast.error('載入通知設定失敗', notificationSettingResult.error.message)
+    } else if (notificationSettingResult.data) {
+      setNotificationSettings({
+        booking_received_enabled: notificationSettingResult.data.booking_received_enabled,
+        booking_confirmed_enabled: notificationSettingResult.data.booking_confirmed_enabled,
+        booking_cancelled_enabled: notificationSettingResult.data.booking_cancelled_enabled,
+        booking_rescheduled_enabled: notificationSettingResult.data.booking_rescheduled_enabled,
+        reminder_enabled: notificationSettingResult.data.reminder_enabled,
+        reminder_minutes_before: notificationSettingResult.data.reminder_minutes_before,
+      })
+    }
+
+    if (notificationTemplateResult.error) {
+      toast.error('載入通知範本失敗', notificationTemplateResult.error.message)
+    } else {
+      const templates = { ...DEFAULT_NOTIFICATION_TEMPLATES }
+      for (const template of notificationTemplateResult.data ?? []) {
+        if (TRANSACTION_NOTIFICATION_TYPES.includes(template.type as TransactionNotificationType)) {
+          templates[template.type as TransactionNotificationType] = template.content.replace(/\\n/g, '\n')
+        }
+      }
+      setNotificationTemplates(templates)
+    }
     setLoading(false)
   }, [isAdmin, storeId])
 
@@ -412,6 +510,128 @@ function ChannelsSettings() {
     await loadSettings()
   }
 
+  async function handleMessagingConnect(configuration: {
+    messagingChannelId: string
+    channelAccessToken: string
+    channelSecret: string
+  }) {
+    if (!activeConnection?.provider_id) {
+      toast.error('尚未完成官方 LINE 串接', '請先在上方補齊 Provider ID')
+      return false
+    }
+    if (!/^[0-9]{5,32}$/.test(configuration.messagingChannelId)) {
+      toast.error('Messaging Channel ID 格式錯誤', '請輸入 5～32 位純數字')
+      return false
+    }
+    if (configuration.channelAccessToken.length < 20 || configuration.channelAccessToken.length > 4096) {
+      toast.error('Channel Access Token 格式錯誤', '請重新從 LINE Developers 複製完整 Token')
+      return false
+    }
+    if (configuration.channelSecret.length < 20 || configuration.channelSecret.length > 255) {
+      toast.error('Channel Secret 格式錯誤', '請重新從 LINE Developers 複製完整 Secret')
+      return false
+    }
+
+    setMessagingConnecting(true)
+    try {
+      const { data, error } = await supabase.functions.invoke<MessagingFunctionResponse>(
+        'line-messaging-settings',
+        {
+          body: {
+            action: 'connect',
+            connectionId: activeConnection.id,
+            providerId: activeConnection.provider_id,
+            messagingChannelId: configuration.messagingChannelId,
+            channelAccessToken: configuration.channelAccessToken,
+            channelSecret: configuration.channelSecret,
+          },
+        },
+      )
+
+      if (error) {
+        throw new Error(await functionErrorMessage(error, 'Messaging API 串接失敗'))
+      }
+      if (!data?.ok) {
+        throw new Error(data?.error || 'Messaging API 串接失敗')
+      }
+
+      toast.success('LINE 推播已啟用', 'Token 已驗證並安全保存；請接著設定 Webhook URL')
+      await loadSettings()
+      return true
+    } catch (error) {
+      toast.error('LINE 推播串接失敗', error instanceof Error ? error.message : '請稍後再試')
+      return false
+    } finally {
+      setMessagingConnecting(false)
+    }
+  }
+
+  function validateNotificationTemplates() {
+    const allowedVariables = new Set([
+      'customer_name',
+      'service_name',
+      'practitioner_name',
+      'start_time',
+      'store_name',
+    ])
+    const variablePattern = /{{\s*([a-z_]+)\s*}}/g
+
+    for (const type of TRANSACTION_NOTIFICATION_TYPES) {
+      const template = notificationTemplates[type].trim()
+      if (!template || template.length > 4500) return false
+
+      for (const match of template.matchAll(variablePattern)) {
+        if (!allowedVariables.has(match[1])) return false
+      }
+
+      const withoutVariables = template.replace(variablePattern, '')
+      if (withoutVariables.includes('{{') || withoutVariables.includes('}}')) return false
+    }
+    return true
+  }
+
+  async function handleNotificationsSave() {
+    if (!validateNotificationTemplates()) {
+      toast.error('通知範本格式錯誤', '請只使用畫面列出的變數，並確認大括號完整')
+      return
+    }
+
+    setNotificationsSaving(true)
+    const { error: settingError } = await supabase
+      .from('notification_settings')
+      .update({
+        ...notificationSettings,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('store_id', storeId)
+
+    if (settingError) {
+      setNotificationsSaving(false)
+      toast.error('儲存通知設定失敗', settingError.message)
+      return
+    }
+
+    const templateResults = await Promise.all(
+      TRANSACTION_NOTIFICATION_TYPES.map(type => supabase
+        .from('notification_templates')
+        .update({
+          content: notificationTemplates[type].trim(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('store_id', storeId)
+        .eq('type', type)),
+    )
+    setNotificationsSaving(false)
+
+    const templateError = templateResults.find(result => result.error)?.error
+    if (templateError) {
+      toast.error('儲存通知範本失敗', templateError.message)
+      return
+    }
+
+    toast.success('LINE 通知設定已儲存')
+  }
+
   async function handleSave() {
     setSaving(true)
     const { error } = await supabase
@@ -459,6 +679,29 @@ function ChannelsSettings() {
         onChannelIdChange={setLineChannelId}
         onSave={handleLineSave}
         onDisconnect={() => setDisconnectOpen(true)}
+      />
+
+      <LineMessagingCard
+        activeConnection={activeConnection}
+        messagingStatus={messagingStatus}
+        webhookUrl={messagingStatus
+          ? `${import.meta.env.VITE_SUPABASE_URL}${messagingStatus.webhook_path}`
+          : ''}
+        isAdmin={isAdmin}
+        connecting={messagingConnecting}
+        savingNotifications={notificationsSaving}
+        settings={notificationSettings}
+        templates={notificationTemplates}
+        onConnect={handleMessagingConnect}
+        onSettingChange={(key, value) => setNotificationSettings(current => ({
+          ...current,
+          [key]: value,
+        }))}
+        onTemplateChange={(type, value) => setNotificationTemplates(current => ({
+          ...current,
+          [type]: value,
+        }))}
+        onSaveNotifications={handleNotificationsSave}
       />
 
       {/* 預約設定 */}
