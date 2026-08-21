@@ -29,3 +29,7 @@ verify_jwt = true
 # 再以後端角色呼叫 service-only RPC。
 [functions.line-booking]
 verify_jwt = false
+
+# 由函式內使用 Supabase Auth 驗證登入者，並再次確認店家管理員角色。
+[functions.line-messaging-settings]
+verify_jwt = false
