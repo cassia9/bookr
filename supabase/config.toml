@@ -24,3 +24,20 @@ verify_jwt = false
 
 [functions.send-invitation-email]
 verify_jwt = true
+
+# 公開 LIFF 預約不使用 Supabase Auth JWT；函式內會向 LINE 驗證 ID token，
+# 再以後端角色呼叫 service-only RPC。
+[functions.line-booking]
+verify_jwt = false
+
+# 由函式內使用 Supabase Auth 驗證登入者，並再次確認店家管理員角色。
+[functions.line-messaging-settings]
+verify_jwt = false
+
+# LINE 平台不會攜帶 Supabase JWT；函式必須自行驗證 X-Line-Signature。
+[functions.line-webhook]
+verify_jwt = false
+
+# Cron 使用獨立的強隨機 Worker secret；函式內以 constant-time digest 比對。
+[functions.line-notification-worker]
+verify_jwt = false

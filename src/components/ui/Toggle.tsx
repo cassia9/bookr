@@ -4,14 +4,16 @@ interface Props {
   checked: boolean
   onChange: (val: boolean) => void
   disabled?: boolean
+  ariaLabel?: string
 }
 
-export default function Toggle({ checked, onChange, disabled }: Props) {
+export default function Toggle({ checked, onChange, disabled, ariaLabel }: Props) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(

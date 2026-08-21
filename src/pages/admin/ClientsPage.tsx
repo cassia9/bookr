@@ -16,6 +16,7 @@ import {
 import { format, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
 import { supabase } from '@/lib/supabase'
+import type { PostgrestError } from '@supabase/supabase-js'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import FormField from '@/components/ui/FormField'
@@ -30,6 +31,7 @@ import Pagination from '@/components/ui/Pagination'
 import Spinner from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Snackbar'
 import IconButton from '@/components/ui/IconButton'
+import CustomerChannelIdentities from '@/components/clients/CustomerChannelIdentities'
 import { cn } from '@/lib/cn'
 import type { ClientStat } from '@/types/database'
 
@@ -107,21 +109,14 @@ interface ClientFormProps {
 
 function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
   const isEdit = !!editing
-  const [form, setForm] = useState({ full_name: '', phone: '', gender: 'unknown' as 'male'|'female'|'unknown', notes: '' })
+  const [form, setForm] = useState({
+    full_name: editing?.full_name ?? '',
+    phone: editing?.phone ?? '',
+    gender: editing?.gender ?? 'unknown' as 'male'|'female'|'unknown',
+    notes: editing?.notes ?? '',
+  })
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    if (open) {
-      setForm({
-        full_name: editing?.full_name ?? '',
-        phone:     editing?.phone     ?? '',
-        gender:    editing?.gender    ?? 'unknown',
-        notes:     editing?.notes     ?? '',
-      })
-      setErrors({})
-    }
-  }, [open, editing?.id])
 
   function validate() {
     const e: Record<string, string> = {}
@@ -145,7 +140,7 @@ function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
       store_id:  STORE_ID,
     }
 
-    let error: any
+    let error: PostgrestError | null
 
     if (isEdit) {
       ;({ error } = await supabase.from('clients').update(payload).eq('id', editing!.id))
@@ -262,7 +257,7 @@ interface ClientDrawerProps {
 
 function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh }: ClientDrawerProps) {
   const [bookings,    setBookings]    = useState<ClientBooking[]>([])
-  const [loading,     setLoading]     = useState(false)
+  const [loading,     setLoading]     = useState(Boolean(client))
   const [expandedId,  setExpandedId]  = useState<string | null>(null)
   // 每筆預約的 local edit state: bookingId → {price, notes}
   const [editMap,     setEditMap]     = useState<Record<string, { price: string; notes: string }>>({})
@@ -273,7 +268,6 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
 
   const loadBookings = useCallback(() => {
     if (!client) return
-    setLoading(true)
     supabase
       .rpc('get_client_bookings', { p_client_id: client.id })
       .then(({ data, error }) => {
@@ -297,10 +291,8 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
 
   useEffect(() => {
     if (!open || !client) return
-    setExpandedId(null)
-    setCancelTarget(null)
     loadBookings()
-  }, [open, client?.id])
+  }, [open, client, loadBookings])
 
   // 更新預約狀態
   async function updateStatus(bookingId: string, newStatus: BookingStatus) {
@@ -397,6 +389,12 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
             客戶建立：{fmtDate(client.created_at)}
           </p>
         </div>
+
+        <CustomerChannelIdentities
+          key={client.id}
+          clientId={client.id}
+          active={open}
+        />
 
         {/* 統計卡片 */}
         <div>
@@ -624,6 +622,7 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
 
 export default function ClientsPage() {
   const [clients,  setClients]  = useState<ClientStat[]>([])
+  const [lineProfiles, setLineProfiles] = useState<Record<string, { displayName: string | null; avatarUrl: string | null }>>({})
   const [loading,  setLoading]  = useState(true)
   const [search,   setSearch]   = useState('')
   const [page,     setPage]     = useState(1)
@@ -636,22 +635,44 @@ export default function ClientsPage() {
   const [deleteTarget,  setDeleteTarget]  = useState<ClientStat | null>(null)
 
   const loadClients = useCallback(async () => {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('client_stats')
-      .select('*')
-      .eq('store_id', STORE_ID)
-      .order('created_at', { ascending: false })
+    const [clientsResult, identitiesResult] = await Promise.all([
+      supabase
+        .from('client_stats')
+        .select('*')
+        .eq('store_id', STORE_ID)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('customer_channel_identities')
+        .select('client_id, display_name, avatar_url')
+        .eq('channel', 'line')
+        .is('deleted_at', null),
+    ])
 
-    if (error) {
-      toast.error('無法載入客戶資料', error.message)
+    if (clientsResult.error) {
+      toast.error('無法載入客戶資料', clientsResult.error.message)
     } else {
-      setClients((data as ClientStat[]) ?? [])
+      setClients((clientsResult.data as ClientStat[]) ?? [])
+    }
+
+    if (!identitiesResult.error) {
+      const profiles = Object.fromEntries(
+        (identitiesResult.data ?? []).map(identity => [
+          identity.client_id,
+          {
+            displayName: identity.display_name,
+            avatarUrl: identity.avatar_url,
+          },
+        ]),
+      )
+      setLineProfiles(profiles)
     }
     setLoading(false)
   }, [])
 
-  useEffect(() => { loadClients() }, [loadClients])
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => { void loadClients() })
+    return () => window.cancelAnimationFrame(frame)
+  }, [loadClients])
 
   // 本地搜尋過濾
   const filtered = clients.filter(c => {
@@ -668,9 +689,6 @@ export default function ClientsPage() {
   const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
   const paged       = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-
-  // 搜尋時重置頁碼
-  useEffect(() => { setPage(1) }, [search])
 
   // 全站統計
   const totalSpent    = clients.reduce((s, c) => s + c.total_spent, 0)
@@ -747,7 +765,10 @@ export default function ClientsPage() {
         <div className="max-w-sm">
           <SearchInput
             value={search}
-            onChange={setSearch}
+            onChange={value => {
+              setSearch(value)
+              setPage(1)
+            }}
             placeholder="搜尋姓名、電話或 Email…"
           />
         </div>
@@ -786,7 +807,9 @@ export default function ClientsPage() {
                 </tr>
               </thead>
               <tbody>
-                {paged.map((client, i) => (
+                {paged.map((client, i) => {
+                  const lineProfile = lineProfiles[client.id]
+                  return (
                   <tr
                     key={client.id}
                     onClick={() => openDrawer(client)}
@@ -799,14 +822,28 @@ export default function ClientsPage() {
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         {/* Avatar */}
-                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                          <span className="text-sm font-semibold text-slate-600">
-                            {client.full_name[0]}
-                          </span>
-                        </div>
+                        {lineProfile?.avatarUrl ? (
+                          <img
+                            src={lineProfile.avatarUrl}
+                            alt="LINE 頭像"
+                            className="w-8 h-8 rounded-full object-cover shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                            <span className="text-sm font-semibold text-slate-600">
+                              {client.full_name[0]}
+                            </span>
+                          </div>
+                        )}
                         <div>
-                          <p className="text-sm font-medium text-slate-900">{client.full_name}</p>
-                          {client.notes && (
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-medium text-slate-900">{client.full_name}</p>
+                            {lineProfile && <Badge variant="green">LINE</Badge>}
+                          </div>
+                          {lineProfile?.displayName ? (
+                            <p className="text-xs text-green-600 truncate max-w-[160px]">{lineProfile.displayName}</p>
+                          ) : client.notes && (
                             <p className="text-xs text-slate-400 truncate max-w-[160px]">{client.notes}</p>
                           )}
                         </div>
@@ -843,7 +880,8 @@ export default function ClientsPage() {
                       />
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
 
@@ -858,19 +896,23 @@ export default function ClientsPage() {
       </div>
 
       {/* 新增客戶 Modal */}
-      <ClientFormModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onSaved={handleSaved}
-      />
+      {addOpen && (
+        <ClientFormModal
+          open
+          onClose={() => setAddOpen(false)}
+          onSaved={handleSaved}
+        />
+      )}
 
       {/* 編輯客戶 Modal */}
-      <ClientFormModal
-        open={!!editingClient}
-        onClose={() => setEditingClient(null)}
-        onSaved={handleSaved}
-        editing={editingClient}
-      />
+      {editingClient && (
+        <ClientFormModal
+          open
+          onClose={() => setEditingClient(null)}
+          onSaved={handleSaved}
+          editing={editingClient}
+        />
+      )}
 
       {/* 刪除確認 */}
       <ConfirmModal
@@ -890,6 +932,7 @@ export default function ClientsPage() {
 
       {/* 客戶詳情 Drawer */}
       <ClientDrawer
+        key={drawerClient?.id ?? 'empty-client'}
         client={drawerClient}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}

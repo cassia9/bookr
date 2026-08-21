@@ -62,8 +62,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  16::BIGINT,
-  'authenticated 只有十六支必要 RPC／輔助函式'
+  18::BIGINT,
+  'authenticated 只有十八支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -89,7 +89,9 @@ SELECT extensions.ok(
         'get_dashboard_kpi',
         'get_practitioner_stats',
         'get_service_stats',
-        'get_daily_stats'
+        'get_daily_stats',
+        'manage_store_line_connection',
+        'get_store_line_messaging_status'
       ])
   ),
   'authenticated RPC 全部位於白名單'
@@ -103,8 +105,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('service_role', p.oid, 'EXECUTE')
   ),
-  6::BIGINT,
-  'service_role 只有六支邀請流程 RPC'
+  16::BIGINT,
+  'service_role 只有邀請、LINE 預約與 Messaging Worker 必要 RPC'
 );
 
 SELECT extensions.ok(
@@ -120,10 +122,20 @@ SELECT extensions.ok(
         'release_member_invitation_claim',
         'complete_member_invitation',
         'claim_invitation_email_send',
-        'finish_invitation_email_send'
+        'finish_invitation_email_send',
+        'create_line_booking',
+        'configure_store_line_messaging',
+        'enqueue_line_reminders',
+        'claim_line_notification_jobs',
+        'complete_line_notification_job',
+        'retry_line_notification_job',
+        'skip_line_notification_job',
+        'enqueue_line_test_notification',
+        'get_line_webhook_config',
+        'record_line_webhook_event'
       ])
   ),
-  'service_role RPC 全部位於邀請白名單'
+  'service_role RPC 全部位於後端工作白名單'
 );
 
 SELECT extensions.is(
@@ -162,12 +174,15 @@ SELECT extensions.is(
         'practitioner_blocks',
         'practitioner_leaves',
         'practitioner_services',
-        'audit_logs'
+        'audit_logs',
+        'store_channel_connections',
+        'customer_channel_identities',
+        'line_notification_outbox'
       ])
       AND c.relrowsecurity
   ),
-  13::BIGINT,
-  '十三張核心資料表全部啟用 RLS'
+  16::BIGINT,
+  '十六張核心資料表全部啟用 RLS'
 );
 
 SELECT extensions.is(
@@ -272,14 +287,15 @@ SELECT extensions.is(
         'get_store_by_code',
         'get_store_by_slug',
         'get_available_slots',
-        'create_booking_public'
+        'create_booking_public',
+        'create_line_booking'
       ])
       AND p.prosecdef
       AND COALESCE(p.proconfig, ARRAY[]::TEXT[])
         @> ARRAY['search_path=""']
   ),
-  4::BIGINT,
-  '公開預約 RPC 均為固定安全路徑的 SECURITY DEFINER'
+  5::BIGINT,
+  '公開查詢與兩支預約 RPC 均為固定安全路徑的 SECURITY DEFINER'
 );
 
 SELECT extensions.ok(

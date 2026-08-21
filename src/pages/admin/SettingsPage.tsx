@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2, Share2, Copy, Check, ToggleLeft, ToggleRight } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2, Share2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 import { useAuth } from '@/lib/auth'
@@ -11,7 +11,18 @@ import Modal from '@/components/ui/Modal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import Badge from '@/components/ui/Badge'
 import Spinner from '@/components/ui/Spinner'
+import Toggle from '@/components/ui/Toggle'
 import { toast } from '@/components/ui/Snackbar'
+import LineChannelCard from '@/components/settings/LineChannelCard'
+import LineMessagingCard from '@/components/settings/LineMessagingCard'
+import type {
+  LineMessagingStatus,
+  LineTestRecipient,
+  TransactionNotificationSettings,
+  TransactionNotificationTemplates,
+  TransactionNotificationType,
+} from '@/components/settings/LineMessagingCard'
+import type { StoreChannelConnection } from '@/types/database'
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -230,56 +241,458 @@ function BasicSettings() {
 // ── 渠道設定 Tab ─────────────────────────────────────────────────────────────
 
 const BOOKING_URL_BASE = 'https://bookr-5ph.pages.dev/book'
+const TRANSACTION_NOTIFICATION_TYPES: TransactionNotificationType[] = [
+  'booking_received',
+  'booking_confirmed',
+  'booking_cancelled',
+  'booking_rescheduled',
+  'reminder',
+]
+
+const DEFAULT_NOTIFICATION_SETTINGS: TransactionNotificationSettings = {
+  booking_received_enabled: true,
+  booking_confirmed_enabled: true,
+  booking_cancelled_enabled: true,
+  booking_rescheduled_enabled: true,
+  reminder_enabled: true,
+  reminder_minutes_before: 1440,
+}
+
+const DEFAULT_NOTIFICATION_TEMPLATES: TransactionNotificationTemplates = {
+  booking_received: '您好 {{customer_name}}，我們已收到您的預約申請。\n課程：{{service_name}}\n老師：{{practitioner_name}}\n時間：{{start_time}}\n確認後會再通知您。',
+  booking_confirmed: '您好 {{customer_name}}，您的預約已確認。\n課程：{{service_name}}\n老師：{{practitioner_name}}\n時間：{{start_time}}',
+  booking_cancelled: '您好 {{customer_name}}，您的預約已取消。\n課程：{{service_name}}\n原預約時間：{{start_time}}\n如需重新預約，歡迎再次使用預約連結。',
+  booking_rescheduled: '您好 {{customer_name}}，您的預約資料已更新。\n課程：{{service_name}}\n老師：{{practitioner_name}}\n新時間：{{start_time}}',
+  reminder: '提醒您明天的預約！\n課程：{{service_name}}\n老師：{{practitioner_name}}\n時間：{{start_time}}\n請準時到來 😊',
+}
+
+interface MessagingFunctionResponse {
+  ok?: boolean
+  code?: string
+  error?: string
+}
 
 function ChannelsSettings() {
-  const [loading, setLoading]         = useState(true)
-  const [saving, setSaving]           = useState(false)
-  const [liffId, setLiffId]           = useState('')
-  const [storeCode, setStoreCode]     = useState('')
+  const { isAdmin, profile } = useAuth()
+  const storeId = profile?.store_id ?? STORE_ID
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [lineSaving, setLineSaving] = useState(false)
+  const [messagingConnecting, setMessagingConnecting] = useState(false)
+  const [notificationsSaving, setNotificationsSaving] = useState(false)
+  const [testSending, setTestSending] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
+  const [providerId, setProviderId] = useState('')
+  const [providerName, setProviderName] = useState('')
+  const [officialAccountName, setOfficialAccountName] = useState('')
+  const [officialAccountBasicId, setOfficialAccountBasicId] = useState('')
+  const [liffId, setLiffId] = useState('')
+  const [lineChannelId, setLineChannelId] = useState('')
+  const [connectionHistory, setConnectionHistory] = useState<StoreChannelConnection[]>([])
+  const [messagingStatus, setMessagingStatus] = useState<LineMessagingStatus | null>(null)
+  const [testRecipients, setTestRecipients] = useState<LineTestRecipient[]>([])
+  const [notificationSettings, setNotificationSettings] = useState<TransactionNotificationSettings>(
+    DEFAULT_NOTIFICATION_SETTINGS,
+  )
+  const [notificationTemplates, setNotificationTemplates] = useState<TransactionNotificationTemplates>(
+    DEFAULT_NOTIFICATION_TEMPLATES,
+  )
+  const [storeCode, setStoreCode] = useState('')
   const [confirmMode, setConfirmMode] = useState<'manual' | 'auto'>('manual')
   const [bookingEnabled, setBookingEnabled] = useState(true)
-  const [copied, setCopied]           = useState(false)
 
+  const activeConnection = connectionHistory.find(connection => connection.status === 'active') ?? null
   const bookingUrl = storeCode
     ? `${BOOKING_URL_BASE}/${storeCode}`
-    : `${BOOKING_URL_BASE}/${STORE_ID}`
+    : `${BOOKING_URL_BASE}/${storeId}`
+
+  const loadSettings = useCallback(async () => {
+    const { data: store, error: storeError } = await supabase
+      .from('stores')
+      .select('liff_id, line_login_channel_id, booking_confirmation_mode, booking_enabled, store_code')
+      .eq('id', storeId)
+      .single()
+
+    if (storeError) {
+      toast.error('載入渠道設定失敗', storeError.message)
+      setLoading(false)
+      return
+    }
+
+    setStoreCode(store.store_code ?? '')
+    setConfirmMode((store.booking_confirmation_mode ?? 'manual') as 'manual' | 'auto')
+    setBookingEnabled(store.booking_enabled ?? true)
+
+    if (!isAdmin) {
+      setConnectionHistory([])
+      setProviderId('')
+      setProviderName('')
+      setOfficialAccountName('')
+      setOfficialAccountBasicId('')
+      setLiffId('')
+      setLineChannelId('')
+      setMessagingStatus(null)
+      setTestRecipients([])
+      setLoading(false)
+      return
+    }
+
+    const { data: connections, error: connectionError } = await supabase
+      .from('store_channel_connections')
+      .select('*')
+      .eq('channel', 'line')
+      .order('connection_version', { ascending: false })
+
+    if (connectionError) {
+      toast.error('載入 LINE 串接失敗', connectionError.message)
+      setLoading(false)
+      return
+    }
+
+    const history = connections ?? []
+    const formSource = history.find(connection => connection.status === 'active') ?? history[0]
+    setConnectionHistory(history)
+    setProviderId(formSource?.provider_id ?? '')
+    setProviderName(formSource?.provider_name ?? '')
+    setOfficialAccountName(formSource?.official_account_name ?? '')
+    setOfficialAccountBasicId(formSource?.official_account_basic_id ?? '')
+    setLiffId(formSource?.liff_id ?? store.liff_id ?? '')
+    setLineChannelId(formSource?.login_channel_id ?? store.line_login_channel_id ?? '')
+
+    const [
+      messagingResult,
+      notificationSettingResult,
+      notificationTemplateResult,
+      testRecipientResult,
+    ] = await Promise.all([
+      supabase.rpc('get_store_line_messaging_status'),
+      supabase
+        .from('notification_settings')
+        .select([
+          'booking_received_enabled',
+          'booking_confirmed_enabled',
+          'booking_cancelled_enabled',
+          'booking_rescheduled_enabled',
+          'reminder_enabled',
+          'reminder_minutes_before',
+        ].join(','))
+        .eq('store_id', storeId)
+        .maybeSingle(),
+      supabase
+        .from('notification_templates')
+        .select('type, content')
+        .in('type', TRANSACTION_NOTIFICATION_TYPES),
+      supabase
+        .from('customer_channel_identities')
+        .select('id, display_name')
+        .eq('store_id', storeId)
+        .eq('channel', 'line')
+        .eq('friend_status', 'friend')
+        .eq('notifications_reachable', true)
+        .is('deleted_at', null)
+        .order('display_name'),
+    ])
+
+    if (messagingResult.error) {
+      toast.error('載入 LINE 通知狀態失敗', messagingResult.error.message)
+    } else {
+      setMessagingStatus(messagingResult.data?.[0] ?? null)
+    }
+
+    if (notificationSettingResult.error) {
+      toast.error('載入通知設定失敗', notificationSettingResult.error.message)
+    } else if (notificationSettingResult.data) {
+      setNotificationSettings({
+        booking_received_enabled: notificationSettingResult.data.booking_received_enabled,
+        booking_confirmed_enabled: notificationSettingResult.data.booking_confirmed_enabled,
+        booking_cancelled_enabled: notificationSettingResult.data.booking_cancelled_enabled,
+        booking_rescheduled_enabled: notificationSettingResult.data.booking_rescheduled_enabled,
+        reminder_enabled: notificationSettingResult.data.reminder_enabled,
+        reminder_minutes_before: notificationSettingResult.data.reminder_minutes_before,
+      })
+    }
+
+    if (notificationTemplateResult.error) {
+      toast.error('載入通知範本失敗', notificationTemplateResult.error.message)
+    } else {
+      const templates = { ...DEFAULT_NOTIFICATION_TEMPLATES }
+      for (const template of notificationTemplateResult.data ?? []) {
+        if (TRANSACTION_NOTIFICATION_TYPES.includes(template.type as TransactionNotificationType)) {
+          templates[template.type as TransactionNotificationType] = template.content.replace(/\\n/g, '\n')
+        }
+      }
+      setNotificationTemplates(templates)
+    }
+
+    if (testRecipientResult.error) {
+      toast.error('載入 LINE 測試收件人失敗', testRecipientResult.error.message)
+      setTestRecipients([])
+    } else {
+      setTestRecipients((testRecipientResult.data ?? []).map(identity => ({
+        value: identity.id,
+        label: identity.display_name || `LINE 客戶 ${identity.id.slice(0, 8)}`,
+      })))
+    }
+    setLoading(false)
+  }, [isAdmin, storeId])
 
   useEffect(() => {
-    supabase
-      .from('stores')
-      .select('liff_id, booking_confirmation_mode, booking_enabled, store_code')
-      .eq('id', STORE_ID)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setLiffId(data.liff_id ?? '')
-          setStoreCode(data.store_code ?? '')
-          setConfirmMode((data.booking_confirmation_mode ?? 'manual') as 'manual' | 'auto')
-          setBookingEnabled(data.booking_enabled ?? true)
-        }
-        setLoading(false)
+    // Supabase 是外部資料源；loadSettings 僅在查詢完成後同步畫面狀態。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadSettings()
+  }, [loadSettings])
+
+  function lineConnectionErrorMessage(code: string) {
+    const messages: Record<string, string> = {
+      FORBIDDEN: '只有店家管理員能變更官方 LINE 串接',
+      INVALID_ACTION: '不支援的串接操作',
+      INVALID_INPUT: '請確認 Provider、官方帳號、Channel ID 與 LIFF ID 格式',
+      DISCONNECT_REQUIRED: '更換 Provider、Channel 或 LIFF 前，請先解除目前串接',
+      NOT_CONNECTED: '目前沒有可解除的 LINE 串接',
+    }
+    return messages[code] ?? 'LINE 串接操作失敗，請稍後再試'
+  }
+
+  async function handleLineSave() {
+    const normalizedProviderId = providerId.trim()
+    const normalizedProviderName = providerName.trim()
+    const normalizedOfficialAccountName = officialAccountName.trim()
+    const normalizedOfficialAccountBasicId = officialAccountBasicId.trim()
+    const normalizedLiffId = liffId.trim()
+    const normalizedChannelId = lineChannelId.trim()
+
+    if (!/^[0-9]{1,32}$/.test(normalizedProviderId)) {
+      toast.error('Provider ID 格式錯誤', 'Provider ID 必須是 1～32 位純數字')
+      return
+    }
+    if (!normalizedProviderName || !normalizedOfficialAccountName) {
+      toast.error('串接資料未完整', '請填寫 Provider 名稱與官方帳號名稱')
+      return
+    }
+    if (!/^[0-9]{5,32}$/.test(normalizedChannelId)) {
+      toast.error('Channel ID 格式錯誤', 'LINE Login Channel ID 必須是 5～32 位純數字')
+      return
+    }
+    if (!/^[0-9]+-[A-Za-z0-9_-]+$/.test(normalizedLiffId)) {
+      toast.error('LIFF ID 格式錯誤', '請確認 LIFF ID 格式，例如 1234567890-AbCdEfGh')
+      return
+    }
+
+    setLineSaving(true)
+    const { data, error } = await supabase.rpc('manage_store_line_connection', {
+      p_action: 'connect',
+      p_provider_id: normalizedProviderId,
+      p_provider_name: normalizedProviderName,
+      p_official_account_name: normalizedOfficialAccountName,
+      p_official_account_basic_id: normalizedOfficialAccountBasicId || null,
+      p_line_login_channel_id: normalizedChannelId,
+      p_liff_id: normalizedLiffId,
+    })
+    setLineSaving(false)
+
+    if (error) {
+      toast.error('LINE 串接失敗', error.message)
+      return
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.ok !== true) {
+      const code = data && typeof data === 'object' && !Array.isArray(data)
+        ? String(data.error ?? '')
+        : ''
+      toast.error('LINE 串接失敗', lineConnectionErrorMessage(code))
+      return
+    }
+
+    const detail = data.mode === 'reconnected'
+      ? data.same_provider === true
+        ? '已辨識為相同 Provider，既有客戶 LINE 身分會延續使用'
+        : '已切換至不同 Provider，舊 LINE 身分已安全封存'
+      : activeConnection
+        ? '官方帳號顯示資料已更新'
+        : '官方 LINE 預約入口已啟用'
+    toast.success('LINE 串接已儲存', detail)
+    await loadSettings()
+  }
+
+  async function handleDisconnect() {
+    setDisconnecting(true)
+    const { data, error } = await supabase.rpc('manage_store_line_connection', {
+      p_action: 'disconnect',
+    })
+    setDisconnecting(false)
+
+    if (error) {
+      toast.error('解除串接失敗', error.message)
+      return
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.ok !== true) {
+      const code = data && typeof data === 'object' && !Array.isArray(data)
+        ? String(data.error ?? '')
+        : ''
+      toast.error('解除串接失敗', lineConnectionErrorMessage(code))
+      return
+    }
+
+    setDisconnectOpen(false)
+    toast.success('官方 LINE 已解除', 'LINE 預約入口已停止；一般預約與歷史資料不受影響')
+    await loadSettings()
+  }
+
+  async function handleMessagingConnect(configuration: {
+    messagingChannelId: string
+    channelAccessToken: string
+    channelSecret: string
+  }) {
+    if (!activeConnection?.provider_id) {
+      toast.error('尚未完成官方 LINE 串接', '請先在上方補齊 Provider ID')
+      return false
+    }
+    if (!/^[0-9]{5,32}$/.test(configuration.messagingChannelId)) {
+      toast.error('Messaging Channel ID 格式錯誤', '請輸入 5～32 位純數字')
+      return false
+    }
+    if (configuration.channelAccessToken.length < 20 || configuration.channelAccessToken.length > 4096) {
+      toast.error('Channel Access Token 格式錯誤', '請重新從 LINE Developers 複製完整 Token')
+      return false
+    }
+    if (configuration.channelSecret.length < 20 || configuration.channelSecret.length > 255) {
+      toast.error('Channel Secret 格式錯誤', '請重新從 LINE Developers 複製完整 Secret')
+      return false
+    }
+
+    setMessagingConnecting(true)
+    try {
+      const { data, error } = await supabase.functions.invoke<MessagingFunctionResponse>(
+        'line-messaging-settings',
+        {
+          body: {
+            action: 'connect',
+            connectionId: activeConnection.id,
+            providerId: activeConnection.provider_id,
+            messagingChannelId: configuration.messagingChannelId,
+            channelAccessToken: configuration.channelAccessToken,
+            channelSecret: configuration.channelSecret,
+          },
+        },
+      )
+
+      if (error) {
+        throw new Error(await functionErrorMessage(error, 'Messaging API 串接失敗'))
+      }
+      if (!data?.ok) {
+        throw new Error(data?.error || 'Messaging API 串接失敗')
+      }
+
+      toast.success('LINE 推播已啟用', 'Token 已驗證並安全保存；請接著設定 Webhook URL')
+      await loadSettings()
+      return true
+    } catch (error) {
+      toast.error('LINE 推播串接失敗', error instanceof Error ? error.message : '請稍後再試')
+      return false
+    } finally {
+      setMessagingConnecting(false)
+    }
+  }
+
+  function validateNotificationTemplates() {
+    const allowedVariables = new Set([
+      'customer_name',
+      'service_name',
+      'practitioner_name',
+      'start_time',
+      'store_name',
+    ])
+    const variablePattern = /{{\s*([a-z_]+)\s*}}/g
+
+    for (const type of TRANSACTION_NOTIFICATION_TYPES) {
+      const template = notificationTemplates[type].trim()
+      if (!template || template.length > 4500) return false
+
+      for (const match of template.matchAll(variablePattern)) {
+        if (!allowedVariables.has(match[1])) return false
+      }
+
+      const withoutVariables = template.replace(variablePattern, '')
+      if (withoutVariables.includes('{{') || withoutVariables.includes('}}')) return false
+    }
+    return true
+  }
+
+  async function handleNotificationsSave() {
+    if (!validateNotificationTemplates()) {
+      toast.error('通知範本格式錯誤', '請只使用畫面列出的變數，並確認大括號完整')
+      return
+    }
+
+    setNotificationsSaving(true)
+    const { error: settingError } = await supabase
+      .from('notification_settings')
+      .update({
+        ...notificationSettings,
+        updated_at: new Date().toISOString(),
       })
-  }, [])
+      .eq('store_id', storeId)
+
+    if (settingError) {
+      setNotificationsSaving(false)
+      toast.error('儲存通知設定失敗', settingError.message)
+      return
+    }
+
+    const templateResults = await Promise.all(
+      TRANSACTION_NOTIFICATION_TYPES.map(type => supabase
+        .from('notification_templates')
+        .update({
+          content: notificationTemplates[type].trim(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('store_id', storeId)
+        .eq('type', type)),
+    )
+    setNotificationsSaving(false)
+
+    const templateError = templateResults.find(result => result.error)?.error
+    if (templateError) {
+      toast.error('儲存通知範本失敗', templateError.message)
+      return
+    }
+
+    toast.success('LINE 通知設定已儲存')
+  }
+
+  async function handleTestNotification(identityId: string) {
+    setTestSending(true)
+    try {
+      const { data, error } = await supabase.functions.invoke<MessagingFunctionResponse>(
+        'line-messaging-settings',
+        { body: { action: 'test', identityId } },
+      )
+
+      if (error) throw new Error(await functionErrorMessage(error, '測試推播建立失敗'))
+      if (!data?.ok) throw new Error(data?.error || '測試推播建立失敗')
+
+      toast.success('測試推播已加入佇列', '背景服務會在下一輪處理並留下發送結果')
+      return true
+    } catch (error) {
+      toast.error('無法建立測試推播', error instanceof Error ? error.message : '請稍後再試')
+      return false
+    } finally {
+      setTestSending(false)
+    }
+  }
 
   async function handleSave() {
     setSaving(true)
     const { error } = await supabase
       .from('stores')
       .update({
-        liff_id: liffId.trim() || null,
         booking_confirmation_mode: confirmMode,
         booking_enabled: bookingEnabled,
       })
-      .eq('id', STORE_ID)
+      .eq('id', storeId)
     setSaving(false)
     if (error) toast.error('儲存失敗', error.message)
-    else toast.success('渠道設定已儲存')
-  }
-
-  async function handleCopy() {
-    await navigator.clipboard.writeText(bookingUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    else toast.success('預約設定已儲存')
   }
 
   if (loading) return (
@@ -295,44 +708,53 @@ function ChannelsSettings() {
         <p className="text-sm text-slate-500 mt-0.5">設定客戶端預約頁面的整合選項與行為</p>
       </div>
 
-      {/* LINE 渠道 */}
-      <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#06C755] flex items-center justify-center shrink-0">
-            <span className="text-white text-xs font-bold leading-none">L</span>
-          </div>
-          <h3 className="text-sm font-semibold text-slate-700">LINE 渠道</h3>
-        </div>
+      <LineChannelCard
+        providerId={providerId}
+        providerName={providerName}
+        officialAccountName={officialAccountName}
+        officialAccountBasicId={officialAccountBasicId}
+        liffId={liffId}
+        channelId={lineChannelId}
+        bookingUrl={bookingUrl}
+        activeConnection={activeConnection}
+        connectionHistory={connectionHistory}
+        isAdmin={isAdmin}
+        saving={lineSaving}
+        onProviderIdChange={setProviderId}
+        onProviderNameChange={setProviderName}
+        onOfficialAccountNameChange={setOfficialAccountName}
+        onOfficialAccountBasicIdChange={setOfficialAccountBasicId}
+        onLiffIdChange={setLiffId}
+        onChannelIdChange={setLineChannelId}
+        onSave={handleLineSave}
+        onDisconnect={() => setDisconnectOpen(true)}
+      />
 
-        <FormField
-          label="LIFF ID"
-          hint="在 LINE Developers Console 建立 LIFF App 後取得"
-        >
-          <Input
-            type="text"
-            value={liffId}
-            onChange={e => setLiffId(e.target.value)}
-            placeholder="1234567890-xxxxxxxx"
-          />
-        </FormField>
-
-        <div>
-          <p className="text-xs font-medium text-slate-500 mb-1.5">客戶預約連結</p>
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl">
-            <span className="text-sm text-slate-600 flex-1 truncate font-mono text-xs">{bookingUrl}</span>
-            <button
-              onClick={handleCopy}
-              className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 transition-all"
-            >
-              {copied
-                ? <><Check size={12} className="text-green-500" /><span className="text-green-600">已複製！</span></>
-                : <><Copy size={12} /><span>複製</span></>
-              }
-            </button>
-          </div>
-          <p className="text-xs text-slate-400 mt-1.5">將此連結貼到 LINE 官方帳號的選單或訊息中</p>
-        </div>
-      </section>
+      <LineMessagingCard
+        activeConnection={activeConnection}
+        messagingStatus={messagingStatus}
+        webhookUrl={messagingStatus
+          ? `${import.meta.env.VITE_SUPABASE_URL}${messagingStatus.webhook_path}`
+          : ''}
+        isAdmin={isAdmin}
+        connecting={messagingConnecting}
+        savingNotifications={notificationsSaving}
+        sendingTest={testSending}
+        testRecipients={testRecipients}
+        settings={notificationSettings}
+        templates={notificationTemplates}
+        onConnect={handleMessagingConnect}
+        onSettingChange={(key, value) => setNotificationSettings(current => ({
+          ...current,
+          [key]: value,
+        }))}
+        onTemplateChange={(type, value) => setNotificationTemplates(current => ({
+          ...current,
+          [type]: value,
+        }))}
+        onSaveNotifications={handleNotificationsSave}
+        onSendTest={handleTestNotification}
+      />
 
       {/* 預約設定 */}
       <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
@@ -356,25 +778,30 @@ function ChannelsSettings() {
               {bookingEnabled ? '客戶可透過預約連結進行預約' : '預約頁將顯示「暫停接受預約」'}
             </p>
           </div>
-          <button
-            onClick={() => setBookingEnabled(v => !v)}
-            className="shrink-0 transition-transform active:scale-95"
-            aria-label="切換線上預約"
-          >
-            {bookingEnabled
-              ? <ToggleRight size={36} strokeWidth={1.5} className="text-indigo-600" />
-              : <ToggleLeft  size={36} strokeWidth={1.5} className="text-slate-300" />
-            }
-          </button>
+          <Toggle
+            checked={bookingEnabled}
+            onChange={setBookingEnabled}
+            ariaLabel="切換線上預約"
+          />
+        </div>
+
+        <div className="flex justify-end border-t border-slate-100 pt-5">
+          <Button variant="primary" loading={saving} onClick={handleSave}>
+            <Save size={15} />
+            儲存此區設定
+          </Button>
         </div>
       </section>
 
-      <div className="flex justify-end">
-        <Button variant="primary" loading={saving} onClick={handleSave}>
-          <Save size={15} />
-          儲存設定
-        </Button>
-      </div>
+      <ConfirmModal
+        open={disconnectOpen}
+        onClose={() => setDisconnectOpen(false)}
+        onConfirm={handleDisconnect}
+        loading={disconnecting}
+        title="解除官方 LINE 串接？"
+        description="解除後，客人將無法從目前的 LINE LIFF 入口帶入身分預約。一般網頁預約、歷史預約、客戶資料與舊 LINE 身分紀錄都會保留。"
+        confirmLabel="確認解除串接"
+      />
     </div>
   )
 }
@@ -814,21 +1241,21 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* 頁首 */}
-      <div className="bg-white border-b border-slate-200 px-8 py-6">
+      <div className="border-b border-slate-200 bg-white px-4 py-5 sm:px-8 sm:py-6">
         <h1 className="text-2xl font-bold text-slate-900">設定</h1>
         <p className="text-sm text-slate-500 mt-0.5">管理店家設定與成員權限</p>
       </div>
 
-      <div className="flex gap-8 px-8 py-8 max-w-5xl">
+      <div className="flex max-w-5xl flex-col gap-5 px-4 py-6 sm:px-8 lg:flex-row lg:gap-8 lg:py-8">
         {/* 左側分類導航 */}
-        <aside className="w-44 shrink-0">
-          <nav className="space-y-0.5">
+        <aside className="w-full shrink-0 lg:w-44">
+          <nav className="grid grid-cols-3 gap-1 lg:block lg:space-y-0.5">
             {TABS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
                 className={[
-                  'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-colors',
+                  'flex w-full items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-center text-xs font-medium transition-colors sm:text-sm lg:justify-start lg:px-3 lg:text-left',
                   activeTab === id
                     ? 'bg-black text-white'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',

@@ -3,13 +3,20 @@ import { useParams } from 'react-router-dom'
 import { format, addMonths, isSameDay, parseISO, addHours } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
 import { ChevronLeft, ChevronRight, CheckCircle, User, Clock,
-         CalendarDays, Phone, MessageSquare, MapPin, AlertCircle } from 'lucide-react'
-import liff from '@line/liff'
+         CalendarDays, Phone, MessageSquare, MapPin, AlertCircle, UserPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
+import {
+  getCurrentLineIdToken,
+  initializeLineBooking,
+  requestLineFriendship,
+  type LineBookingStatus,
+  type LineFriendStatus,
+} from '@/lib/line/liff'
 import Input from '@/components/ui/Input'
 import FormField from '@/components/ui/FormField'
 import Button from '@/components/ui/Button'
+import Textarea from '@/components/ui/Textarea'
 import type { Service, Practitioner } from '@/types/database'
 
 const STEP_LABELS = ['服務', '人員', '日期', '時段', '資料']
@@ -45,7 +52,38 @@ interface BookingDraft {
   notes:              string
 }
 
-type BookingSource = 'line' | 'messenger' | 'web'
+interface BookingResult {
+  ok: boolean
+  error?: string
+  code?: string
+  id?: string
+  status?: string
+}
+
+async function getFunctionErrorResult(error: unknown): Promise<BookingResult | null> {
+  const context = (error as { context?: unknown } | null)?.context
+  if (!(context instanceof Response)) return null
+
+  try {
+    return await context.clone().json() as BookingResult
+  } catch {
+    return null
+  }
+}
+
+function bookingErrorMessage(code?: string) {
+  if (code === 'CONFLICT') return '此時段剛被預約，請返回重新選擇時段'
+  if (code === 'PHONE_LINK_CONFLICT') return '此電話已連結其他 LINE 帳號，請聯絡店家協助確認'
+  if (code === 'PHONE_ALREADY_REGISTERED') return '新電話已由其他客戶使用，請聯絡店家協助修改'
+  if (code === 'LINE_TOKEN_REJECTED' || code === 'INVALID_LINE_TOKEN') {
+    return 'LINE 登入已失效，請關閉此頁後從店家 LINE 重新開啟'
+  }
+  if (code === 'LINE_VERIFY_UNAVAILABLE') return 'LINE 驗證暫時無法使用，請稍後再試'
+  if (code === 'LINE_NOT_CONFIGURED' || code === 'LINE_CHANNEL_NOT_CONFIGURED') {
+    return '店家 LINE 預約尚未完成設定，請聯絡店家'
+  }
+  return '預約失敗，請稍後再試'
+}
 
 // ── Main Page ──────────────────────────────────────────────────────────
 
@@ -53,18 +91,23 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export default function BookingPage() {
   const { storeId: storeParam } = useParams<{ storeId: string }>()
-  const [resolvedStoreId, setResolvedStoreId] = useState<string | null>(null)
+  const [resolvedStoreId, setResolvedStoreId] = useState<string | null>(
+    storeParam && UUID_RE.test(storeParam) ? storeParam : null,
+  )
 
   const [step, setStep] = useState(1)
   const [store, setStore] = useState<StoreInfo | null>(null)
-  const [storeError, setStoreError] = useState('')
+  const [storeError, setStoreError] = useState(storeParam ? '' : '無效的預約連結')
   const [services, setServices] = useState<Service[]>([])
   const [practitioners, setPractitioners] = useState<Practitioner[]>([])
 
   // LINE LIFF state
   const [lineAvatar, setLineAvatar] = useState<string | null>(null)
-  const [lineUserId, setLineUserId] = useState<string | null>(null)
-  const [source, setSource] = useState<BookingSource>('web')
+  const [lineDisplayName, setLineDisplayName] = useState('')
+  const [lineIdToken, setLineIdToken] = useState<string | null>(null)
+  const [lineStatus, setLineStatus] = useState<LineBookingStatus>('idle')
+  const [lineFriendStatus, setLineFriendStatus] = useState<LineFriendStatus>('unknown')
+  const [requestingLineFriend, setRequestingLineFriend] = useState(false)
 
   const [draft, setDraft] = useState<BookingDraft>({
     service: null, practitionerChoice: null,
@@ -78,16 +121,46 @@ export default function BookingPage() {
 
   // ── 解析 storeParam（UUID 或 slug）──────────────────────────────────
   useEffect(() => {
-    if (!storeParam) { setStoreError('無效的預約連結'); return }
-    if (UUID_RE.test(storeParam)) {
-      setResolvedStoreId(storeParam)
-    } else {
+    if (storeParam && !UUID_RE.test(storeParam)) {
       supabase.rpc('get_store_by_code', { p_code: storeParam }).then(({ data }) => {
         if (!data) { setStoreError('找不到此預約頁面'); return }
         setResolvedStoreId(data as string)
       })
     }
   }, [storeParam])
+
+  const initLiff = useCallback(async (liffId: string | null) => {
+    if (!liffId) {
+      setLineStatus('idle')
+      return
+    }
+
+    setLineStatus('initializing')
+    const session = await initializeLineBooking(liffId)
+    setLineStatus(session.status)
+
+    if (session.status !== 'connected') {
+      setLineIdToken(null)
+      setLineFriendStatus('unknown')
+      return
+    }
+
+    setLineIdToken(session.idToken)
+    setLineAvatar(session.pictureUrl)
+    setLineDisplayName(session.displayName)
+    setLineFriendStatus(session.friendStatus)
+    setDraft(current => ({
+      ...current,
+      name: current.name || session.displayName,
+    }))
+  }, [])
+
+  async function handleRequestLineFriendship() {
+    setRequestingLineFriend(true)
+    const isFriend = await requestLineFriendship()
+    setLineFriendStatus(isFriend ? 'friend' : 'not_friend')
+    setRequestingLineFriend(false)
+  }
 
   // ── Load store + services + practitioners ──────────────────────────
   useEffect(() => {
@@ -121,27 +194,7 @@ export default function BookingPage() {
       // 嘗試初始化 LINE LIFF
       initLiff(s.liff_id)
     })
-  }, [resolvedStoreId])
-
-  // ── LINE LIFF 初始化 ────────────────────────────────────────────────
-  async function initLiff(liffId: string | null) {
-    if (!liffId) return
-    const isLiffEnv =
-      window.location.href.includes('liff.state') ||
-      navigator.userAgent.includes('Line')
-    if (!isLiffEnv) return
-    try {
-      await liff.init({ liffId })
-      if (!liff.isLoggedIn()) { liff.login(); return }
-      const profile = await liff.getProfile()
-      setDraft(d => ({ ...d, name: d.name || profile.displayName }))
-      setLineAvatar(profile.pictureUrl ?? null)
-      setLineUserId(profile.userId)
-      setSource('line')
-    } catch (err) {
-      console.warn('LIFF init failed:', err)
-    }
-  }
+  }, [resolvedStoreId, initLiff])
 
   // ── Submit ─────────────────────────────────────────────────────────
   async function handleSubmit() {
@@ -151,30 +204,54 @@ export default function BookingPage() {
 
     const startTs = new Date(`${draft.date}T${draft.slot.slot_time}:00`)
 
-    const { data, error } = await supabase.rpc('create_booking_public', {
-      p_full_name:          draft.name.trim(),
-      p_phone:              draft.phone.trim(),
-      p_service_id:         draft.service.id,
-      p_practitioner_id:    draft.slot.practitioner_id,
-      p_start_time:         startTs.toISOString(),
-      p_notes:              draft.notes.trim() || null,
-      p_store_id:           resolvedStoreId,
-      p_source:             source,
-      p_client_line_id:     lineUserId,
-      p_client_picture_url: lineAvatar,
-    })
+    let result: BookingResult | null = null
+
+    if (lineStatus === 'connected') {
+      const currentIdToken = getCurrentLineIdToken() || lineIdToken
+      if (!currentIdToken) {
+        setSubmitting(false)
+        setSubmitError('LINE 登入已失效，請關閉此頁後從店家 LINE 重新開啟')
+        return
+      }
+
+      const { data, error } = await supabase.functions.invoke<BookingResult>('line-booking', {
+        body: {
+          storeId: resolvedStoreId,
+          fullName: draft.name.trim(),
+          phone: draft.phone.trim(),
+          serviceId: draft.service.id,
+          practitionerId: draft.slot.practitioner_id,
+          startTime: startTs.toISOString(),
+          notes: draft.notes.trim() || null,
+          idToken: currentIdToken,
+        },
+      })
+
+      result = data
+      if (error) result = await getFunctionErrorResult(error)
+    } else {
+      const { data, error } = await supabase.rpc('create_booking_public', {
+        p_full_name:          draft.name.trim(),
+        p_phone:              draft.phone.trim(),
+        p_service_id:         draft.service.id,
+        p_practitioner_id:    draft.slot.practitioner_id,
+        p_start_time:         startTs.toISOString(),
+        p_notes:              draft.notes.trim() || null,
+        p_store_id:           resolvedStoreId,
+        p_source:             'web',
+        p_client_line_id:     null,
+        p_client_picture_url: null,
+      })
+
+      if (!error) result = data as BookingResult
+    }
 
     setSubmitting(false)
 
-    if (error) { setSubmitError('系統錯誤，請稍後再試'); return }
+    if (!result) { setSubmitError('系統錯誤，請稍後再試'); return }
 
-    const result = data as { ok: boolean; error?: string; id?: string; status?: string }
     if (!result.ok) {
-      if (result.error === 'CONFLICT') {
-        setSubmitError('此時段剛被預約，請返回重新選擇時段')
-      } else {
-        setSubmitError('預約失敗，請稍後再試')
-      }
+      setSubmitError(bookingErrorMessage(result.code || result.error))
       return
     }
 
@@ -303,8 +380,12 @@ export default function BookingPage() {
           <Step5Info
             draft={draft}
             lineAvatar={lineAvatar}
+            lineStatus={lineStatus}
+            lineFriendStatus={lineFriendStatus}
+            requestingLineFriend={requestingLineFriend}
             onChange={(k, v) => setDraft(d => ({ ...d, [k]: v }))}
             onSubmit={handleSubmit}
+            onRequestLineFriendship={handleRequestLineFriendship}
             onBack={() => setStep(4)}
             submitting={submitting}
             error={submitError}
@@ -317,7 +398,15 @@ export default function BookingPage() {
             confirmedId={confirmedId}
             confirmedStatus={confirmedStatus}
             onRebook={() => {
-              setDraft({ service: null, practitionerChoice: null, date: '', slot: null, name: '', phone: '', notes: '' })
+              setDraft({
+                service: null,
+                practitionerChoice: null,
+                date: '',
+                slot: null,
+                name: lineStatus === 'connected' ? lineDisplayName : '',
+                phone: '',
+                notes: '',
+              })
               setConfirmedId('')
               setSubmitError('')
               setStep(1)
@@ -424,8 +513,8 @@ function Step2Practitioner({ practitioners, selected, onSelect, onBack }: {
               </div>
               <div>
                 <p className="font-semibold text-slate-900">{p.full_name}</p>
-                {(p as any).title && (
-                  <p className="text-xs text-slate-400 mt-0.5">{(p as any).title}</p>
+                {p.title && (
+                  <p className="text-xs text-slate-400 mt-0.5">{p.title}</p>
                 )}
               </div>
             </div>
@@ -512,6 +601,36 @@ function Step3Date({ onSelect, onBack }: {
 
 // ── Step 4: 選擇時段 ───────────────────────────────────────────────────
 
+function SlotGroup({ label, items, selected, onSelect }: {
+  label: string
+  items: SlotItem[]
+  selected: SlotItem | null
+  onSelect: (slot: SlotItem) => void
+}) {
+  if (items.length === 0) return null
+  return (
+    <div className="mb-5">
+      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">{label}</p>
+      <div className="grid grid-cols-3 gap-2">
+        {items.map(slot => (
+          <button
+            key={`${slot.slot_time}-${slot.practitioner_id}`}
+            onClick={() => onSelect(slot)}
+            className={cn(
+              'py-3.5 rounded-2xl border text-sm font-semibold transition-all active:scale-95',
+              selected?.slot_time === slot.slot_time && selected?.practitioner_id === slot.practitioner_id
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200'
+                : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300 hover:text-indigo-600',
+            )}
+          >
+            <span className="tabular-nums">{slot.slot_time}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Step4Time({ storeId, date, serviceId, practitionerId, selected, onSelect, onBack }: {
   storeId:          string
   date:             string
@@ -524,50 +643,31 @@ function Step4Time({ storeId, date, serviceId, practitionerId, selected, onSelec
   const [slots, setSlots]     = useState<SlotItem[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchSlots = useCallback(async () => {
-    setLoading(true)
-    const { data } = await supabase.rpc('get_available_slots', {
-      p_date:            date,
-      p_service_id:      serviceId,
-      p_practitioner_id: practitionerId,
-      p_store_id:        storeId,
-    })
-    setSlots((data ?? []) as SlotItem[])
-    setLoading(false)
-  }, [storeId, date, serviceId, practitionerId])
+  useEffect(() => {
+    let active = true
 
-  useEffect(() => { fetchSlots() }, [fetchSlots])
+    async function loadSlots() {
+      const { data } = await supabase.rpc('get_available_slots', {
+        p_date:            date,
+        p_service_id:      serviceId,
+        p_practitioner_id: practitionerId,
+        p_store_id:        storeId,
+      })
+
+      if (!active) return
+      setSlots((data ?? []) as SlotItem[])
+      setLoading(false)
+    }
+
+    void loadSlots()
+    return () => { active = false }
+  }, [storeId, date, serviceId, practitionerId])
 
   const dateLabel = format(parseISO(date), 'M月d日（EEE）', { locale: zhTW })
 
   const morning   = slots.filter(s => parseInt(s.slot_time) < 12)
   const afternoon = slots.filter(s => parseInt(s.slot_time) >= 12 && parseInt(s.slot_time) < 17)
   const evening   = slots.filter(s => parseInt(s.slot_time) >= 17)
-
-  function SlotGroup({ label, items }: { label: string; items: SlotItem[] }) {
-    if (items.length === 0) return null
-    return (
-      <div className="mb-5">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">{label}</p>
-        <div className="grid grid-cols-3 gap-2">
-          {items.map(slot => (
-            <button
-              key={`${slot.slot_time}-${slot.practitioner_id}`}
-              onClick={() => onSelect(slot)}
-              className={cn(
-                'py-3.5 rounded-2xl border text-sm font-semibold transition-all active:scale-95',
-                selected?.slot_time === slot.slot_time && selected?.practitioner_id === slot.practitioner_id
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200'
-                  : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300 hover:text-indigo-600',
-              )}
-            >
-              <span className="tabular-nums">{slot.slot_time}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div>
@@ -591,9 +691,9 @@ function Step4Time({ storeId, date, serviceId, practitionerId, selected, onSelec
         </div>
       ) : (
         <>
-          <SlotGroup label="上午" items={morning} />
-          <SlotGroup label="下午" items={afternoon} />
-          <SlotGroup label="晚間" items={evening} />
+          <SlotGroup label="上午" items={morning} selected={selected} onSelect={onSelect} />
+          <SlotGroup label="下午" items={afternoon} selected={selected} onSelect={onSelect} />
+          <SlotGroup label="晚間" items={evening} selected={selected} onSelect={onSelect} />
         </>
       )}
     </div>
@@ -602,11 +702,27 @@ function Step4Time({ storeId, date, serviceId, practitionerId, selected, onSelec
 
 // ── Step 5: 填寫資料 + 確認送出 ───────────────────────────────────────
 
-function Step5Info({ draft, lineAvatar, onChange, onSubmit, onBack, submitting, error }: {
+function Step5Info({
+  draft,
+  lineAvatar,
+  lineStatus,
+  lineFriendStatus,
+  requestingLineFriend,
+  onChange,
+  onSubmit,
+  onRequestLineFriendship,
+  onBack,
+  submitting,
+  error,
+}: {
   draft:       BookingDraft
   lineAvatar:  string | null
+  lineStatus:  LineBookingStatus
+  lineFriendStatus: LineFriendStatus
+  requestingLineFriend: boolean
   onChange:    (k: string, v: string) => void
   onSubmit:    () => void
+  onRequestLineFriendship: () => Promise<void>
   onBack:      () => void
   submitting:  boolean
   error:       string
@@ -650,13 +766,64 @@ function Step5Info({ draft, lineAvatar, onChange, onSubmit, onBack, submitting, 
         </p>
       </div>
 
-      {/* LINE 大頭照 */}
-      {lineAvatar && (
-        <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-2xl px-4 py-3 mb-4">
-          <img src={lineAvatar} alt="LINE 頭像" className="w-10 h-10 rounded-full object-cover" />
+      {/* LINE 連結狀態 */}
+      {lineStatus === 'connected' && (
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center gap-3 rounded-2xl border border-green-100 bg-green-50 px-4 py-3">
+            {lineAvatar ? (
+              <img src={lineAvatar} alt="LINE 頭像" className="w-10 h-10 rounded-full object-cover" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle size={18} className="text-green-600" />
+              </div>
+            )}
+            <div>
+              <p className="text-xs text-green-700 font-semibold">LINE 身分已安全連結</p>
+              <p className="text-xs text-green-600">姓名已自動帶入，送出時會再次驗證</p>
+            </div>
+          </div>
+
+          {lineFriendStatus === 'friend' ? (
+            <div className="flex items-start gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+              <CheckCircle size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+              <p className="text-xs leading-5 text-emerald-700">已加入店家官方帳號，可接收預約成功與提醒推播。</p>
+            </div>
+          ) : lineFriendStatus === 'not_friend' ? (
+            <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-900">加入店家官方帳號才能接收通知</p>
+                  <p className="mt-0.5 text-xs leading-5 text-amber-700">不加好友仍可完成預約，只是不會收到 LINE 預約成功與提醒訊息。</p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={requestingLineFriend}
+                onClick={() => void onRequestLineFriendship()}
+                className="w-full"
+              >
+                <UserPlus size={14} />
+                加入或解除封鎖官方帳號
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-slate-500" />
+              <p className="text-xs leading-5 text-slate-600">暫時無法確認官方帳號好友狀態，不影響本次預約。</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {lineStatus === 'failed' && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 mb-4">
+          <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
           <div>
-            <p className="text-xs text-green-700 font-medium">已連結 LINE 帳號</p>
-            <p className="text-xs text-green-600">姓名已自動帶入，可視需要修改</p>
+            <p className="text-xs text-amber-800 font-semibold">LINE 帳號未連結</p>
+            <p className="text-xs text-amber-700 mt-0.5">您仍可用一般網頁方式完成預約</p>
           </div>
         </div>
       )}
@@ -692,13 +859,13 @@ function Step5Info({ draft, lineAvatar, onChange, onSubmit, onBack, submitting, 
         <FormField label="備註" hint="（選填）">
           <div className="relative">
             <MessageSquare size={15} strokeWidth={1.5} className="absolute left-3 top-3.5 text-slate-400 pointer-events-none" />
-            <textarea
+            <Textarea
               value={draft.notes}
               onChange={e => onChange('notes', e.target.value)}
               rows={3}
               placeholder="如有特殊需求或想告知事項，請在此填寫"
               disabled={submitting}
-              className="w-full pl-9 pr-3 py-3 rounded-2xl border border-slate-200 text-sm bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 focus:bg-white transition resize-none"
+              className="pl-9 py-3"
             />
           </div>
         </FormField>
