@@ -90,6 +90,22 @@ Deno.test("renderLineMessageTemplate 只替換白名單變數", () => {
   )
 })
 
+Deno.test("renderLineMessageTemplate 將舊版字面換行轉為真正換行", () => {
+  const message = renderLineMessageTemplate(
+    "您好 {{customer_name}}\\n預約已確認",
+    {
+      customer_name: "王小明",
+      service_name: "伸展課",
+      practitioner_name: "林老師",
+      start_time: "2026/08/22 14:00",
+      store_name: "Bookr",
+    },
+  )
+
+  assert(message === "您好 王小明\n預約已確認", "字面換行應轉為真正換行")
+  assert(!message.includes("\\n"), "推播內容不得保留字面反斜線 n")
+})
+
 Deno.test("formatLineBookingTime 使用店家時區", () => {
   const formatted = formatLineBookingTime("2026-08-22T06:00:00.000Z", "Asia/Taipei")
   assert(formatted.includes("14:00"), "台北時區應顯示 14:00")
@@ -123,9 +139,12 @@ Deno.test("verifyLineWebhookSignature 驗證原始 body HMAC-SHA256", async () =
 })
 
 Deno.test("sendLinePushMessage 使用 Retry Key 且不把 Token 放入 body", async () => {
-  let capturedRequest: Request | null = null
+  let capturedRetryKey: string | null = null
+  let capturedRequestBody = ""
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    capturedRequest = new Request(input, init)
+    const request = new Request(input, init)
+    capturedRetryKey = request.headers.get("x-line-retry-key")
+    capturedRequestBody = await request.text()
     return new Response("{}", {
       status: 200,
       headers: { "x-line-request-id": "request-123" },
@@ -140,13 +159,11 @@ Deno.test("sendLinePushMessage 使用 Retry Key 且不把 Token 放入 body", as
   }, fetchImpl)
 
   assert(result.requestId === "request-123", "應保留 LINE request ID")
-  assert(capturedRequest !== null, "應呼叫 LINE API")
   assert(
-    capturedRequest.headers.get("x-line-retry-key") === "90000000-0000-4000-8000-000000000001",
+    capturedRetryKey === "90000000-0000-4000-8000-000000000001",
     "應帶入工作 UUID 作為 Retry Key",
   )
-  const requestBody = await capturedRequest.text()
-  assert(!requestBody.includes("local-test-access-token-value"), "body 不得包含 Token")
+  assert(!capturedRequestBody.includes("local-test-access-token-value"), "body 不得包含 Token")
 })
 
 Deno.test("sendLinePushMessage 將 429 分類為可重試並尊重 Retry-After", async () => {

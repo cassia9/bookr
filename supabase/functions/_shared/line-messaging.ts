@@ -206,7 +206,9 @@ export async function fetchLineBotInfo(
 }
 
 export function validateLineMessageTemplate(template: string) {
-  const normalizedTemplate = template.trim()
+  // 舊版 migration 以字面 `\\n` 儲存換行；統一轉為真正換行，
+  // 避免推播內容顯示反斜線與字母 n。
+  const normalizedTemplate = template.trim().replace(/\\n/g, "\n")
   if (!normalizedTemplate || normalizedTemplate.length > 4_500) {
     throw new LineMessagingError(
       "INVALID_LINE_CONFIGURATION",
@@ -301,10 +303,12 @@ export async function verifyLineWebhookSignature(
   const normalizedSecret = channelSecret.trim()
   if (!rawBody || !normalizedSignature || normalizedSecret.length < 20) return false
 
-  let signatureBytes: Uint8Array
+  let signatureBytes: Uint8Array<ArrayBuffer>
   try {
     const binary = atob(normalizedSignature)
-    signatureBytes = Uint8Array.from(binary, character => character.charCodeAt(0))
+    const decodedBytes = Uint8Array.from(binary, character => character.charCodeAt(0))
+    signatureBytes = new Uint8Array(decodedBytes.length)
+    signatureBytes.set(decodedBytes)
   } catch {
     return false
   }
