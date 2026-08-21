@@ -62,8 +62,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  16::BIGINT,
-  'authenticated 只有十六支必要 RPC／輔助函式'
+  17::BIGINT,
+  'authenticated 只有十七支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -89,7 +89,8 @@ SELECT extensions.ok(
         'get_dashboard_kpi',
         'get_practitioner_stats',
         'get_service_stats',
-        'get_daily_stats'
+        'get_daily_stats',
+        'manage_store_line_connection'
       ])
   ),
   'authenticated RPC 全部位於白名單'
@@ -163,12 +164,13 @@ SELECT extensions.is(
         'practitioner_blocks',
         'practitioner_leaves',
         'practitioner_services',
-        'audit_logs'
+        'audit_logs',
+        'store_channel_connections'
       ])
       AND c.relrowsecurity
   ),
-  13::BIGINT,
-  '十三張核心資料表全部啟用 RLS'
+  14::BIGINT,
+  '十四張核心資料表全部啟用 RLS'
 );
 
 SELECT extensions.is(
