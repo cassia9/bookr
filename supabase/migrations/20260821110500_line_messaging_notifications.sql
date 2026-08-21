@@ -736,6 +736,114 @@ AS $$
   WHERE credential.store_id = public.current_store_id();
 $$;
 
+CREATE OR REPLACE FUNCTION public.enqueue_line_test_notification(
+  p_actor_id UUID,
+  p_identity_id UUID
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_job_id UUID := extensions.uuid_generate_v4();
+  v_store_id UUID;
+  v_client_id UUID;
+  v_connection_id UUID;
+  v_store_name TEXT;
+BEGIN
+  SELECT actor.store_id
+  INTO v_store_id
+  FROM public.users AS actor
+  WHERE actor.id = p_actor_id
+    AND actor.role = 'admin'::public.user_role
+    AND actor.deleted_at IS NULL;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ADMIN_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT
+    identity.client_id,
+    credential.connection_id,
+    store.name
+  INTO
+    v_client_id,
+    v_connection_id,
+    v_store_name
+  FROM public.customer_channel_identities AS identity
+  JOIN public.store_channel_connections AS connection
+    ON connection.store_id = identity.store_id
+    AND connection.channel = 'line'
+    AND connection.status = 'active'
+    AND connection.disconnected_at IS NULL
+    AND connection.login_channel_id = identity.provider_account_id
+  JOIN private.store_line_messaging_credentials AS credential
+    ON credential.store_id = identity.store_id
+    AND credential.connection_id = connection.id
+    AND credential.status = 'active'
+    AND credential.disconnected_at IS NULL
+  JOIN public.stores AS store
+    ON store.id = identity.store_id
+  WHERE identity.id = p_identity_id
+    AND identity.store_id = v_store_id
+    AND identity.channel = 'line'
+    AND identity.friend_status = 'friend'
+    AND identity.notifications_reachable IS TRUE
+    AND identity.deleted_at IS NULL;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'LINE_IDENTITY_NOT_REACHABLE' USING ERRCODE = 'P0002';
+  END IF;
+
+  INSERT INTO public.line_notification_outbox (
+    id,
+    store_id,
+    connection_id,
+    booking_id,
+    client_id,
+    identity_id,
+    event_type,
+    idempotency_key,
+    payload_snapshot
+  ) VALUES (
+    v_job_id,
+    v_store_id,
+    v_connection_id,
+    NULL,
+    v_client_id,
+    p_identity_id,
+    'test'::public.notification_type,
+    'test:' || v_job_id::TEXT,
+    JSONB_BUILD_OBJECT(
+      'message', 'Bookr 測試通知：' || v_store_name || ' 的 LINE 預約推播串接正常。'
+    )
+  );
+
+  INSERT INTO public.audit_logs (
+    user_id,
+    action,
+    table_name,
+    record_id,
+    new_values,
+    store_id
+  ) VALUES (
+    p_actor_id,
+    'SEND_TEST',
+    'line_notification_outbox',
+    v_job_id,
+    JSONB_BUILD_OBJECT(
+      'identity_id', p_identity_id,
+      'event_type', 'test',
+      'status', 'pending'
+    ),
+    v_store_id
+  );
+
+  RETURN v_job_id;
+END;
+$$;
+
 REVOKE ALL ON FUNCTION public.configure_store_line_messaging(
   UUID, UUID, UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT
 ) FROM PUBLIC, anon, authenticated;
@@ -897,7 +1005,11 @@ AS $$
     access_secret.decrypted_secret,
     identity.provider_user_id,
     identity.friend_status,
-    template.content,
+    CASE
+      WHEN claimed.event_type = 'test'::public.notification_type
+        THEN claimed.payload_snapshot ->> 'message'
+      ELSE template.content
+    END,
     client.full_name,
     service.name,
     practitioner.full_name,
@@ -1156,6 +1268,8 @@ REVOKE ALL ON FUNCTION public.get_line_webhook_config(UUID)
   FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.record_line_webhook_event(UUID, TEXT, TEXT, TEXT)
   FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.enqueue_line_test_notification(UUID, UUID)
+  FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.enqueue_line_reminders(TIMESTAMPTZ, INTEGER)
   TO service_role;
@@ -1170,6 +1284,8 @@ GRANT EXECUTE ON FUNCTION public.skip_line_notification_job(UUID, TEXT)
 GRANT EXECUTE ON FUNCTION public.get_line_webhook_config(UUID)
   TO service_role;
 GRANT EXECUTE ON FUNCTION public.record_line_webhook_event(UUID, TEXT, TEXT, TEXT)
+  TO service_role;
+GRANT EXECUTE ON FUNCTION public.enqueue_line_test_notification(UUID, UUID)
   TO service_role;
 
 COMMENT ON TABLE public.line_notification_outbox IS

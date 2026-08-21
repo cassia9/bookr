@@ -9,3 +9,6 @@ ALTER TYPE public.notification_type
 
 ALTER TYPE public.notification_type
   ADD VALUE IF NOT EXISTS 'booking_rescheduled';
+
+ALTER TYPE public.notification_type
+  ADD VALUE IF NOT EXISTS 'test';
