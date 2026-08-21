@@ -25,9 +25,16 @@ export interface LineMessagingConfiguration {
   channelSecret: string
 }
 
+export interface LineMessagingTestRequest {
+  actorId: string
+  storeId: string
+  identityId: string
+}
+
 export interface LineMessagingSettingsDependencies {
   authenticate: (token: string) => Promise<LineMessagingAdmin | null>
   configure: (configuration: LineMessagingConfiguration) => Promise<Record<string, unknown>>
+  enqueueTest: (request: LineMessagingTestRequest) => Promise<string>
   fetchBotInfo?: typeof fetchLineBotInfo
   allowedOrigins: Set<string>
 }
@@ -39,6 +46,7 @@ interface ConnectPayload {
   messagingChannelId?: unknown
   channelAccessToken?: unknown
   channelSecret?: unknown
+  identityId?: unknown
 }
 
 function corsHeaders(origin: string | null, allowedOrigins: Set<string>) {
@@ -138,18 +146,22 @@ export function createLineMessagingSettingsHandler(
     const messagingChannelId = normalizedString(payload.messagingChannelId)
     const channelAccessToken = normalizedString(payload.channelAccessToken)
     const channelSecret = normalizedString(payload.channelSecret)
+    const identityId = normalizedString(payload.identityId)
 
     if (
-      action !== "connect"
-      || !uuidPattern.test(connectionId)
-      || !providerIdPattern.test(providerId)
-      || !channelIdPattern.test(messagingChannelId)
-      || channelAccessToken.length < 20
-      || channelAccessToken.length > 4_096
-      || channelSecret.length < 20
-      || channelSecret.length > 255
-      || /[\r\n]/.test(channelAccessToken)
-      || /[\r\n]/.test(channelSecret)
+      !["connect", "test"].includes(action)
+      || (action === "test" && !uuidPattern.test(identityId))
+      || (action === "connect" && (
+        !uuidPattern.test(connectionId)
+        || !providerIdPattern.test(providerId)
+        || !channelIdPattern.test(messagingChannelId)
+        || channelAccessToken.length < 20
+        || channelAccessToken.length > 4_096
+        || channelSecret.length < 20
+        || channelSecret.length > 255
+        || /[\r\n]/.test(channelAccessToken)
+        || /[\r\n]/.test(channelSecret)
+      ))
     ) {
       return jsonResponse(
         { ok: false, code: "INVALID_INPUT", error: "Invalid LINE Messaging configuration" },
@@ -176,6 +188,28 @@ export function createLineMessagingSettingsHandler(
         origin,
         dependencies.allowedOrigins,
       )
+    }
+
+    if (action === "test") {
+      try {
+        const jobId = await dependencies.enqueueTest({
+          actorId: admin.id,
+          storeId: admin.storeId,
+          identityId,
+        })
+        return jsonResponse({ ok: true, status: "queued", jobId }, 202, origin, dependencies.allowedOrigins)
+      } catch {
+        return jsonResponse(
+          {
+            ok: false,
+            code: "LINE_IDENTITY_NOT_REACHABLE",
+            error: "Selected LINE identity cannot receive notifications",
+          },
+          409,
+          origin,
+          dependencies.allowedOrigins,
+        )
+      }
     }
 
     let botInfo: LineBotInfo

@@ -104,6 +104,22 @@ const handler = createLineMessagingSettingsHandler({
 
     return data as Record<string, unknown>
   },
+  enqueueTest: async testRequest => {
+    const { data, error } = await adminClient.rpc("enqueue_line_test_notification", {
+      p_actor_id: testRequest.actorId,
+      p_identity_id: testRequest.identityId,
+    })
+
+    if (error || typeof data !== "string") {
+      console.error(
+        "LINE test notification enqueue RPC failed",
+        error?.code || "UNKNOWN_DATABASE_ERROR",
+      )
+      throw new Error("LINE_IDENTITY_NOT_REACHABLE")
+    }
+
+    return data
+  },
 })
 
 serve(handler)

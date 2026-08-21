@@ -47,6 +47,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       displayName: "Bookr 測試官方帳號",
     }),
     configure: async (_configuration: LineMessagingConfiguration) => ({ status: "active" }),
+    enqueueTest: async () => "90000000-0000-4000-8000-000000000001",
     ...overrides,
   }
 }
@@ -69,6 +70,44 @@ Deno.test("設定 Handler 驗證 Bot 後只回傳去敏 metadata", async () => {
   assert(capturedAccessToken === validPayload.channelAccessToken, "設定層應收到 Token")
   assert(!bodyText.includes(validPayload.channelAccessToken), "回應不得包含 Token")
   assert(!bodyText.includes(validPayload.channelSecret), "回應不得包含 Channel Secret")
+})
+
+Deno.test("設定 Handler 只為管理員與可驗證身分建立測試推播", async () => {
+  let capturedIdentityId = ""
+  let botVerificationCalled = false
+  const handler = createLineMessagingSettingsHandler(dependencies({
+    fetchBotInfo: async () => {
+      botVerificationCalled = true
+      throw new Error("測試推播不應驗證 Bot")
+    },
+    enqueueTest: async (testRequest: { identityId: string }) => {
+      capturedIdentityId = testRequest.identityId
+      return "90000000-0000-4000-8000-000000000002"
+    },
+  }))
+
+  const identityId = "70000000-0000-4000-8000-000000000001"
+  const response = await handler(request({ action: "test", identityId }))
+  const body = await response.json()
+
+  assert(response.status === 202, "測試推播應進入佇列")
+  assert(body.status === "queued", "回應應標示 queued")
+  assert(capturedIdentityId === identityId, "只能傳遞已驗證格式的身分 ID")
+  assert(!botVerificationCalled, "測試推播不得重新接觸憑證驗證流程")
+})
+
+Deno.test("設定 Handler 拒絕格式錯誤的測試推播身分", async () => {
+  let queueCalled = false
+  const handler = createLineMessagingSettingsHandler(dependencies({
+    enqueueTest: async () => {
+      queueCalled = true
+      return "90000000-0000-4000-8000-000000000003"
+    },
+  }))
+
+  const response = await handler(request({ action: "test", identityId: "not-a-uuid" }))
+  assert(response.status === 400, "無效身分 ID 應拒絕")
+  assert(!queueCalled, "無效輸入不得碰觸 outbox")
 })
 
 Deno.test("設定 Handler 拒絕非白名單 Origin", async () => {
