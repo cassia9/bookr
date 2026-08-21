@@ -2,6 +2,14 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
 export type UserRole = 'admin' | 'member'
+export type NotificationType =
+  | 'booking_received'
+  | 'booking_confirmed'
+  | 'booking_cancelled'
+  | 'booking_rescheduled'
+  | 'reminder'
+  | 'post_session_review'
+  | 'post_session_tips'
 
 export interface Database {
   public: {
@@ -22,6 +30,7 @@ export interface Database {
           booking_enabled: boolean
           store_code: string | null
           booking_slug: string | null
+          timezone: string
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['stores']['Row'], 'id' | 'created_at'>
@@ -110,7 +119,11 @@ export interface Database {
           id: string
           store_id: string
           booking_confirmed_enabled: boolean
+          booking_received_enabled: boolean
+          booking_cancelled_enabled: boolean
+          booking_rescheduled_enabled: boolean
           reminder_enabled: boolean
+          reminder_minutes_before: number
           post_session_review_enabled: boolean
           post_session_tips_enabled: boolean
           updated_at: string
@@ -122,7 +135,7 @@ export interface Database {
         Row: {
           id: string
           store_id: string
-          type: 'booking_confirmed' | 'reminder' | 'post_session_review' | 'post_session_tips'
+          type: NotificationType
           content: string
           updated_at: string
         }
@@ -181,6 +194,9 @@ export interface Database {
           created_at: string
           updated_at: string
           deleted_at: string | null
+          friend_status: 'unknown' | 'friend' | 'not_friend'
+          friend_status_updated_at: string | null
+          notifications_reachable: boolean | null
         }
         Insert: {
           id?: string
@@ -196,6 +212,9 @@ export interface Database {
           created_at?: string
           updated_at?: string
           deleted_at?: string | null
+          friend_status?: 'unknown' | 'friend' | 'not_friend'
+          friend_status_updated_at?: string | null
+          notifications_reachable?: boolean | null
         }
         Update: Partial<Database['public']['Tables']['customer_channel_identities']['Insert']>
       }
@@ -239,6 +258,33 @@ export interface Database {
           updated_at?: string
         }
         Update: Partial<Database['public']['Tables']['store_channel_connections']['Insert']>
+      }
+      line_notification_outbox: {
+        Row: {
+          id: string
+          store_id: string
+          connection_id: string
+          booking_id: string | null
+          client_id: string
+          identity_id: string
+          event_type: NotificationType
+          idempotency_key: string
+          payload_snapshot: Json
+          status: 'pending' | 'processing' | 'retry' | 'sent' | 'skipped' | 'dead'
+          available_at: string
+          attempt_count: number
+          max_attempts: number
+          locked_at: string | null
+          sent_at: string | null
+          skipped_at: string | null
+          error_code: string | null
+          http_status: number | null
+          line_request_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
       }
     }
     Views: {
@@ -303,6 +349,19 @@ export interface Database {
           p_liff_id?: string | null
         }
         Returns: Json
+      }
+      get_store_line_messaging_status: {
+        Args: Record<string, never>
+        Returns: Array<{
+          connection_id: string
+          provider_id: string
+          messaging_channel_id: string
+          bot_basic_id: string | null
+          bot_display_name: string
+          status: 'active' | 'disconnected' | 'error'
+          verified_at: string
+          webhook_path: string
+        }>
       }
     }
   }
