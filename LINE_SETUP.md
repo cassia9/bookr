@@ -5,7 +5,7 @@
 ## 開發位置
 
 ```text
-分支：codex/line-integration
+分支：codex/line-messaging-notifications（疊加於 codex/line-integration）
 Worktree：/Users/CL/Documents/booking-system-ai-workspace/line-integration
 基準：origin/main
 ```
@@ -60,23 +60,25 @@ LIFF 前端
 supabase/functions/.env.local
 ```
 
-第一階段不需要 LINE Secret。本機店家資料會設定 LIFF ID 與公開的 LINE Login Channel ID，Edge Function 依店家設定向 LINE 驗證 ID token。
+LINE Login 第一階段不需要 LINE Secret。本機店家資料會設定 LIFF ID 與公開的 LINE Login Channel ID，Edge Function 依店家設定向 LINE 驗證 ID token。
+
+Messaging API 本機測試額外需要一組純本機 Worker secret（至少 32 字元）；Channel Access Token 與 Channel Secret 只經 `line-messaging-settings` Edge Function 驗證，並保存到本機 Supabase Vault，不得放入前端 `.env.local`。
 
 ### 正式環境
 
-第一階段的 LIFF ID 與 LINE Login Channel ID 是公開識別值，由店家後台設定，不放入 Secrets。若第二階段加入訊息通知，再使用 Supabase Edge Function Secrets 新增：
+LIFF ID、LINE Login Channel ID 與 Messaging Channel ID 是公開識別值，由店家後台設定，不放入 Secrets。正式通知服務只新增一個後端 Worker secret：
 
 ```text
-LINE_MESSAGING_CHANNEL_SECRET
-LINE_MESSAGING_CHANNEL_ACCESS_TOKEN
+LINE_NOTIFICATION_WORKER_SECRET
 ```
 
-若系統開放多間店家各自串接 Messaging API，必須改成每店加密憑證模型，不得共用一組全域 Channel Secret 或 Access Token。
+每間店的 Messaging API Channel Secret 與 Access Token 由後台安全設定，經驗證後分別保存於 Supabase Vault；公開資料表只保存 Vault reference 與去敏 metadata。不同店家不得共用全域 Token。
 
 如需限制 Edge Function 的瀏覽器來源，可設定：
 
 ```text
 LINE_BOOKING_ALLOWED_ORIGINS=https://bookr-5ph.pages.dev
+LINE_MESSAGING_ALLOWED_ORIGINS=https://bookr-5ph.pages.dev
 ```
 
 ## 預計程式位置
@@ -95,11 +97,17 @@ supabase/functions/line-booking/index.ts
 supabase/tests/line_channel_identity.sql
 ```
 
-第二階段才加入：
+Messaging API 通知階段：
 
 ```text
 supabase/functions/line-webhook/index.ts
-supabase/functions/line-notify/index.ts
+supabase/functions/line-messaging-settings/index.ts
+supabase/functions/line-notification-worker/index.ts
+supabase/functions/_shared/line-messaging.ts
+supabase/functions/_shared/line-notification-worker-handler.ts
+supabase/migrations/20260821110000_line_notification_types.sql
+supabase/migrations/20260821110500_line_messaging_notifications.sql
+supabase/tests/line_messaging_notifications.sql
 ```
 
 ## Migration 原則
@@ -129,16 +137,99 @@ supabase/functions/line-notify/index.ts
 9. 執行 build、修改範圍 lint、SQL 測試及安全檢查。
 10. 產出 QA 報告，等待使用者確認後才建立部署批次。
 
+## Messaging API 正式設定
+
+1. 在 LINE Developers Console 確認 Messaging API Channel 與 LIFF 使用的 LINE Login Channel 位於同一 Provider。
+2. 在後台「設定 → 渠道設定」輸入 Messaging Channel ID、Channel Access Token 與 Channel Secret。
+3. 後端先呼叫 LINE Bot Info API 驗證 Token，再將 Token／Secret 分別存入 Supabase Vault；畫面只顯示 Bot 名稱、Basic ID、Channel ID 與驗證時間。
+4. 把後台顯示的 Webhook URL 貼到 LINE Developers Console，啟用 Webhook 並使用 Verify 驗證。
+5. 用測試 LINE 帳號加入官方帳號、完成一筆 LIFF 預約，再由後台「發送測試推播」驗證 outbox 與 Worker。
+
+## Worker 與 Cron
+
+正式環境需要讓 Supabase Cron 每分鐘呼叫一次 `line-notification-worker`。依 Supabase 官方建議，排程使用 `pg_cron` + `pg_net`，呼叫所需秘密存入 Vault，不得寫進 migration 或 Git。
+
+先在 Supabase Dashboard 完成兩件事：
+
+1. 在 Edge Function Secrets 建立 `LINE_NOTIFICATION_WORKER_SECRET`，使用至少 32 字元的隨機值。
+2. 在 Vault 建立同名 secret `line_notification_worker_secret`，內容必須和 Edge Function Secret 完全相同。
+
+接著複製貼到 Supabase SQL Editor 執行：
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
+
+SELECT vault.create_secret(
+  'https://xfdpcjpjpczqyuqzdqmr.supabase.co',
+  'bookr_project_url',
+  'Booking CSA production project URL'
+)
+WHERE NOT EXISTS (
+  SELECT 1 FROM vault.secrets WHERE name = 'bookr_project_url'
+);
+
+SELECT cron.schedule(
+  'bookr-line-notification-worker-every-minute',
+  '* * * * *',
+  $cron$
+    SELECT net.http_post(
+      url := (
+        SELECT decrypted_secret
+        FROM vault.decrypted_secrets
+        WHERE name = 'bookr_project_url'
+      ) || '/functions/v1/line-notification-worker',
+      headers := JSONB_BUILD_OBJECT(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || (
+          SELECT decrypted_secret
+          FROM vault.decrypted_secrets
+          WHERE name = 'line_notification_worker_secret'
+        )
+      ),
+      body := JSONB_BUILD_OBJECT('scheduled_at', NOW()),
+      timeout_milliseconds := 10000
+    ) AS request_id;
+  $cron$
+);
+```
+
+驗證排程狀態：
+
+```sql
+SELECT jobid, jobname, schedule, active
+FROM cron.job
+WHERE jobname = 'bookr-line-notification-worker-every-minute';
+
+SELECT status, return_message, start_time, end_time
+FROM cron.job_run_details
+WHERE jobid = (
+  SELECT jobid
+  FROM cron.job
+  WHERE jobname = 'bookr-line-notification-worker-every-minute'
+)
+ORDER BY start_time DESC
+LIMIT 10;
+```
+
+若需緊急停止通知，先執行：
+
+```sql
+SELECT cron.unschedule('bookr-line-notification-worker-every-minute');
+```
+
 ## 部署順序
 
 本地 QA 與 PR 審查通過後才執行：
 
 1. 備份並確認正式資料庫狀態。
 2. 套用 additive migration。
-3. 設定 Supabase Secrets。
-4. 部署 `line-booking` Edge Function。
-5. 部署 Cloudflare Pages 前端。
-6. 在正式環境執行不改動既有資料的 QA。
-7. 最後才把 LINE Rich Menu 切換至 LIFF URL。
+3. 設定 `LINE_NOTIFICATION_WORKER_SECRET` 與 Vault 對應 secret。
+4. 依序部署 `line-booking`、`line-messaging-settings`、`line-webhook`、`line-notification-worker` Edge Functions。
+5. 設定並驗證 LINE Webhook。
+6. 建立每分鐘 Cron；先確認一筆後台測試推播成功，再保留排程。
+7. 部署 Cloudflare Pages 前端。
+8. 在正式環境執行不改動既有資料的 QA。
+9. 最後才把 LINE Rich Menu 切換至 LIFF URL。
 
 Rich Menu 切換是上線開關；若正式 QA 失敗，可先切回舊預約系統網址，不需要刪除既有資料。
