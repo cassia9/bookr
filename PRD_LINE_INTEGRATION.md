@@ -1,6 +1,6 @@
 ---
 artifact: prd
-version: "1.0"
+version: "1.1"
 created: 2026-08-21
 status: approved-for-local-development
 ---
@@ -230,3 +230,80 @@ status: approved-for-local-development
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-08-21 | Codex | 第一版安全 LINE 預約、本地 QA 與部署門檻 |
+| 1.1 | 2026-08-21 | Codex | 新增店家官方 LINE 串接、解除、同／跨 Provider 重綁與審計規格 |
+
+## 第二階段：店家官方 LINE 串接生命週期
+
+### Problem Statement
+
+第一階段只在 `stores` 保存目前的 LIFF ID 與 LINE Login Channel ID，無法顯示 LINE Provider、官方帳號或歷次串接，也沒有安全的解除與重綁流程。若店家直接改填另一組 Channel ID，舊客戶渠道身分仍會保留為有效資料；跨 Provider 時，同一 LINE 使用者會取得不同 user ID，並可能因相同電話觸發身分衝突。
+
+### Goals & Success Metrics
+
+1. 店家管理員可辨識目前串接的 Provider、LINE Login Channel、LIFF 與官方帳號。
+2. 解除串接立即停止 LINE 身分預約，但一般網頁預約不受影響。
+3. 同 Provider 重綁可延續既有客戶 LINE 身分。
+4. 不同 Provider 重綁會軟封存舊身分，讓新 Provider 可重新建立可信身分。
+5. 串接、資料補齊、解除與重綁都留下操作人及前後值。
+
+| Metric | Baseline | Target |
+|---|---|---|
+| 官方 LINE 串接歷史可追溯率 | 0% | 100% |
+| 解除後 LINE token 可建立預約 | 可繼續依舊設定嘗試 | 0 筆 |
+| 同 Provider 重綁身分延續率 | 未支援 | 100% |
+| 跨 Provider 舊身分封存率 | 未支援 | 100% |
+| 管理操作審計覆蓋率 | 0% | 100% |
+
+### User Stories
+
+| ID | User Story | Priority |
+|---|---|---|
+| US-6 | 身為店家管理員，我希望看到目前串接的是哪個 Provider 與官方帳號，避免改錯 LINE 設定 | P0 |
+| US-7 | 身為店家管理員，我希望能安全解除官方 LINE 串接，同時保留客戶與預約歷史 | P0 |
+| US-8 | 身為店家管理員，我希望改綁同 Provider 的官方帳號時延續既有 LINE 客戶身分 | P0 |
+| US-9 | 身為店家管理員，我希望跨 Provider 重綁時封存舊身分，避免相同電話被錯誤阻擋 | P0 |
+| US-10 | 身為系統維護者，我希望每次串接變更都有審計紀錄 | P0 |
+
+### Functional Requirements
+
+- FR-20：每家店、每個渠道同時只能存在一筆有效串接。
+- FR-21：LINE 串接需保存 Provider ID／名稱、官方帳號名稱／Basic ID、LINE Login Channel ID、LIFF ID、版本與連線時間。
+- FR-22：既有 `stores.liff_id` 與 `stores.line_login_channel_id` 作為公開預約所需的有效設定快取，不作歷史來源。
+- FR-23：只有目前店家的管理員可建立、補齊或解除串接；一般成員只能看到必要狀態或被拒絕操作。
+- FR-24：解除時必須原子性地封存有效串接並清空店家的 LIFF／Channel ID；不得停用一般網頁預約。
+- FR-25：解除不得刪除客戶、預約、預約內的 LINE 快照或渠道身分歷史。
+- FR-26：重綁時必須與最近一筆已解除串接比較 Provider ID。
+- FR-27：同 Provider 重綁時，將有效客戶 LINE 身分遷移至新的 Login Channel ID，保留 client 關聯與驗證歷史。
+- FR-28：不同 Provider 重綁時，將舊的有效 LINE 身分設定 `deleted_at`，新 Provider 後續可用相同電話建立新身分。
+- FR-29：不同 Provider 的 LINE user ID 不得自動視為同一人，也不得自動搬移完整 provider user ID。
+- FR-30：串接、補齊、解除與重綁必須寫入 `audit_logs`，記錄操作人、店家、連線紀錄、前後公開設定及遷移／封存筆數。
+- FR-31：Provider、Channel 與 LIFF 僅保存公開識別值；Channel Secret、Access Token 與 ID token 不得存入資料表或審計紀錄。
+- FR-32：解除與跨 Provider 重綁需在後台顯示二次確認，並說明一般網頁預約與歷史資料不受影響。
+- FR-33：既有只保存 LIFF／Channel ID 的店家需自動建立相容的歷史紀錄，並標示「資料待補」而非遺失設定。
+
+### Edge Cases
+
+| Scenario | Expected Behavior |
+|---|---|
+| 未串接時解除 | 回傳可辨識的 `NOT_CONNECTED`，不修改資料 |
+| 有有效串接時直接輸入另一組 Channel／LIFF | 阻擋並要求先解除，避免無歷史覆蓋 |
+| 沿用相同 Login Channel，只更換同 Provider 官方帳號 | 更新官方帳號資料，不重建客戶身分 |
+| 同 Provider、不同 Login Channel | 遷移有效身分至新 Channel，user ID 保持不變 |
+| 不同 Provider | 封存舊身分；客戶下次以新 Provider 驗證後重新連結 |
+| 舊資料沒有 Provider ID | 視為無法證明同 Provider，採跨 Provider 的安全封存策略 |
+| 一般成員呼叫管理操作 | 資料庫拒絕，且不得產生部分更新 |
+| 兩位管理員同時操作 | 店家／渠道交易鎖確保只有一個操作成功 |
+
+### Scope Boundaries
+
+**本階段包含**：串接歷史資料表、RLS／權限、管理 RPC、審計、既有設定回填、後台顯示／解除／重綁、SQL 與瀏覽器 QA。
+
+**本階段不包含**：自動登入 LINE Developers Console、以 OAuth 代替店家輸入公開 ID、管理 Channel Secret／Access Token、Messaging API 推播、Rich Menu 自動建立或移除。
+
+### Deployment Gate
+
+1. 本機從零 migration 與 pgTAP 全部通過。
+2. 管理員／一般成員／跨店家權限測試通過。
+3. 同 Provider 遷移、跨 Provider 封存、解除後一般網頁預約等情境通過。
+4. 後台二次確認、狀態顯示、重新整理後持久化與手機版版面通過。
+5. 使用者確認 QA 報告後，才依序部署 migration、Edge Function（如有）、前端與正式環境回歸。
