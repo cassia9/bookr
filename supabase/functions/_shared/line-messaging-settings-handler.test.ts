@@ -52,10 +52,10 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 }
 
 Deno.test("設定 Handler 驗證 Bot 後只回傳去敏 metadata", async () => {
-  let captured: LineMessagingConfiguration | null = null
+  let capturedAccessToken = ""
   const handler = createLineMessagingSettingsHandler(dependencies({
     configure: async (configuration: LineMessagingConfiguration) => {
-      captured = configuration
+      capturedAccessToken = configuration.channelAccessToken
       return { status: "active" }
     },
   }))
@@ -66,7 +66,7 @@ Deno.test("設定 Handler 驗證 Bot 後只回傳去敏 metadata", async () => {
 
   assert(response.status === 200, "有效設定應成功")
   assert(body.ok === true, "回應應為成功")
-  assert(captured?.channelAccessToken === validPayload.channelAccessToken, "設定層應收到 Token")
+  assert(capturedAccessToken === validPayload.channelAccessToken, "設定層應收到 Token")
   assert(!bodyText.includes(validPayload.channelAccessToken), "回應不得包含 Token")
   assert(!bodyText.includes(validPayload.channelSecret), "回應不得包含 Channel Secret")
 })
