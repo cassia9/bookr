@@ -3,13 +3,15 @@ import { useParams } from 'react-router-dom'
 import { format, addMonths, isSameDay, parseISO, addHours } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
 import { ChevronLeft, ChevronRight, CheckCircle, User, Clock,
-         CalendarDays, Phone, MessageSquare, MapPin, AlertCircle } from 'lucide-react'
+         CalendarDays, Phone, MessageSquare, MapPin, AlertCircle, UserPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
 import {
   getCurrentLineIdToken,
   initializeLineBooking,
+  requestLineFriendship,
   type LineBookingStatus,
+  type LineFriendStatus,
 } from '@/lib/line/liff'
 import Input from '@/components/ui/Input'
 import FormField from '@/components/ui/FormField'
@@ -104,6 +106,8 @@ export default function BookingPage() {
   const [lineDisplayName, setLineDisplayName] = useState('')
   const [lineIdToken, setLineIdToken] = useState<string | null>(null)
   const [lineStatus, setLineStatus] = useState<LineBookingStatus>('idle')
+  const [lineFriendStatus, setLineFriendStatus] = useState<LineFriendStatus>('unknown')
+  const [requestingLineFriend, setRequestingLineFriend] = useState(false)
 
   const [draft, setDraft] = useState<BookingDraft>({
     service: null, practitionerChoice: null,
@@ -137,17 +141,26 @@ export default function BookingPage() {
 
     if (session.status !== 'connected') {
       setLineIdToken(null)
+      setLineFriendStatus('unknown')
       return
     }
 
     setLineIdToken(session.idToken)
     setLineAvatar(session.pictureUrl)
     setLineDisplayName(session.displayName)
+    setLineFriendStatus(session.friendStatus)
     setDraft(current => ({
       ...current,
       name: current.name || session.displayName,
     }))
   }, [])
+
+  async function handleRequestLineFriendship() {
+    setRequestingLineFriend(true)
+    const isFriend = await requestLineFriendship()
+    setLineFriendStatus(isFriend ? 'friend' : 'not_friend')
+    setRequestingLineFriend(false)
+  }
 
   // ── Load store + services + practitioners ──────────────────────────
   useEffect(() => {
@@ -368,8 +381,11 @@ export default function BookingPage() {
             draft={draft}
             lineAvatar={lineAvatar}
             lineStatus={lineStatus}
+            lineFriendStatus={lineFriendStatus}
+            requestingLineFriend={requestingLineFriend}
             onChange={(k, v) => setDraft(d => ({ ...d, [k]: v }))}
             onSubmit={handleSubmit}
+            onRequestLineFriendship={handleRequestLineFriendship}
             onBack={() => setStep(4)}
             submitting={submitting}
             error={submitError}
@@ -686,12 +702,27 @@ function Step4Time({ storeId, date, serviceId, practitionerId, selected, onSelec
 
 // ── Step 5: 填寫資料 + 確認送出 ───────────────────────────────────────
 
-function Step5Info({ draft, lineAvatar, lineStatus, onChange, onSubmit, onBack, submitting, error }: {
+function Step5Info({
+  draft,
+  lineAvatar,
+  lineStatus,
+  lineFriendStatus,
+  requestingLineFriend,
+  onChange,
+  onSubmit,
+  onRequestLineFriendship,
+  onBack,
+  submitting,
+  error,
+}: {
   draft:       BookingDraft
   lineAvatar:  string | null
   lineStatus:  LineBookingStatus
+  lineFriendStatus: LineFriendStatus
+  requestingLineFriend: boolean
   onChange:    (k: string, v: string) => void
   onSubmit:    () => void
+  onRequestLineFriendship: () => Promise<void>
   onBack:      () => void
   submitting:  boolean
   error:       string
@@ -737,18 +768,53 @@ function Step5Info({ draft, lineAvatar, lineStatus, onChange, onSubmit, onBack, 
 
       {/* LINE 連結狀態 */}
       {lineStatus === 'connected' && (
-        <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-2xl px-4 py-3 mb-4">
-          {lineAvatar ? (
-            <img src={lineAvatar} alt="LINE 頭像" className="w-10 h-10 rounded-full object-cover" />
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center gap-3 rounded-2xl border border-green-100 bg-green-50 px-4 py-3">
+            {lineAvatar ? (
+              <img src={lineAvatar} alt="LINE 頭像" className="w-10 h-10 rounded-full object-cover" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle size={18} className="text-green-600" />
+              </div>
+            )}
+            <div>
+              <p className="text-xs text-green-700 font-semibold">LINE 身分已安全連結</p>
+              <p className="text-xs text-green-600">姓名已自動帶入，送出時會再次驗證</p>
+            </div>
+          </div>
+
+          {lineFriendStatus === 'friend' ? (
+            <div className="flex items-start gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+              <CheckCircle size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+              <p className="text-xs leading-5 text-emerald-700">已加入店家官方帳號，可接收預約成功與提醒推播。</p>
+            </div>
+          ) : lineFriendStatus === 'not_friend' ? (
+            <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-900">加入店家官方帳號才能接收通知</p>
+                  <p className="mt-0.5 text-xs leading-5 text-amber-700">不加好友仍可完成預約，只是不會收到 LINE 預約成功與提醒訊息。</p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={requestingLineFriend}
+                onClick={() => void onRequestLineFriendship()}
+                className="w-full"
+              >
+                <UserPlus size={14} />
+                加入或解除封鎖官方帳號
+              </Button>
+            </div>
           ) : (
-            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-              <CheckCircle size={18} className="text-green-600" />
+            <div className="flex items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-slate-500" />
+              <p className="text-xs leading-5 text-slate-600">暫時無法確認官方帳號好友狀態，不影響本次預約。</p>
             </div>
           )}
-          <div>
-            <p className="text-xs text-green-700 font-semibold">LINE 身分已安全連結</p>
-            <p className="text-xs text-green-600">姓名已自動帶入，送出時會再次驗證</p>
-          </div>
         </div>
       )}
 

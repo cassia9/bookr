@@ -1,12 +1,14 @@
 import liff from '@line/liff'
 
 export type LineBookingStatus = 'idle' | 'initializing' | 'connected' | 'failed'
+export type LineFriendStatus = 'friend' | 'not_friend' | 'unknown'
 
 export interface LineBookingSession {
   status: 'connected'
   idToken: string
   displayName: string
   pictureUrl: string | null
+  friendStatus: LineFriendStatus
 }
 
 type LineBookingInitResult =
@@ -46,9 +48,10 @@ export async function initializeLineBooking(liffId: string): Promise<LineBooking
       return { status: 'initializing' }
     }
 
-    const [profile, idToken] = await Promise.all([
+    const [profile, idToken, friendship] = await Promise.all([
       liff.getProfile(),
       Promise.resolve(liff.getIDToken()),
+      liff.getFriendship().catch(() => null),
     ])
 
     if (!idToken) return { status: 'failed' }
@@ -58,6 +61,11 @@ export async function initializeLineBooking(liffId: string): Promise<LineBooking
       idToken,
       displayName: profile.displayName,
       pictureUrl: profile.pictureUrl ?? null,
+      friendStatus: friendship === null
+        ? 'unknown'
+        : friendship.friendFlag
+          ? 'friend'
+          : 'not_friend',
     }
   } catch {
     return { status: 'failed' }
@@ -68,4 +76,23 @@ export async function initializeLineBooking(liffId: string): Promise<LineBooking
 export function getCurrentLineIdToken() {
   if (!liff.isLoggedIn()) return null
   return liff.getIDToken()
+}
+
+/**
+ * 顯示 LINE 官方的加好友／解除封鎖視窗。
+ * 查詢或提示失敗時只回傳 false，不影響客戶繼續完成預約。
+ */
+export async function requestLineFriendship() {
+  if (!liff.isLoggedIn()) return false
+
+  try {
+    const current = await liff.getFriendship()
+    if (current.friendFlag) return true
+
+    await liff.requestFriendship()
+    const updated = await liff.getFriendship()
+    return updated.friendFlag
+  } catch {
+    return false
+  }
 }
