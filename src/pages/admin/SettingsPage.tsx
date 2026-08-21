@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2, Share2, Copy, Check, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2, Share2, ToggleLeft, ToggleRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 import { useAuth } from '@/lib/auth'
@@ -12,6 +12,7 @@ import ConfirmModal from '@/components/ui/ConfirmModal'
 import Badge from '@/components/ui/Badge'
 import Spinner from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Snackbar'
+import LineChannelCard from '@/components/settings/LineChannelCard'
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -235,10 +236,10 @@ function ChannelsSettings() {
   const [loading, setLoading]         = useState(true)
   const [saving, setSaving]           = useState(false)
   const [liffId, setLiffId]           = useState('')
+  const [lineChannelId, setLineChannelId] = useState('')
   const [storeCode, setStoreCode]     = useState('')
   const [confirmMode, setConfirmMode] = useState<'manual' | 'auto'>('manual')
   const [bookingEnabled, setBookingEnabled] = useState(true)
-  const [copied, setCopied]           = useState(false)
 
   const bookingUrl = storeCode
     ? `${BOOKING_URL_BASE}/${storeCode}`
@@ -247,12 +248,13 @@ function ChannelsSettings() {
   useEffect(() => {
     supabase
       .from('stores')
-      .select('liff_id, booking_confirmation_mode, booking_enabled, store_code')
+      .select('liff_id, line_login_channel_id, booking_confirmation_mode, booking_enabled, store_code')
       .eq('id', STORE_ID)
       .single()
       .then(({ data }) => {
         if (data) {
           setLiffId(data.liff_id ?? '')
+          setLineChannelId(data.line_login_channel_id ?? '')
           setStoreCode(data.store_code ?? '')
           setConfirmMode((data.booking_confirmation_mode ?? 'manual') as 'manual' | 'auto')
           setBookingEnabled(data.booking_enabled ?? true)
@@ -262,11 +264,23 @@ function ChannelsSettings() {
   }, [])
 
   async function handleSave() {
+    const normalizedLiffId = liffId.trim()
+    const normalizedChannelId = lineChannelId.trim()
+    if (normalizedLiffId && !/^[0-9]+-[A-Za-z0-9_-]+$/.test(normalizedLiffId)) {
+      toast.error('LINE 設定格式錯誤', '請確認 LIFF ID 格式')
+      return
+    }
+    if (normalizedChannelId && !/^[0-9]{5,32}$/.test(normalizedChannelId)) {
+      toast.error('LINE 設定格式錯誤', 'LINE Login Channel ID 必須是純數字')
+      return
+    }
+
     setSaving(true)
     const { error } = await supabase
       .from('stores')
       .update({
-        liff_id: liffId.trim() || null,
+        liff_id: normalizedLiffId || null,
+        line_login_channel_id: normalizedChannelId || null,
         booking_confirmation_mode: confirmMode,
         booking_enabled: bookingEnabled,
       })
@@ -274,12 +288,6 @@ function ChannelsSettings() {
     setSaving(false)
     if (error) toast.error('儲存失敗', error.message)
     else toast.success('渠道設定已儲存')
-  }
-
-  async function handleCopy() {
-    await navigator.clipboard.writeText(bookingUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
   }
 
   if (loading) return (
@@ -295,44 +303,13 @@ function ChannelsSettings() {
         <p className="text-sm text-slate-500 mt-0.5">設定客戶端預約頁面的整合選項與行為</p>
       </div>
 
-      {/* LINE 渠道 */}
-      <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#06C755] flex items-center justify-center shrink-0">
-            <span className="text-white text-xs font-bold leading-none">L</span>
-          </div>
-          <h3 className="text-sm font-semibold text-slate-700">LINE 渠道</h3>
-        </div>
-
-        <FormField
-          label="LIFF ID"
-          hint="在 LINE Developers Console 建立 LIFF App 後取得"
-        >
-          <Input
-            type="text"
-            value={liffId}
-            onChange={e => setLiffId(e.target.value)}
-            placeholder="1234567890-xxxxxxxx"
-          />
-        </FormField>
-
-        <div>
-          <p className="text-xs font-medium text-slate-500 mb-1.5">客戶預約連結</p>
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl">
-            <span className="text-sm text-slate-600 flex-1 truncate font-mono text-xs">{bookingUrl}</span>
-            <button
-              onClick={handleCopy}
-              className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 transition-all"
-            >
-              {copied
-                ? <><Check size={12} className="text-green-500" /><span className="text-green-600">已複製！</span></>
-                : <><Copy size={12} /><span>複製</span></>
-              }
-            </button>
-          </div>
-          <p className="text-xs text-slate-400 mt-1.5">將此連結貼到 LINE 官方帳號的選單或訊息中</p>
-        </div>
-      </section>
+      <LineChannelCard
+        liffId={liffId}
+        channelId={lineChannelId}
+        bookingUrl={bookingUrl}
+        onLiffIdChange={setLiffId}
+        onChannelIdChange={setLineChannelId}
+      />
 
       {/* 預約設定 */}
       <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
