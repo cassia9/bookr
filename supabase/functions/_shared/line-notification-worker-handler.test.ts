@@ -103,6 +103,33 @@ Deno.test("Worker 組版發送並完成有效確認通知", async () => {
   assert(sentMessage.includes("14:00"), "訊息應使用店家時區")
 })
 
+Deno.test("Worker 可發送不綁定預約的管理員測試推播", async () => {
+  let sentMessage = ""
+  const job = validJob({
+    booking_id: null,
+    event_type: "test",
+    idempotency_key: "test:90000000-0000-4000-8000-000000000001",
+    template_content: "Bookr 測試通知：LINE 預約推播串接正常。",
+    service_name: null,
+    practitioner_name: null,
+    start_time: null,
+    booking_status: null,
+  })
+  const setup = dependencies([job], {
+    send: async (options: { message: string }) => {
+      sentMessage = options.message
+      return { requestId: "line-test-request-1" }
+    },
+  })
+  const handler = createLineNotificationWorkerHandler(setup.values)
+  const response = await handler(request())
+  const body = await response.json()
+
+  assert(body.sent === 1, "測試推播應完成發送")
+  assert(sentMessage === job.template_content, "測試推播只能使用後端建立的固定訊息")
+  assert(setup.state.completed[0] === job.job_id, "測試推播應完成正確工作")
+})
+
 Deno.test("Worker 略過狀態已改變的舊確認通知", async () => {
   const setup = dependencies([validJob({ booking_status: "cancelled" })])
   const handler = createLineNotificationWorkerHandler(setup.values)

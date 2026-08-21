@@ -4,6 +4,7 @@ import {
   LineMessagingError,
   renderLineMessageTemplate,
   sendLinePushMessage,
+  validateLineMessageTemplate,
 } from "./line-messaging.ts"
 
 export type LineNotificationEvent =
@@ -12,6 +13,7 @@ export type LineNotificationEvent =
   | "booking_cancelled"
   | "booking_rescheduled"
   | "reminder"
+  | "test"
 
 export interface LineNotificationJob {
   job_id: string
@@ -89,6 +91,8 @@ function skipReason(job: LineNotificationJob) {
     return "notification_data_missing"
   }
 
+  if (job.event_type === "test") return null
+
   if (!job.booking_id || !job.start_time || !job.booking_status) {
     return "booking_not_available"
   }
@@ -159,16 +163,18 @@ export function createLineNotificationWorkerHandler(
       }
 
       try {
-        const message = renderLineMessageTemplate(job.template_content as string, {
-          customer_name: job.customer_name as string,
-          service_name: job.service_name || "",
-          practitioner_name: job.practitioner_name || "",
-          start_time: formatLineBookingTime(
-            job.start_time as string,
-            job.store_timezone as string,
-          ),
-          store_name: job.store_name as string,
-        })
+        const message = job.event_type === "test"
+          ? validateLineMessageTemplate(job.template_content as string)
+          : renderLineMessageTemplate(job.template_content as string, {
+            customer_name: job.customer_name as string,
+            service_name: job.service_name || "",
+            practitioner_name: job.practitioner_name || "",
+            start_time: formatLineBookingTime(
+              job.start_time as string,
+              job.store_timezone as string,
+            ),
+            store_name: job.store_name as string,
+          })
 
         const result = await send({
           channelAccessToken: job.channel_access_token as string,
