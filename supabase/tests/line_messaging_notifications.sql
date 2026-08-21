@@ -2,7 +2,24 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT extensions.plan(34);
+SELECT extensions.plan(35);
+
+SELECT extensions.is(
+  (
+    SELECT COUNT(*)
+    FROM public.notification_templates
+    WHERE type IN (
+      'booking_received'::public.notification_type,
+      'booking_confirmed'::public.notification_type,
+      'booking_cancelled'::public.notification_type,
+      'booking_rescheduled'::public.notification_type,
+      'reminder'::public.notification_type
+    )
+      AND POSITION(CHR(92) || 'n' IN content) > 0
+  ),
+  0::BIGINT,
+  '交易通知範本不保留字面反斜線 n'
+);
 
 -- ------------------------------------------------------------
 -- 權限與 RLS

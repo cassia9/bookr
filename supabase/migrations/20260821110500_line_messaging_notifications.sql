@@ -109,6 +109,19 @@ CROSS JOIN (
 ) AS template(type, content)
 ON CONFLICT (store_id, type) DO NOTHING;
 
+-- 舊版 seed 在一般字串中使用 `\n`，PostgreSQL 會保存為字面反斜線 n。
+-- Messaging API 需要真正換行；只處理本功能會發送的五種交易通知。
+UPDATE public.notification_templates
+SET content = REPLACE(content, CHR(92) || 'n', CHR(10))
+WHERE type IN (
+  'booking_received'::public.notification_type,
+  'booking_confirmed'::public.notification_type,
+  'booking_cancelled'::public.notification_type,
+  'booking_rescheduled'::public.notification_type,
+  'reminder'::public.notification_type
+)
+  AND POSITION(CHR(92) || 'n' IN content) > 0;
+
 -- ------------------------------------------------------------
 -- 私有憑證參照：秘密本體只存在 Vault
 -- ------------------------------------------------------------
