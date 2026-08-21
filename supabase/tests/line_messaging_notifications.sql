@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT extensions.plan(35);
+SELECT extensions.plan(43);
 
 SELECT extensions.is(
   (
@@ -122,6 +122,33 @@ SELECT extensions.ok(
     'EXECUTE'
   ),
   'anon 無法讀取 Messaging 狀態'
+);
+
+SELECT extensions.ok(
+  NOT has_function_privilege(
+    'anon',
+    'public.enqueue_line_test_notification(uuid,uuid)',
+    'EXECUTE'
+  ),
+  'anon 無法建立 LINE 測試推播'
+);
+
+SELECT extensions.ok(
+  NOT has_function_privilege(
+    'authenticated',
+    'public.enqueue_line_test_notification(uuid,uuid)',
+    'EXECUTE'
+  ),
+  'authenticated 無法繞過 Edge Function 建立測試推播'
+);
+
+SELECT extensions.ok(
+  has_function_privilege(
+    'service_role',
+    'public.enqueue_line_test_notification(uuid,uuid)',
+    'EXECUTE'
+  ),
+  'service_role 可建立已授權的測試推播'
 );
 
 -- ------------------------------------------------------------
@@ -480,7 +507,91 @@ SELECT extensions.is(
   '相同 Webhook event ID 重送會被安全去重'
 );
 
+CREATE TEMP TABLE enqueued_line_test_job ON COMMIT DROP AS
+SELECT public.enqueue_line_test_notification(
+  '50000000-0000-0000-0000-000000000081',
+  '70000000-0000-0000-0000-000000000081'
+) AS job_id;
+
 RESET ROLE;
+
+SELECT extensions.ok(
+  (SELECT job_id IS NOT NULL FROM enqueued_line_test_job),
+  '管理員可對同店且可送達的 LINE 身分建立測試推播'
+);
+
+SELECT extensions.ok(
+  (
+    SELECT event_type = 'test'::public.notification_type
+      AND booking_id IS NULL
+      AND payload_snapshot ? 'message'
+      AND NOT payload_snapshot ? 'channel_access_token'
+      AND NOT payload_snapshot ? 'channel_secret'
+    FROM public.line_notification_outbox
+    WHERE id = (SELECT job_id FROM enqueued_line_test_job)
+  ),
+  '測試推播寫入 outbox 且 payload 不含憑證'
+);
+
+SELECT extensions.is(
+  (
+    SELECT COUNT(*)
+    FROM public.audit_logs
+    WHERE record_id = (SELECT job_id FROM enqueued_line_test_job)
+      AND action = 'SEND_TEST'
+      AND store_id = '00000000-0000-0000-0000-000000000001'
+  ),
+  1::BIGINT,
+  '測試推播留下同店審計紀錄'
+);
+
+SELECT SET_CONFIG('request.jwt.claims', '{"role":"service_role"}', TRUE);
+SET LOCAL ROLE service_role;
+
+SELECT extensions.throws_ok(
+  $$
+    SELECT public.enqueue_line_test_notification(
+      '50000000-0000-0000-0000-000000000083',
+      '70000000-0000-0000-0000-000000000081'
+    )
+  $$,
+  'P0002',
+  'LINE_IDENTITY_NOT_REACHABLE',
+  '其他店家管理員不能對本店 LINE 身分建立測試推播'
+);
+
+RESET ROLE;
+
+UPDATE public.customer_channel_identities
+SET
+  friend_status = 'not_friend',
+  notifications_reachable = FALSE,
+  friend_status_updated_at = NOW()
+WHERE id = '70000000-0000-0000-0000-000000000081';
+
+SELECT SET_CONFIG('request.jwt.claims', '{"role":"service_role"}', TRUE);
+SET LOCAL ROLE service_role;
+
+SELECT extensions.throws_ok(
+  $$
+    SELECT public.enqueue_line_test_notification(
+      '50000000-0000-0000-0000-000000000081',
+      '70000000-0000-0000-0000-000000000081'
+    )
+  $$,
+  'P0002',
+  'LINE_IDENTITY_NOT_REACHABLE',
+  '未加好友或已封鎖身分不能建立測試推播'
+);
+
+RESET ROLE;
+
+UPDATE public.customer_channel_identities
+SET
+  friend_status = 'friend',
+  notifications_reachable = TRUE,
+  friend_status_updated_at = NOW()
+WHERE id = '70000000-0000-0000-0000-000000000081';
 
 INSERT INTO public.bookings (
   id,

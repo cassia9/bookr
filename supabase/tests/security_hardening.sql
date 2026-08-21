@@ -105,7 +105,7 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('service_role', p.oid, 'EXECUTE')
   ),
-  15::BIGINT,
+  16::BIGINT,
   'service_role 只有邀請、LINE 預約與 Messaging Worker 必要 RPC'
 );
 
@@ -130,6 +130,7 @@ SELECT extensions.ok(
         'complete_line_notification_job',
         'retry_line_notification_job',
         'skip_line_notification_job',
+        'enqueue_line_test_notification',
         'get_line_webhook_config',
         'record_line_webhook_event'
       ])
