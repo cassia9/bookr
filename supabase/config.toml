@@ -37,3 +37,7 @@ verify_jwt = false
 # LINE 平台不會攜帶 Supabase JWT；函式必須自行驗證 X-Line-Signature。
 [functions.line-webhook]
 verify_jwt = false
+
+# Cron 使用獨立的強隨機 Worker secret；函式內以 constant-time digest 比對。
+[functions.line-notification-worker]
+verify_jwt = false
