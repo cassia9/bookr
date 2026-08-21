@@ -8,6 +8,7 @@ export type NotificationType =
   | 'booking_cancelled'
   | 'booking_rescheduled'
   | 'reminder'
+  | 'test'
   | 'post_session_review'
   | 'post_session_tips'
 

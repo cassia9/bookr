@@ -15,6 +15,7 @@ import FormField from '@/components/ui/FormField'
 import Input from '@/components/ui/Input'
 import Textarea from '@/components/ui/Textarea'
 import Toggle from '@/components/ui/Toggle'
+import Select from '@/components/ui/Select'
 import type { NotificationType, StoreChannelConnection } from '@/types/database'
 
 export type TransactionNotificationType = Extract<
@@ -48,6 +49,11 @@ export interface TransactionNotificationSettings {
 
 export type TransactionNotificationTemplates = Record<TransactionNotificationType, string>
 
+export interface LineTestRecipient {
+  value: string
+  label: string
+}
+
 interface MessagingConfigurationInput {
   messagingChannelId: string
   channelAccessToken: string
@@ -61,6 +67,8 @@ interface LineMessagingCardProps {
   isAdmin: boolean
   connecting: boolean
   savingNotifications: boolean
+  sendingTest: boolean
+  testRecipients: LineTestRecipient[]
   settings: TransactionNotificationSettings
   templates: TransactionNotificationTemplates
   onConnect: (configuration: MessagingConfigurationInput) => Promise<boolean>
@@ -70,6 +78,7 @@ interface LineMessagingCardProps {
   ) => void
   onTemplateChange: (type: TransactionNotificationType, value: string) => void
   onSaveNotifications: () => void
+  onSendTest: (identityId: string) => Promise<boolean>
 }
 
 const notificationRows: Array<{
@@ -128,17 +137,21 @@ export default function LineMessagingCard({
   isAdmin,
   connecting,
   savingNotifications,
+  sendingTest,
+  testRecipients,
   settings,
   templates,
   onConnect,
   onSettingChange,
   onTemplateChange,
   onSaveNotifications,
+  onSendTest,
 }: LineMessagingCardProps) {
   const [messagingChannelId, setMessagingChannelId] = useState('')
   const [channelAccessToken, setChannelAccessToken] = useState('')
   const [channelSecret, setChannelSecret] = useState('')
   const [copied, setCopied] = useState(false)
+  const [testIdentityId, setTestIdentityId] = useState('')
 
   const isActive = messagingStatus?.status === 'active'
   const baseConnectionReady = Boolean(activeConnection?.provider_id)
@@ -309,6 +322,39 @@ export default function LineMessagingCard({
               >
                 {copied ? <CheckCircle size={13} className="text-green-600" /> : <Copy size={13} />}
                 {copied ? '已複製' : '複製'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {isActive && messagingStatus && isAdmin && (
+          <div className="space-y-3 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700">發送測試推播</h4>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                只能選擇同店、已驗證且目前可接收訊息的 LINE 客戶；操作會留下審計紀錄。
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <FormField label="測試收件人" className="min-w-0 flex-1">
+                <Select
+                  value={testIdentityId}
+                  onChange={setTestIdentityId}
+                  options={testRecipients}
+                  placeholder={testRecipients.length > 0 ? '選擇可接收推播的客戶' : '目前沒有可測試的 LINE 客戶'}
+                  disabled={sendingTest || testRecipients.length === 0}
+                />
+              </FormField>
+              <Button
+                type="button"
+                variant="primary"
+                loading={sendingTest}
+                disabled={!testIdentityId || testRecipients.length === 0}
+                onClick={() => void onSendTest(testIdentityId)}
+                className="shrink-0"
+              >
+                <Send size={14} />
+                加入測試佇列
               </Button>
             </div>
           </div>

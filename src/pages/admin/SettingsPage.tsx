@@ -17,6 +17,7 @@ import LineChannelCard from '@/components/settings/LineChannelCard'
 import LineMessagingCard from '@/components/settings/LineMessagingCard'
 import type {
   LineMessagingStatus,
+  LineTestRecipient,
   TransactionNotificationSettings,
   TransactionNotificationTemplates,
   TransactionNotificationType,
@@ -279,6 +280,7 @@ function ChannelsSettings() {
   const [lineSaving, setLineSaving] = useState(false)
   const [messagingConnecting, setMessagingConnecting] = useState(false)
   const [notificationsSaving, setNotificationsSaving] = useState(false)
+  const [testSending, setTestSending] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
   const [providerId, setProviderId] = useState('')
@@ -289,6 +291,7 @@ function ChannelsSettings() {
   const [lineChannelId, setLineChannelId] = useState('')
   const [connectionHistory, setConnectionHistory] = useState<StoreChannelConnection[]>([])
   const [messagingStatus, setMessagingStatus] = useState<LineMessagingStatus | null>(null)
+  const [testRecipients, setTestRecipients] = useState<LineTestRecipient[]>([])
   const [notificationSettings, setNotificationSettings] = useState<TransactionNotificationSettings>(
     DEFAULT_NOTIFICATION_SETTINGS,
   )
@@ -330,6 +333,7 @@ function ChannelsSettings() {
       setLiffId('')
       setLineChannelId('')
       setMessagingStatus(null)
+      setTestRecipients([])
       setLoading(false)
       return
     }
@@ -356,7 +360,12 @@ function ChannelsSettings() {
     setLiffId(formSource?.liff_id ?? store.liff_id ?? '')
     setLineChannelId(formSource?.login_channel_id ?? store.line_login_channel_id ?? '')
 
-    const [messagingResult, notificationSettingResult, notificationTemplateResult] = await Promise.all([
+    const [
+      messagingResult,
+      notificationSettingResult,
+      notificationTemplateResult,
+      testRecipientResult,
+    ] = await Promise.all([
       supabase.rpc('get_store_line_messaging_status'),
       supabase
         .from('notification_settings')
@@ -374,6 +383,15 @@ function ChannelsSettings() {
         .from('notification_templates')
         .select('type, content')
         .in('type', TRANSACTION_NOTIFICATION_TYPES),
+      supabase
+        .from('customer_channel_identities')
+        .select('id, display_name')
+        .eq('store_id', storeId)
+        .eq('channel', 'line')
+        .eq('friend_status', 'friend')
+        .eq('notifications_reachable', true)
+        .is('deleted_at', null)
+        .order('display_name'),
     ])
 
     if (messagingResult.error) {
@@ -405,6 +423,16 @@ function ChannelsSettings() {
         }
       }
       setNotificationTemplates(templates)
+    }
+
+    if (testRecipientResult.error) {
+      toast.error('載入 LINE 測試收件人失敗', testRecipientResult.error.message)
+      setTestRecipients([])
+    } else {
+      setTestRecipients((testRecipientResult.data ?? []).map(identity => ({
+        value: identity.id,
+        label: identity.display_name || `LINE 客戶 ${identity.id.slice(0, 8)}`,
+      })))
     }
     setLoading(false)
   }, [isAdmin, storeId])
@@ -632,6 +660,27 @@ function ChannelsSettings() {
     toast.success('LINE 通知設定已儲存')
   }
 
+  async function handleTestNotification(identityId: string) {
+    setTestSending(true)
+    try {
+      const { data, error } = await supabase.functions.invoke<MessagingFunctionResponse>(
+        'line-messaging-settings',
+        { body: { action: 'test', identityId } },
+      )
+
+      if (error) throw new Error(await functionErrorMessage(error, '測試推播建立失敗'))
+      if (!data?.ok) throw new Error(data?.error || '測試推播建立失敗')
+
+      toast.success('測試推播已加入佇列', '背景服務會在下一輪處理並留下發送結果')
+      return true
+    } catch (error) {
+      toast.error('無法建立測試推播', error instanceof Error ? error.message : '請稍後再試')
+      return false
+    } finally {
+      setTestSending(false)
+    }
+  }
+
   async function handleSave() {
     setSaving(true)
     const { error } = await supabase
@@ -690,6 +739,8 @@ function ChannelsSettings() {
         isAdmin={isAdmin}
         connecting={messagingConnecting}
         savingNotifications={notificationsSaving}
+        sendingTest={testSending}
+        testRecipients={testRecipients}
         settings={notificationSettings}
         templates={notificationTemplates}
         onConnect={handleMessagingConnect}
@@ -702,6 +753,7 @@ function ChannelsSettings() {
           [type]: value,
         }))}
         onSaveNotifications={handleNotificationsSave}
+        onSendTest={handleTestNotification}
       />
 
       {/* 預約設定 */}
