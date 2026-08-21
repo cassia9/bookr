@@ -33,3 +33,7 @@ verify_jwt = false
 # 由函式內使用 Supabase Auth 驗證登入者，並再次確認店家管理員角色。
 [functions.line-messaging-settings]
 verify_jwt = false
+
+# LINE 平台不會攜帶 Supabase JWT；函式必須自行驗證 X-Line-Signature。
+[functions.line-webhook]
+verify_jwt = false
