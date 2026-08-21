@@ -12,6 +12,16 @@ export interface Database {
           name: string
           address: string | null
           phone: string | null
+          open_time: string
+          close_time: string
+          default_buffer_minutes: number
+          logo_url: string | null
+          liff_id: string | null
+          line_login_channel_id: string | null
+          booking_confirmation_mode: 'manual' | 'auto'
+          booking_enabled: boolean
+          store_code: string | null
+          booking_slug: string | null
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['stores']['Row'], 'id' | 'created_at'>
@@ -155,6 +165,39 @@ export interface Database {
           email_last_error?: string | null
         }
         Update: Partial<Database['public']['Tables']['pending_invitations']['Insert']>
+      }
+      customer_channel_identities: {
+        Row: {
+          id: string
+          store_id: string
+          client_id: string
+          channel: 'line' | 'messenger' | 'instagram'
+          provider_account_id: string
+          provider_user_id: string
+          display_name: string | null
+          avatar_url: string | null
+          verified_at: string
+          last_seen_at: string
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          store_id: string
+          client_id: string
+          channel: 'line' | 'messenger' | 'instagram'
+          provider_account_id: string
+          provider_user_id: string
+          display_name?: string | null
+          avatar_url?: string | null
+          verified_at?: string
+          last_seen_at?: string
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['customer_channel_identities']['Insert']>
       }
     }
     Views: {

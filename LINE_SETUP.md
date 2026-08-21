@@ -60,30 +60,24 @@ LIFF 前端
 supabase/functions/.env.local
 ```
 
-預計變數名稱：
-
-```text
-LINE_LOGIN_CHANNEL_ID=
-```
-
-第一階段只驗證 LINE Login ID token，不需要把 Messaging API Channel Access Token 放進前端。
+第一階段不需要 LINE Secret。本機店家資料會設定 LIFF ID 與公開的 LINE Login Channel ID，Edge Function 依店家設定向 LINE 驗證 ID token。
 
 ### 正式環境
 
-正式值使用 Supabase Edge Function Secrets 設定，不提交 Git：
-
-```bash
-supabase secrets set LINE_LOGIN_CHANNEL_ID=...
-```
-
-若第二階段加入訊息通知，再新增：
+第一階段的 LIFF ID 與 LINE Login Channel ID 是公開識別值，由店家後台設定，不放入 Secrets。若第二階段加入訊息通知，再使用 Supabase Edge Function Secrets 新增：
 
 ```text
 LINE_MESSAGING_CHANNEL_SECRET
 LINE_MESSAGING_CHANNEL_ACCESS_TOKEN
 ```
 
-單一店家可先使用專案 Secrets。若系統開放多間店家各自串接，必須改成每店加密憑證模型，不得共用一組全域 Channel 憑證。
+若系統開放多間店家各自串接 Messaging API，必須改成每店加密憑證模型，不得共用一組全域 Channel Secret 或 Access Token。
+
+如需限制 Edge Function 的瀏覽器來源，可設定：
+
+```text
+LINE_BOOKING_ALLOWED_ORIGINS=https://bookr-5ph.pages.dev
+```
 
 ## 預計程式位置
 

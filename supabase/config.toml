@@ -24,3 +24,8 @@ verify_jwt = false
 
 [functions.send-invitation-email]
 verify_jwt = true
+
+# 公開 LIFF 預約不使用 Supabase Auth JWT；函式內會向 LINE 驗證 ID token，
+# 再以後端角色呼叫 service-only RPC。
+[functions.line-booking]
+verify_jwt = false
