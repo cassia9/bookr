@@ -303,7 +303,7 @@ export async function verifyLineWebhookSignature(
   const normalizedSecret = channelSecret.trim()
   if (!rawBody || !normalizedSignature || normalizedSecret.length < 20) return false
 
-  let signatureBytes: Uint8Array<ArrayBuffer>
+  let signatureBytes: Uint8Array
   try {
     const binary = atob(normalizedSignature)
     const decodedBytes = Uint8Array.from(binary, character => character.charCodeAt(0))

@@ -4,6 +4,17 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 SELECT extensions.plan(43);
 
+-- 隔離既有本機 LINE QA 狀態；測試結尾會 ROLLBACK，不影響使用者資料。
+DELETE FROM public.line_notification_outbox
+WHERE store_id = '00000000-0000-0000-0000-000000000001';
+
+DELETE FROM public.store_channel_connections
+WHERE store_id = '00000000-0000-0000-0000-000000000001'
+  AND channel = 'line';
+
+DELETE FROM vault.secrets
+WHERE name LIKE 'line_%_00000000-0000-0000-0000-000000000001_%';
+
 SELECT extensions.is(
   (
     SELECT COUNT(*)

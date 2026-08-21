@@ -4,6 +4,18 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 SELECT extensions.plan(15);
 
+-- 測試可在保留本機 QA 資料的情況下重複執行；所有清理會在結尾 ROLLBACK。
+DELETE FROM public.line_notification_outbox
+WHERE store_id = '00000000-0000-0000-0000-000000000001';
+
+DELETE FROM public.store_channel_connections
+WHERE store_id = '00000000-0000-0000-0000-000000000001'
+  AND channel = 'line';
+
+DELETE FROM public.customer_channel_identities
+WHERE store_id = '00000000-0000-0000-0000-000000000001'
+  AND channel = 'line';
+
 SELECT extensions.ok(
   (
     SELECT c.relrowsecurity
