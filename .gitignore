@@ -1,6 +1,7 @@
 node_modules
 dist/
 .env.local
+.env.staging.local
 .DS_Store
 *.log
 supabase/.temp/

@@ -240,7 +240,10 @@ function BasicSettings() {
 
 // ── 渠道設定 Tab ─────────────────────────────────────────────────────────────
 
-const BOOKING_URL_BASE = 'https://bookr-5ph.pages.dev/book'
+const BOOKING_SITE_ORIGIN = (
+  import.meta.env.VITE_BOOKING_SITE_ORIGIN || window.location.origin
+).replace(/\/+$/, '')
+const BOOKING_URL_BASE = `${BOOKING_SITE_ORIGIN}/book`
 const TRANSACTION_NOTIFICATION_TYPES: TransactionNotificationType[] = [
   'booking_received',
   'booking_confirmed',
