@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT extensions.plan(34);
+SELECT extensions.plan(35);
 
 -- ============================================================
 -- 結構檢查：SECURITY DEFINER、RPC 白名單、GRANT、RLS
@@ -325,8 +325,23 @@ SELECT extensions.ok(
 -- 行為檢查：建立兩家店、管理員與一般成員測試資料
 -- ============================================================
 
+-- 本測試會在結尾 ROLLBACK；先暫時移除與固定測試 UUID 衝突的本地 QA 預約，
+-- 避免非空本地資料庫造成重複鍵或筆數誤判。
+DELETE FROM public.bookings
+WHERE service_id IN (
+  '10000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000002'
+)
+OR practitioner_id IN (
+  '20000000-0000-0000-0000-000000000001',
+  '20000000-0000-0000-0000-000000000002',
+  '20000000-0000-0000-0000-000000000003'
+);
+
 INSERT INTO public.stores (id, name)
-VALUES ('00000000-0000-0000-0000-000000000002', '測試店家二');
+VALUES ('00000000-0000-0000-0000-000000000002', '測試店家二')
+ON CONFLICT (id) DO UPDATE
+SET name = EXCLUDED.name;
 
 INSERT INTO public.services (
   id, name, duration_minutes, price, active, store_id
@@ -340,7 +355,15 @@ INSERT INTO public.services (
     '10000000-0000-0000-0000-000000000002',
     '店家二課程', 60, 1200, TRUE,
     '00000000-0000-0000-0000-000000000002'
-  );
+  )
+ON CONFLICT (id) DO UPDATE
+SET
+  name = EXCLUDED.name,
+  duration_minutes = EXCLUDED.duration_minutes,
+  price = EXCLUDED.price,
+  active = EXCLUDED.active,
+  store_id = EXCLUDED.store_id,
+  deleted_at = NULL;
 
 INSERT INTO public.practitioners (
   id, full_name, color, active, store_id
@@ -359,7 +382,14 @@ INSERT INTO public.practitioners (
     '20000000-0000-0000-0000-000000000003',
     '店家二成員老師', '#333333', TRUE,
     '00000000-0000-0000-0000-000000000002'
-  );
+  )
+ON CONFLICT (id) DO UPDATE
+SET
+  full_name = EXCLUDED.full_name,
+  color = EXCLUDED.color,
+  active = EXCLUDED.active,
+  store_id = EXCLUDED.store_id,
+  deleted_at = NULL;
 
 INSERT INTO auth.users (id, email, raw_user_meta_data)
 VALUES
@@ -649,6 +679,23 @@ SELECT extensions.ok(
   )::BOOLEAN,
   '合法的匿名公開預約仍可成功建立'
 );
+
+RESET ROLE;
+
+SELECT extensions.is(
+  (
+    SELECT b.price
+    FROM public.bookings AS b
+    JOIN public.clients AS c ON c.id = b.client_id
+    WHERE c.phone = '0900000010'
+    ORDER BY b.created_at DESC
+    LIMIT 1
+  ),
+  1200,
+  '匿名公開預約會保存建立當下的服務價格'
+);
+
+SET LOCAL ROLE anon;
 
 SELECT extensions.is(
   public.create_booking_public(

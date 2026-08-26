@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT extensions.plan(15);
+SELECT extensions.plan(17);
 
 -- 測試可在保留本機 QA 資料的情況下重複執行；所有清理會在結尾 ROLLBACK。
 DELETE FROM public.line_notification_outbox
@@ -170,6 +170,18 @@ SELECT extensions.is(
   '已驗證 LINE 預約保留 line 來源快照'
 );
 
+SELECT extensions.is(
+  (
+    SELECT b.price
+    FROM public.bookings AS b
+    WHERE b.client_line_id = 'U11111111111111111111111111111111'
+    ORDER BY b.created_at DESC
+    LIMIT 1
+  ),
+  1200,
+  '已驗證 LINE 預約會保存建立當下的服務價格'
+);
+
 SELECT SET_CONFIG('request.jwt.claims', '{"role":"anon"}', TRUE);
 SET LOCAL ROLE anon;
 
@@ -204,6 +216,19 @@ SELECT extensions.is(
   ),
   'web',
   '一般公開 RPC 忽略偽造來源並固定為 web'
+);
+
+SELECT extensions.is(
+  (
+    SELECT b.price
+    FROM public.bookings AS b
+    JOIN public.clients AS c ON c.id = b.client_id
+    WHERE c.phone = '0911000098'
+    ORDER BY b.created_at DESC
+    LIMIT 1
+  ),
+  1200,
+  '一般公開 RPC 會保存建立當下的服務價格'
 );
 
 SELECT extensions.is(
