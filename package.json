@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "test:functions": "deno test supabase/functions/_shared/*.test.ts",
+    "test:db": "supabase test db",
+    "test": "bun run test:functions && bun run test:db",
+    "local:admin": "deno run --env-file=.env.local --allow-env --allow-net=127.0.0.1:54321 scripts/create-local-admin.ts",
     "preview": "vite preview"
   },
   "dependencies": {
