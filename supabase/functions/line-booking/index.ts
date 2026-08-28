@@ -5,7 +5,9 @@ import {
   verifyLineIdToken,
 } from "../_shared/line.ts"
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+// PostgreSQL 的 uuid 型別接受標準 8-4-4-4-12 十六進位格式，
+// 不要求特定 RFC version／variant 位元；staging 的固定店家 ID 也使用此格式。
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const defaultAllowedOrigins = new Set([
   "https://bookr-5ph.pages.dev",
   "http://127.0.0.1:5173",

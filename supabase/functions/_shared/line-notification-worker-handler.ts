@@ -1,4 +1,5 @@
 import {
+  buildLineBookingFlexMessage,
   calculateLineRetryDelay,
   formatLineBookingTime,
   LineMessagingError,
@@ -163,18 +164,22 @@ export function createLineNotificationWorkerHandler(
       }
 
       try {
-        const message = job.event_type === "test"
+        const templateValues = {
+          customer_name: job.customer_name as string,
+          service_name: job.service_name || "",
+          practitioner_name: job.practitioner_name || "",
+          start_time: formatLineBookingTime(
+            job.start_time as string,
+            job.store_timezone as string,
+          ),
+          store_name: job.store_name as string,
+        }
+        const renderedText = job.event_type === "test"
           ? validateLineMessageTemplate(job.template_content as string)
-          : renderLineMessageTemplate(job.template_content as string, {
-            customer_name: job.customer_name as string,
-            service_name: job.service_name || "",
-            practitioner_name: job.practitioner_name || "",
-            start_time: formatLineBookingTime(
-              job.start_time as string,
-              job.store_timezone as string,
-            ),
-            store_name: job.store_name as string,
-          })
+          : renderLineMessageTemplate(job.template_content as string, templateValues)
+        const message = job.event_type === "test"
+          ? renderedText
+          : buildLineBookingFlexMessage(job.event_type, renderedText, templateValues)
 
         const result = await send({
           channelAccessToken: job.channel_access_token as string,

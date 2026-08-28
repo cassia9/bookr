@@ -24,12 +24,229 @@ export interface LinePushResult {
   requestId: string | null
 }
 
+export type LineBookingNotificationType =
+  | "booking_received"
+  | "booking_confirmed"
+  | "booking_cancelled"
+  | "booking_rescheduled"
+  | "reminder"
+
+export interface LineFlexMessage {
+  type: "flex"
+  altText: string
+  contents: Record<string, unknown>
+}
+
 export interface LineTemplateValues {
   customer_name: string
   service_name: string
   practitioner_name: string
   start_time: string
   store_name: string
+}
+
+const bookingCardStyles: Record<LineBookingNotificationType, {
+  title: string
+  status: string
+  accent: string
+  headerText: string
+  softBackground: string
+  footerText: string
+  footer: string
+}> = {
+  booking_received: {
+    title: "預約申請已收到",
+    status: "等待確認",
+    accent: "#D8C8A8",
+    headerText: "#3F382C",
+    softBackground: "#F8F3E9",
+    footerText: "#796A50",
+    footer: "確認完成後，我們會再傳送通知。",
+  },
+  booking_confirmed: {
+    title: "預約已確認",
+    status: "已確認",
+    accent: "#8DBA45",
+    headerText: "#263514",
+    softBackground: "#F2F8E7",
+    footerText: "#58752E",
+    footer: "請依預約時間抵達，如需調整請聯絡店家。",
+  },
+  booking_cancelled: {
+    title: "預約已取消",
+    status: "已取消",
+    accent: "#C2414B",
+    headerText: "#FFFFFF",
+    softBackground: "#FFF0F1",
+    footerText: "#C2414B",
+    footer: "如需重新安排，歡迎再次使用預約連結。",
+  },
+  booking_rescheduled: {
+    title: "預約時間已更新",
+    status: "已更新",
+    accent: "#5B5BD6",
+    headerText: "#FFFFFF",
+    softBackground: "#F1F0FF",
+    footerText: "#5B5BD6",
+    footer: "請留意新的預約時間。",
+  },
+  reminder: {
+    title: "預約提醒",
+    status: "即將開始",
+    accent: "#2563A6",
+    headerText: "#FFFFFF",
+    softBackground: "#EDF6FF",
+    footerText: "#2563A6",
+    footer: "我們期待您的到來。",
+  },
+}
+
+function bookingDetailRow(label: string, value: string) {
+  return {
+    type: "box",
+    layout: "horizontal",
+    margin: "md",
+    contents: [
+      {
+        type: "text",
+        text: label,
+        size: "sm",
+        color: "#7A8494",
+        flex: 2,
+      },
+      {
+        type: "text",
+        text: value || "—",
+        size: "sm",
+        color: "#18212F",
+        weight: "bold",
+        wrap: true,
+        flex: 5,
+      },
+    ],
+  }
+}
+
+function bookingCardIntro(renderedText: string) {
+  const detailLinePattern = /^(課程|老師|時間|原預約時間|新時間)\s*[：:]/
+  return renderedText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !detailLinePattern.test(line))
+    .join("\n")
+    .slice(0, 1_500)
+}
+
+export function buildLineBookingFlexMessage(
+  eventType: LineBookingNotificationType,
+  renderedText: string,
+  values: LineTemplateValues,
+): LineFlexMessage {
+  const style = bookingCardStyles[eventType]
+  const altText = renderedText.trim().slice(0, 1_500)
+  const intro = bookingCardIntro(renderedText)
+
+  if (!altText) {
+    throw new LineMessagingError(
+      "INVALID_LINE_CONFIGURATION",
+      "LINE Flex Message alternative text is invalid",
+    )
+  }
+
+  const contents: Record<string, unknown> = {
+    type: "bubble",
+    size: "mega",
+    header: {
+      type: "box",
+      layout: "vertical",
+      backgroundColor: style.accent,
+      paddingAll: "20px",
+      contents: [
+        {
+          type: "box",
+          layout: "horizontal",
+          contents: [
+            {
+              type: "text",
+              text: "BOOKR · 預約通知",
+              size: "xs",
+              color: style.headerText,
+              weight: "bold",
+              flex: 1,
+            },
+            {
+              type: "text",
+              text: style.status,
+              size: "xs",
+              color: style.headerText,
+              weight: "bold",
+              align: "end",
+            },
+          ],
+        },
+        {
+          type: "text",
+          text: style.title,
+          size: "xl",
+          color: style.headerText,
+          weight: "bold",
+          wrap: true,
+          margin: "md",
+        },
+      ],
+    },
+    body: {
+      type: "box",
+      layout: "vertical",
+      paddingAll: "20px",
+      contents: [
+        ...(intro
+          ? [{
+            type: "text",
+            text: intro,
+            size: "sm",
+            color: "#455264",
+            wrap: true,
+          }]
+          : []),
+        {
+          type: "separator",
+          color: "#E5E9EF",
+          margin: intro ? "xl" : "none",
+        },
+        bookingDetailRow("課程", values.service_name),
+        bookingDetailRow("老師", values.practitioner_name),
+        bookingDetailRow(
+          eventType === "booking_rescheduled" ? "新時間" : "時間",
+          values.start_time,
+        ),
+        bookingDetailRow("店家", values.store_name),
+      ],
+    },
+    footer: {
+      type: "box",
+      layout: "vertical",
+      backgroundColor: style.softBackground,
+      paddingAll: "16px",
+      contents: [{
+        type: "text",
+        text: style.footer,
+        size: "xs",
+        color: style.footerText,
+        wrap: true,
+        align: "center",
+      }],
+    },
+  }
+
+  if (new TextEncoder().encode(JSON.stringify(contents)).length > 30_000) {
+    throw new LineMessagingError(
+      "INVALID_LINE_CONFIGURATION",
+      "LINE Flex Message bubble is too large",
+    )
+  }
+
+  return { type: "flex", altText, contents }
 }
 
 interface LineBotInfoResponse {
@@ -337,16 +554,28 @@ export async function sendLinePushMessage(
   options: {
     channelAccessToken: string
     to: string
-    message: string
+    message: string | LineFlexMessage
     retryKey: string
   },
   fetchImpl: typeof fetch = fetch,
 ): Promise<LinePushResult> {
   const token = normalizedAccessToken(options.channelAccessToken)
   const recipient = normalizedLineUserId(options.to)
-  const message = options.message.trim()
+  const message = typeof options.message === "string"
+    ? { type: "text" as const, text: options.message.trim() }
+    : options.message
 
-  if (!message || message.length > 5_000 || !uuidPattern.test(options.retryKey)) {
+  const invalidText = message.type === "text"
+    && (!message.text || message.text.length > 5_000)
+  const invalidFlex = message.type === "flex"
+    && (
+      !message.altText
+      || message.altText.length > 1_500
+      || !message.contents
+      || new TextEncoder().encode(JSON.stringify(message.contents)).length > 30_000
+    )
+
+  if (invalidText || invalidFlex || !uuidPattern.test(options.retryKey)) {
     throw new LineMessagingError(
       "INVALID_LINE_CONFIGURATION",
       "LINE message or retry key is invalid",
@@ -364,7 +593,7 @@ export async function sendLinePushMessage(
       },
       body: JSON.stringify({
         to: recipient,
-        messages: [{ type: "text", text: message }],
+        messages: [message],
       }),
       signal: AbortSignal.timeout(8_000),
     })

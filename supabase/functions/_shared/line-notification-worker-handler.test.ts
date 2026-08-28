@@ -1,6 +1,10 @@
 import { createLineNotificationWorkerHandler } from "./line-notification-worker-handler.ts"
 import type { LineNotificationJob } from "./line-notification-worker-handler.ts"
-import { LineMessagingError } from "./line-messaging.ts"
+import {
+  buildLineBookingFlexMessage,
+  LineMessagingError,
+  sendLinePushMessage,
+} from "./line-messaging.ts"
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -83,11 +87,11 @@ Deno.test("Worker 拒絕無效 secret 且不碰佇列", async () => {
 })
 
 Deno.test("Worker 組版發送並完成有效確認通知", async () => {
-  let sentMessage = ""
+  let sentMessage: unknown = null
   const job = validJob()
   const setup = dependencies([job], {
     enqueueReminders: async () => 1,
-    send: async (options: { message: string }) => {
+    send: async (options: { message: unknown }) => {
       sentMessage = options.message
       return { requestId: "line-request-1" }
     },
@@ -100,7 +104,65 @@ Deno.test("Worker 組版發送並完成有效確認通知", async () => {
   assert(body.enqueuedReminders === 1, "應回報新提醒數")
   assert(body.sent === 1, "應完成一筆發送")
   assert(setup.state.completed[0] === job.job_id, "應完成正確工作")
-  assert(sentMessage.includes("14:00"), "訊息應使用店家時區")
+  const serializedMessage = JSON.stringify(sentMessage)
+  assert(serializedMessage.includes('"type":"flex"'), "預約通知應使用 Flex Message")
+  assert(serializedMessage.includes("14:00"), "訊息應使用店家時區")
+})
+
+Deno.test("預約確認卡片保留替代文字與結構化欄位", () => {
+  const message = buildLineBookingFlexMessage(
+    "booking_confirmed",
+    "您好 王小明，您的預約已確認。\n課程：伸展課\n老師：林老師\n時間：2026/08/22 14:00\n期待您的到來！",
+    {
+      customer_name: "王小明",
+      service_name: "伸展課",
+      practitioner_name: "林老師",
+      start_time: "2026/08/22 14:00",
+      store_name: "Bookr",
+    },
+  )
+
+  const serialized = JSON.stringify(message)
+  assert(message.type === "flex", "預約通知應為 Flex Message")
+  assert(message.altText.includes("預約已確認"), "應保留通知列替代文字")
+  assert(serialized.includes("伸展課"), "卡片應顯示課程")
+  assert(serialized.includes("林老師"), "卡片應顯示老師")
+  assert(serialized.includes("2026/08/22 14:00"), "卡片應顯示時間")
+  assert(
+    serialized.match(/課程：伸展課/g)?.length === 1,
+    "範本中的明細只能保留在替代文字，卡片內文應使用結構化欄位",
+  )
+})
+
+Deno.test("LINE Push API 可發送 Flex Message", async () => {
+  let capturedRequestBody = ""
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init)
+    capturedRequestBody = await request.text()
+    return new Response("{}", { status: 200 })
+  }) as typeof fetch
+  const flexMessage = buildLineBookingFlexMessage(
+    "booking_received",
+    "您好 王小明，我們已收到您的預約申請。",
+    {
+      customer_name: "王小明",
+      service_name: "伸展課",
+      practitioner_name: "林老師",
+      start_time: "2026/08/22 14:00",
+      store_name: "Bookr",
+    },
+  )
+
+  await sendLinePushMessage({
+    channelAccessToken: "local-test-access-token-value",
+    to: "U11111111111111111111111111111111",
+    message: flexMessage,
+    retryKey: "90000000-0000-4000-8000-000000000004",
+  }, fetchImpl)
+
+  const payload = JSON.parse(capturedRequestBody)
+  assert(payload.messages[0].type === "flex", "LINE 請求應包含 Flex Message")
+  assert(payload.messages[0].contents.type === "bubble", "預約卡片應使用 bubble")
 })
 
 Deno.test("Worker 可發送不綁定預約的管理員測試推播", async () => {

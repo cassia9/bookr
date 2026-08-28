@@ -307,6 +307,7 @@ export interface Database {
           first_booking_at: string | null
           last_booking_at: string | null
           upcoming_count: number
+          gender: 'male' | 'female' | 'unknown'
         }
       }
     }

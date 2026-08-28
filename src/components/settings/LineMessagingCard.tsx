@@ -119,6 +119,89 @@ const notificationRows: Array<{
   },
 ]
 
+const previewStyles: Record<TransactionNotificationType, {
+  title: string
+  status: string
+  accent: string
+  headerText: string
+  softBackground: string
+  footerText: string
+  footer: string
+}> = {
+  booking_received: {
+    title: '預約申請已收到',
+    status: '等待確認',
+    accent: '#D8C8A8',
+    headerText: '#3F382C',
+    softBackground: '#F8F3E9',
+    footerText: '#796A50',
+    footer: '確認完成後，我們會再傳送通知。',
+  },
+  booking_confirmed: {
+    title: '預約已確認',
+    status: '已確認',
+    accent: '#8DBA45',
+    headerText: '#263514',
+    softBackground: '#F2F8E7',
+    footerText: '#58752E',
+    footer: '請依預約時間抵達，如需調整請聯絡店家。',
+  },
+  booking_cancelled: {
+    title: '預約已取消',
+    status: '已取消',
+    accent: '#C2414B',
+    headerText: '#FFFFFF',
+    softBackground: '#FFF0F1',
+    footerText: '#C2414B',
+    footer: '如需重新安排，歡迎再次使用預約連結。',
+  },
+  booking_rescheduled: {
+    title: '預約時間已更新',
+    status: '已更新',
+    accent: '#5B5BD6',
+    headerText: '#FFFFFF',
+    softBackground: '#F1F0FF',
+    footerText: '#5B5BD6',
+    footer: '請留意新的預約時間。',
+  },
+  reminder: {
+    title: '預約提醒',
+    status: '即將開始',
+    accent: '#2563A6',
+    headerText: '#FFFFFF',
+    softBackground: '#EDF6FF',
+    footerText: '#2563A6',
+    footer: '我們期待您的到來。',
+  },
+}
+
+const previewValues = {
+  customer_name: '王小明',
+  service_name: '進階修復課程 90 分鐘',
+  practitioner_name: '陳老師',
+  start_time: '2026/08/29（六）10:45',
+}
+
+function renderPreviewTemplate(template: string, storeName: string) {
+  const values = { ...previewValues, store_name: storeName }
+  return Object.entries(values).reduce(
+    (message, [variable, value]) => message.replace(
+      new RegExp(`{{\\s*${variable}\\s*}}`, 'g'),
+      value,
+    ),
+    template.replace(/\\n/g, '\n'),
+  )
+}
+
+function previewIntro(renderedText: string) {
+  const detailLinePattern = /^(課程|老師|時間|原預約時間|新時間)\s*[：:]/
+  return renderedText
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line && !detailLinePattern.test(line))
+    .join('\n')
+}
+
 function formatDate(value: string | null) {
   if (!value) return '—'
   return new Intl.DateTimeFormat('zh-TW', {
@@ -388,14 +471,27 @@ export default function LineMessagingCard({
                       ariaLabel={`切換${row.title}`}
                     />
                   </div>
-                  <Textarea
-                    value={templates[row.type]}
-                    onChange={event => onTemplateChange(row.type, event.target.value)}
-                    rows={3}
-                    maxLength={4500}
-                    disabled={!isAdmin || !checked}
-                    aria-label={`${row.title}訊息範本`}
-                  />
+                  <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+                    <div>
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                        訊息文字
+                      </p>
+                      <Textarea
+                        value={templates[row.type]}
+                        onChange={event => onTemplateChange(row.type, event.target.value)}
+                        rows={7}
+                        maxLength={4500}
+                        disabled={!isAdmin || !checked}
+                        aria-label={`${row.title}訊息範本`}
+                        className="min-h-44 font-mono text-xs leading-6"
+                      />
+                    </div>
+                    <LineFlexPreview
+                      type={row.type}
+                      template={templates[row.type]}
+                      storeName={messagingStatus?.bot_display_name || '時運翡翠'}
+                    />
+                  </div>
                 </div>
               )
             })}
@@ -417,6 +513,73 @@ export default function LineMessagingCard({
         </div>
       </div>
     </section>
+  )
+}
+
+function LineFlexPreview({
+  type,
+  template,
+  storeName,
+}: {
+  type: TransactionNotificationType
+  template: string
+  storeName: string
+}) {
+  const style = previewStyles[type]
+  const intro = previewIntro(renderPreviewTemplate(template, storeName))
+  const details = [
+    ['課程', previewValues.service_name],
+    ['老師', previewValues.practitioner_name],
+    [type === 'booking_rescheduled' ? '新時間' : '時間', previewValues.start_time],
+    ['店家', storeName],
+  ]
+
+  return (
+    <div aria-live="polite" aria-label={`${style.title} LINE 卡片預覽`}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+          LINE 卡片預覽
+        </p>
+        <span className="text-[11px] text-slate-400">範例資料</span>
+      </div>
+      <div className="rounded-[24px] bg-[#DCE5EC] p-3 shadow-inner shadow-slate-300/50">
+        <div className="overflow-hidden rounded-[18px] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
+          <div className="px-5 py-4" style={{
+            backgroundColor: style.accent,
+            color: style.headerText,
+          }}>
+            <div className="flex items-center justify-between gap-3 text-[10px] font-bold tracking-wide opacity-90">
+              <span>BOOKR · 預約通知</span>
+              <span>{style.status}</span>
+            </div>
+            <p className="mt-2 text-lg font-bold leading-tight">{style.title}</p>
+          </div>
+
+          <div className="space-y-4 px-5 py-4">
+            {intro && (
+              <p className="whitespace-pre-line break-words text-xs leading-5 text-slate-600">
+                {intro}
+              </p>
+            )}
+            <div className="border-t border-slate-200 pt-1">
+              {details.map(([label, value]) => (
+                <div key={label} className="grid grid-cols-[58px_minmax(0,1fr)] gap-2 py-1.5 text-xs">
+                  <span className="text-slate-400">{label}</span>
+                  <span className="break-words font-semibold text-slate-800">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="px-4 py-3 text-center text-[11px] leading-4" style={{
+            backgroundColor: style.softBackground,
+            color: style.footerText,
+          }}>
+            {style.footer}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
