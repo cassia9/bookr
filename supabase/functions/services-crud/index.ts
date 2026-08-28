@@ -9,6 +9,20 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Max-Age": "86400",
+}
+
+function jsonResponse(body: Record<string, unknown>, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  })
+}
+
 interface CreateServiceRequest {
   name: string
   description?: string
@@ -60,13 +74,7 @@ serve(async (req: Request) => {
   try {
     // CORS
     if (req.method === "OPTIONS") {
-      return new Response("ok", {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      })
+      return new Response("ok", { headers: corsHeaders })
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -76,10 +84,7 @@ serve(async (req: Request) => {
     // 取得授權 token
     const authHeader = req.headers.get("Authorization")
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      )
+      return jsonResponse({ error: "Missing authorization header" }, 401)
     }
 
     const token = authHeader.replace("Bearer ", "")
@@ -87,31 +92,22 @@ serve(async (req: Request) => {
       token
     )
     if (userError || !userData.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      })
+      return jsonResponse({ error: "Unauthorized" }, 401)
     }
 
-    // 驗證用戶身份和權限（檢查 members 表中的 is_admin）
+    // 驗證用戶身份和權限（使用現行 users 表的角色模型）
     const { data: memberData, error: memberError } = await supabase
-      .from("members")
-      .select("store_id, is_admin")
-      .eq("user_id", userData.user.id)
+      .from("users")
+      .select("store_id, role")
+      .eq("id", userData.user.id)
       .single()
 
     if (memberError || !memberData) {
-      return new Response(
-        JSON.stringify({ error: "User not found in members table" }),
-        { status: 403, headers: { "Content-Type": "application/json" } }
-      )
+      return jsonResponse({ error: "User profile not found" }, 403)
     }
 
-    if (!memberData.is_admin) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden: Admin access required" }),
-        { status: 403, headers: { "Content-Type": "application/json" } }
-      )
+    if (memberData.role !== "admin") {
+      return jsonResponse({ error: "Forbidden: Admin access required" }, 403)
     }
 
     // ============================================================
@@ -130,10 +126,7 @@ serve(async (req: Request) => {
         .is("deleted_at", null)
 
       if (existing && existing.length > 0) {
-        return new Response(
-          JSON.stringify({ error: "A service with this name already exists" }),
-          { status: 409, headers: { "Content-Type": "application/json" } }
-        )
+        return jsonResponse({ error: "A service with this name already exists" }, 409)
       }
 
       // 建立課程
@@ -151,19 +144,13 @@ serve(async (req: Request) => {
         .single()
 
       if (createError) {
-        return new Response(JSON.stringify({ error: createError.message }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        })
+        return jsonResponse({ error: createError.message }, 400)
       }
 
-      return new Response(
-        JSON.stringify({
-          data: service,
-          message: "Service created successfully",
-        }),
-        { status: 201, headers: { "Content-Type": "application/json" } }
-      )
+      return jsonResponse({
+        data: service,
+        message: "Service created successfully",
+      }, 201)
     }
 
     // ============================================================
@@ -174,10 +161,7 @@ serve(async (req: Request) => {
       const { service_id, ...updateData } = body
 
       if (!service_id) {
-        return new Response(
-          JSON.stringify({ error: "Service ID is required" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        )
+        return jsonResponse({ error: "Service ID is required" }, 400)
       }
 
       // 驗證課程屬於該店家
@@ -188,17 +172,11 @@ serve(async (req: Request) => {
         .single()
 
       if (fetchError || !service) {
-        return new Response(
-          JSON.stringify({ error: "Service not found" }),
-          { status: 404, headers: { "Content-Type": "application/json" } }
-        )
+        return jsonResponse({ error: "Service not found" }, 404)
       }
 
       if (service.store_id !== memberData.store_id) {
-        return new Response(
-          JSON.stringify({ error: "Forbidden: Access denied" }),
-          { status: 403, headers: { "Content-Type": "application/json" } }
-        )
+        return jsonResponse({ error: "Forbidden: Access denied" }, 403)
       }
 
       // 準備更新資料
@@ -206,10 +184,7 @@ serve(async (req: Request) => {
 
       if (updateData.name !== undefined) {
         if (!updateData.name || updateData.name.trim() === "") {
-          return new Response(
-            JSON.stringify({ error: "Service name cannot be empty" }),
-            { status: 400, headers: { "Content-Type": "application/json" } }
-          )
+          return jsonResponse({ error: "Service name cannot be empty" }, 400)
         }
         updatePayload.name = updateData.name.trim()
       }
@@ -220,10 +195,7 @@ serve(async (req: Request) => {
 
       if (updateData.duration_minutes !== undefined) {
         if (!Number.isInteger(updateData.duration_minutes) || updateData.duration_minutes < 15 || updateData.duration_minutes > 480) {
-          return new Response(
-            JSON.stringify({ error: "Duration must be between 15 and 480 minutes" }),
-            { status: 400, headers: { "Content-Type": "application/json" } }
-          )
+          return jsonResponse({ error: "Duration must be between 15 and 480 minutes" }, 400)
         }
 
         // 警告：若修改時長且有進行中的預約，記錄警告但繼續
@@ -244,10 +216,7 @@ serve(async (req: Request) => {
 
       if (updateData.price !== undefined) {
         if (typeof updateData.price !== "number" || updateData.price < 0 || updateData.price > 999999) {
-          return new Response(
-            JSON.stringify({ error: "Price must be between 0 and 999,999" }),
-            { status: 400, headers: { "Content-Type": "application/json" } }
-          )
+          return jsonResponse({ error: "Price must be between 0 and 999,999" }, 400)
         }
         updatePayload.price = Math.floor(updateData.price)
       }
@@ -265,19 +234,13 @@ serve(async (req: Request) => {
         .single()
 
       if (updateError) {
-        return new Response(JSON.stringify({ error: updateError.message }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        })
+        return jsonResponse({ error: updateError.message }, 400)
       }
 
-      return new Response(
-        JSON.stringify({
-          data: updated,
-          message: "Service updated successfully",
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      )
+      return jsonResponse({
+        data: updated,
+        message: "Service updated successfully",
+      }, 200)
     }
 
     // ============================================================
@@ -288,10 +251,7 @@ serve(async (req: Request) => {
       const { service_id } = body
 
       if (!service_id) {
-        return new Response(
-          JSON.stringify({ error: "Service ID is required" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        )
+        return jsonResponse({ error: "Service ID is required" }, 400)
       }
 
       // 驗證課程屬於該店家
@@ -302,17 +262,11 @@ serve(async (req: Request) => {
         .single()
 
       if (fetchError || !service) {
-        return new Response(
-          JSON.stringify({ error: "Service not found" }),
-          { status: 404, headers: { "Content-Type": "application/json" } }
-        )
+        return jsonResponse({ error: "Service not found" }, 404)
       }
 
       if (service.store_id !== memberData.store_id) {
-        return new Response(
-          JSON.stringify({ error: "Forbidden: Access denied" }),
-          { status: 403, headers: { "Content-Type": "application/json" } }
-        )
+        return jsonResponse({ error: "Forbidden: Access denied" }, 403)
       }
 
       // 檢查該課程相關的預約和從業人員指派
@@ -333,34 +287,22 @@ serve(async (req: Request) => {
         .eq("id", service_id)
 
       if (deleteError) {
-        return new Response(JSON.stringify({ error: deleteError.message }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        })
+        return jsonResponse({ error: deleteError.message }, 400)
       }
 
-      return new Response(
-        JSON.stringify({
-          message: "Service deleted successfully",
-          service_id,
-          affected_bookings: bookings?.length || 0,
-          affected_practitioners: practitioners?.length || 0,
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      )
+      return jsonResponse({
+        message: "Service deleted successfully",
+        service_id,
+        affected_bookings: bookings?.length || 0,
+        affected_practitioners: practitioners?.length || 0,
+      }, 200)
     }
 
-    return new Response(JSON.stringify({ error: "Unknown action" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    })
+    return jsonResponse({ error: "Unknown action" }, 400)
   } catch (error) {
     console.error("Error:", error)
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    )
+    return jsonResponse({
+      error: error instanceof Error ? error.message : "Unknown error",
+    }, 500)
   }
 })
