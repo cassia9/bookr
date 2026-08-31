@@ -32,7 +32,7 @@ END
 $migration$;
 
 CREATE TABLE IF NOT EXISTS public.customer_channel_identities (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
   channel TEXT NOT NULL,
