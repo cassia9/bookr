@@ -174,7 +174,7 @@ REVOKE ALL ON TABLE private.store_line_messaging_credentials
 -- ------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS public.line_notification_outbox (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   connection_id UUID NOT NULL
     REFERENCES public.store_channel_connections(id) ON DELETE RESTRICT,
@@ -250,7 +250,7 @@ REVOKE ALL ON TABLE public.line_notification_outbox
 GRANT SELECT ON TABLE public.line_notification_outbox TO authenticated;
 
 CREATE TABLE IF NOT EXISTS private.line_webhook_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   connection_id UUID NOT NULL
     REFERENCES public.store_channel_connections(id) ON DELETE CASCADE,
@@ -746,7 +746,7 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
-  v_job_id UUID := extensions.uuid_generate_v4();
+  v_job_id UUID := gen_random_uuid();
   v_store_id UUID;
   v_client_id UUID;
   v_connection_id UUID;

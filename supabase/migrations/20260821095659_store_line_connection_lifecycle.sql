@@ -11,7 +11,7 @@
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.store_channel_connections (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   channel TEXT NOT NULL,
   provider_id TEXT,
