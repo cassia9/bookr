@@ -12,6 +12,7 @@ import {
   Users, Plus, Phone, Mail, ChevronRight,
   CalendarDays, TrendingUp, Clock, ChevronDown,
   Check, X, DollarSign, FileText, Pencil, Trash2,
+  Gift, TicketCheck,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
@@ -32,7 +33,15 @@ import Spinner from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Snackbar'
 import IconButton from '@/components/ui/IconButton'
 import CustomerChannelIdentities from '@/components/clients/CustomerChannelIdentities'
+import VoucherSaleModal from '@/components/vouchers/VoucherSaleModal'
 import { cn } from '@/lib/cn'
+import {
+  getAvailableQuantity,
+  getClientVouchers,
+  getVoucherProducts,
+  type ClientVoucherWithItems,
+  type VoucherProductWithItems,
+} from '@/lib/vouchers-api'
 import type { ClientStat } from '@/types/database'
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
@@ -244,6 +253,117 @@ const STATUS_ACTIONS: Partial<Record<BookingStatus, { label: string; next: Booki
   ],
 }
 
+// ── 客戶商品券 ───────────────────────────────────────────────────────────────
+
+function ClientVoucherSection({ client, active }: { client: ClientStat; active: boolean }) {
+  const [vouchers, setVouchers] = useState<ClientVoucherWithItems[]>([])
+  const [products, setProducts] = useState<VoucherProductWithItems[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saleOpen, setSaleOpen] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const [voucherData, productData] = await Promise.all([
+        getClientVouchers(client.id),
+        getVoucherProducts(),
+      ])
+      setVouchers(voucherData)
+      setProducts(productData)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '操作失敗'
+      toast.error('無法載入客戶商品券', message)
+    } finally {
+      setLoading(false)
+    }
+  }, [client.id])
+
+  useEffect(() => {
+    if (!active) return
+    const frame = window.requestAnimationFrame(() => { void load() })
+    return () => window.cancelAnimationFrame(frame)
+  }, [active, load])
+
+  const today = new Date().toLocaleDateString('en-CA')
+  const usableVouchers = vouchers.filter(voucher => (
+    voucher.status === 'active'
+    && (!voucher.expires_on || voucher.expires_on >= today)
+    && voucher.client_voucher_items.some(item => getAvailableQuantity(item) > 0)
+  ))
+  const availableSessions = usableVouchers.reduce((sum, voucher) => (
+    sum + voucher.client_voucher_items.reduce(
+      (itemSum, item) => itemSum + getAvailableQuantity(item),
+      0,
+    )
+  ), 0)
+  const activeProducts = products.filter(product => product.active && !product.deleted_at)
+
+  return (
+    <div className="rounded-2xl border border-[#DDE8CB] bg-[#F8FAF4] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#668B32]">
+            <Gift size={14} /> 商品券
+          </p>
+          <p className="mt-1 font-mono text-xl font-bold text-slate-900">{availableSessions} 堂可用</p>
+          <p className="mt-0.5 text-xs text-slate-400">{usableVouchers.length} 張使用中</p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => setSaleOpen(true)}
+          disabled={!activeProducts.length}
+        >
+          <TicketCheck size={14} /> 登記購買
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-5"><Spinner size="sm" /></div>
+      ) : usableVouchers.length ? (
+        <div className="mt-4 space-y-2 border-t border-[#DDE8CB] pt-3">
+          {usableVouchers.map(voucher => {
+            const remaining = voucher.client_voucher_items.reduce(
+              (sum, item) => sum + getAvailableQuantity(item),
+              0,
+            )
+            const reserved = voucher.client_voucher_items.reduce(
+              (sum, item) => sum + item.reserved_quantity,
+              0,
+            )
+            return (
+              <div key={voucher.id} className="rounded-xl bg-white px-3 py-2.5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="truncate text-sm font-medium text-slate-800">{voucher.product_name_snapshot}</p>
+                  <span className="shrink-0 font-mono text-xs font-semibold text-[#668B32]">剩 {remaining} 堂</span>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {reserved > 0 ? `${reserved} 堂已預約 · ` : ''}
+                  {voucher.expires_on ? `有效至 ${voucher.expires_on}` : '永久有效'}
+                </p>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="mt-4 border-t border-[#DDE8CB] pt-3 text-xs text-slate-400">
+          尚無可使用商品券{!activeProducts.length && '，請先到商品券頁建立方案'}
+        </p>
+      )}
+
+      {saleOpen && (
+        <VoucherSaleModal
+          open
+          initialProduct={null}
+          initialClientId={client.id}
+          products={products}
+          clients={[{ id: client.id, full_name: client.full_name, phone: client.phone }]}
+          onClose={() => setSaleOpen(false)}
+          onSaved={() => { setSaleOpen(false); void load() }}
+        />
+      )}
+    </div>
+  )
+}
+
 // ── 客戶詳情 Drawer ───────────────────────────────────────────────────────────
 
 interface ClientDrawerProps {
@@ -395,6 +515,8 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
           clientId={client.id}
           active={open}
         />
+
+        <ClientVoucherSection client={client} active={open} />
 
         {/* 統計卡片 */}
         <div>
