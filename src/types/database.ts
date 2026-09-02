@@ -115,6 +115,112 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['bookings']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['bookings']['Insert']>
       }
+      voucher_products: {
+        Row: {
+          id: string
+          store_id: string
+          name: string
+          description: string | null
+          selling_price: number
+          validity_days: number | null
+          active: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['voucher_products']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['voucher_products']['Insert']>
+      }
+      voucher_product_items: {
+        Row: {
+          id: string
+          store_id: string
+          voucher_product_id: string
+          service_id: string
+          quantity: number
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['voucher_product_items']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['voucher_product_items']['Insert']>
+      }
+      client_vouchers: {
+        Row: {
+          id: string
+          store_id: string
+          client_id: string
+          voucher_product_id: string | null
+          sale_number: string
+          product_name_snapshot: string
+          product_description_snapshot: string | null
+          paid_amount: number
+          payment_method: 'cash' | 'transfer' | 'card' | 'other'
+          purchased_on: string
+          expires_on: string | null
+          notes: string | null
+          status: 'active' | 'voided'
+          created_by: string | null
+          voided_by: string | null
+          voided_at: string | null
+          void_reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+      }
+      client_voucher_items: {
+        Row: {
+          id: string
+          store_id: string
+          client_voucher_id: string
+          service_id: string
+          service_name_snapshot: string
+          total_quantity: number
+          adjustment_quantity: number
+          reserved_quantity: number
+          used_quantity: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+      }
+      voucher_redemptions: {
+        Row: {
+          id: string
+          store_id: string
+          booking_id: string
+          client_voucher_item_id: string
+          status: 'reserved' | 'redeemed' | 'released'
+          reserved_at: string
+          redeemed_at: string | null
+          released_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+      }
+      voucher_ledger: {
+        Row: {
+          id: string
+          store_id: string
+          client_voucher_item_id: string
+          redemption_id: string | null
+          booking_id: string | null
+          action: 'issued' | 'reserved' | 'released' | 'redeemed' | 'adjusted' | 'voided'
+          quantity: number
+          available_after: number
+          reserved_after: number
+          used_after: number
+          reason: string | null
+          actor_user_id: string | null
+          created_at: string
+        }
+        Insert: never
+        Update: never
+      }
       notification_settings: {
         Row: {
           id: string
@@ -365,6 +471,53 @@ export interface Database {
           webhook_path: string
         }>
       }
+      save_voucher_product: {
+        Args: {
+          p_product_id: string | null
+          p_name: string
+          p_description: string | null
+          p_selling_price: number
+          p_validity_days: number | null
+          p_active: boolean
+          p_items: Json
+        }
+        Returns: Json
+      }
+      archive_voucher_product: {
+        Args: { p_product_id: string }
+        Returns: Json
+      }
+      sell_voucher_product: {
+        Args: {
+          p_product_id: string
+          p_client_id: string
+          p_purchased_on?: string
+          p_paid_amount?: number | null
+          p_payment_method?: 'cash' | 'transfer' | 'card' | 'other'
+          p_notes?: string | null
+        }
+        Returns: Json
+      }
+      void_client_voucher: {
+        Args: { p_client_voucher_id: string; p_reason: string }
+        Returns: Json
+      }
+      adjust_client_voucher_item: {
+        Args: {
+          p_client_voucher_item_id: string
+          p_quantity_delta: number
+          p_reason: string
+        }
+        Returns: Json
+      }
+      set_booking_voucher: {
+        Args: {
+          p_booking_id: string
+          p_use_voucher: boolean
+          p_client_voucher_item_id?: string | null
+        }
+        Returns: Json
+      }
     }
   }
 }
@@ -377,6 +530,12 @@ export type Client = Database['public']['Tables']['clients']['Row']
 export type StoreChannelConnection = Database['public']['Tables']['store_channel_connections']['Row']
 export type Service = Database['public']['Tables']['services']['Row']
 export type Booking = Database['public']['Tables']['bookings']['Row']
+export type VoucherProduct = Database['public']['Tables']['voucher_products']['Row']
+export type VoucherProductItem = Database['public']['Tables']['voucher_product_items']['Row']
+export type ClientVoucher = Database['public']['Tables']['client_vouchers']['Row']
+export type ClientVoucherItem = Database['public']['Tables']['client_voucher_items']['Row']
+export type VoucherRedemption = Database['public']['Tables']['voucher_redemptions']['Row']
+export type VoucherLedgerEntry = Database['public']['Tables']['voucher_ledger']['Row']
 
 export type BookingWithRelations = Booking & {
   client: Client
