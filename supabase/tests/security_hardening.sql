@@ -62,8 +62,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  18::BIGINT,
-  'authenticated 只有十八支必要 RPC／輔助函式'
+  24::BIGINT,
+  'authenticated 只有二十四支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -91,7 +91,13 @@ SELECT extensions.ok(
         'get_service_stats',
         'get_daily_stats',
         'manage_store_line_connection',
-        'get_store_line_messaging_status'
+        'get_store_line_messaging_status',
+        'save_voucher_product',
+        'archive_voucher_product',
+        'sell_voucher_product',
+        'void_client_voucher',
+        'adjust_client_voucher_item',
+        'set_booking_voucher'
       ])
   ),
   'authenticated RPC 全部位於白名單'
@@ -177,12 +183,18 @@ SELECT extensions.is(
         'audit_logs',
         'store_channel_connections',
         'customer_channel_identities',
-        'line_notification_outbox'
+        'line_notification_outbox',
+        'voucher_products',
+        'voucher_product_items',
+        'client_vouchers',
+        'client_voucher_items',
+        'voucher_redemptions',
+        'voucher_ledger'
       ])
       AND c.relrowsecurity
   ),
-  16::BIGINT,
-  '十六張核心資料表全部啟用 RLS'
+  22::BIGINT,
+  '二十二張核心資料表全部啟用 RLS'
 );
 
 SELECT extensions.is(
