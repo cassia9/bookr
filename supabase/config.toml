@@ -30,6 +30,10 @@ verify_jwt = true
 [functions.line-booking]
 verify_jwt = false
 
+# 客戶中心同樣以 LINE ID token 驗證本人，不接受瀏覽器直接查詢資料表。
+[functions.line-customer-center]
+verify_jwt = false
+
 # 由函式內使用 Supabase Auth 驗證登入者，並再次確認店家管理員角色。
 [functions.line-messaging-settings]
 verify_jwt = false
