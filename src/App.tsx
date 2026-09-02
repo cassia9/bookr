@@ -11,6 +11,7 @@ import ComponentsPage from './pages/admin/ComponentsPage'
 import SettingsPage from './pages/admin/SettingsPage'
 import ClientsPage from './pages/admin/ClientsPage'
 import DashboardPage from './pages/admin/DashboardPage'
+import VouchersPage from './pages/admin/VouchersPage'
 // import SettingsPage from './pages/admin/SettingsPage'
 // InviteMemberPage 已整合為 SettingsPage 內的 Modal
 // MembersPage 已整合進 SettingsPage
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="bookings" element={<BookingManagement />} />
             <Route path="practitioners" element={<PractitionerManagement />} />
             <Route path="services" element={<ServicesPage />} />
+            <Route path="vouchers" element={<VouchersPage />} />
             <Route path="components" element={<ComponentsPage />} />
             <Route path="clients" element={<ClientsPage />} />
             <Route path="dashboard" element={<DashboardPage />} />
