@@ -17,6 +17,7 @@ import VouchersPage from './pages/admin/VouchersPage'
 // MembersPage 已整合進 SettingsPage
 import AcceptInvitationPage from './pages/auth/AcceptInvitationPage'
 import BookingPage from './pages/booking/BookingPage'
+import CustomerCenterPage from './pages/booking/CustomerCenterPage'
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
           <Route path="/auth/accept-invitation" element={<AcceptInvitationPage />} />
           <Route path="/book/:storeId" element={<BookingPage />} />
+          <Route path="/book/:storeId/me" element={<CustomerCenterPage />} />
 
           <Route
             path="/admin"
