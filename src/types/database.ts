@@ -518,6 +518,23 @@ export interface Database {
         }
         Returns: Json
       }
+      upsert_booking_with_voucher: {
+        Args: {
+          p_booking_id: string | null
+          p_client_id: string
+          p_practitioner_id: string
+          p_service_id: string
+          p_start_time: string
+          p_end_time: string
+          p_buffer_minutes?: number
+          p_notes?: string | null
+          p_store_id?: string
+          p_price?: number | null
+          p_voucher_mode?: 'auto' | 'specific' | 'none'
+          p_client_voucher_item_id?: string | null
+        }
+        Returns: Json
+      }
     }
   }
 }

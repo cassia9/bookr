@@ -24,6 +24,16 @@ export interface ClientVoucherWithItems extends ClientVoucher {
   client_voucher_items: ClientVoucherItem[]
 }
 
+export interface EligibleVoucherItem {
+  itemId: string
+  voucherId: string
+  productName: string
+  serviceName: string
+  availableQuantity: number
+  expiresOn: string | null
+  purchasedOn: string
+}
+
 export interface VoucherSaleWithRelations extends ClientVoucherWithItems {
   clients: {
     id: string
@@ -156,6 +166,38 @@ export async function getClientVouchers(clientId: string): Promise<ClientVoucher
 
   if (error) throw error
   return (data ?? []) as unknown as ClientVoucherWithItems[]
+}
+
+export async function getEligibleClientVoucherItems(
+  clientId: string,
+  serviceId: string,
+  bookingDate: string,
+): Promise<EligibleVoucherItem[]> {
+  if (!clientId || !serviceId || !bookingDate) return []
+
+  const vouchers = await getClientVouchers(clientId)
+  return vouchers
+    .filter(voucher => (
+      voucher.status === 'active'
+      && voucher.purchased_on <= bookingDate
+      && (!voucher.expires_on || voucher.expires_on >= bookingDate)
+    ))
+    .flatMap(voucher => voucher.client_voucher_items
+      .filter(item => item.service_id === serviceId && getAvailableQuantity(item) > 0)
+      .map(item => ({
+        itemId: item.id,
+        voucherId: voucher.id,
+        productName: voucher.product_name_snapshot,
+        serviceName: item.service_name_snapshot,
+        availableQuantity: getAvailableQuantity(item),
+        expiresOn: voucher.expires_on,
+        purchasedOn: voucher.purchased_on,
+      })))
+    .sort((left, right) => (
+      (left.expiresOn ?? '9999-12-31').localeCompare(right.expiresOn ?? '9999-12-31')
+      || left.purchasedOn.localeCompare(right.purchasedOn)
+      || left.itemId.localeCompare(right.itemId)
+    ))
 }
 
 export async function voidClientVoucher(voucherId: string, reason: string): Promise<void> {
