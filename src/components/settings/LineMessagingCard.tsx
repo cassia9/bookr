@@ -180,6 +180,8 @@ const previewValues = {
   service_name: '進階修復課程 90 分鐘',
   practitioner_name: '陳老師',
   start_time: '2026/08/29（六）10:45',
+  voucher_name: '進階修復五堂券',
+  voucher_remaining: '4',
 }
 
 function renderPreviewTemplate(template: string, storeName: string) {
@@ -194,7 +196,7 @@ function renderPreviewTemplate(template: string, storeName: string) {
 }
 
 function previewIntro(renderedText: string) {
-  const detailLinePattern = /^(課程|老師|時間|原預約時間|新時間)\s*[：:]/
+  const detailLinePattern = /^(課程|老師|時間|原預約時間|新時間|商品券|剩餘堂數)\s*[：:]/
   return renderedText
     .split('\n')
     .map(line => line.trim())
@@ -449,7 +451,7 @@ export default function LineMessagingCard({
             <div>
               <h4 className="text-sm font-semibold text-slate-700">交易通知與文字範本</h4>
               <p className="mt-0.5 text-xs leading-5 text-slate-400">
-                可使用 customer_name、service_name、practitioner_name、start_time、store_name 變數；系統只接受白名單變數。
+                可使用 customer_name、service_name、practitioner_name、start_time、store_name、voucher_name、voucher_remaining 變數；系統只接受白名單變數。
               </p>
             </div>
           </div>
@@ -568,6 +570,11 @@ function LineFlexPreview({
                   <span className="break-words font-semibold text-slate-800">{value}</span>
                 </div>
               ))}
+            </div>
+            <div className="rounded-xl bg-[#F2F8E7] px-3.5 py-3">
+              <p className="text-[10px] font-bold text-[#58752E]">本次使用商品券</p>
+              <p className="mt-1 text-xs font-semibold text-[#263514]">{previewValues.voucher_name}</p>
+              <p className="mt-1 text-[11px] text-[#58752E]">剩餘 {previewValues.voucher_remaining} 堂</p>
             </div>
           </div>
 
