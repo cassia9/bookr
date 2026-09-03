@@ -26,6 +26,7 @@ import {
 import VoucherSaleModal, {
   type VoucherClientOption,
 } from '../../components/vouchers/VoucherSaleModal'
+import VoucherManageModal from '../../components/vouchers/VoucherManageModal'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import ConfirmModal from '../../components/ui/ConfirmModal'
@@ -397,6 +398,7 @@ export default function VouchersPage() {
   const [saleProduct, setSaleProduct] = useState<VoucherProductWithItems | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<VoucherProductWithItems | null>(null)
   const [archiving, setArchiving] = useState(false)
+  const [manageSale, setManageSale] = useState<VoucherSaleWithRelations | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -621,7 +623,7 @@ export default function VouchersPage() {
               <table className="w-full min-w-[820px]">
                 <thead className="border-b border-slate-200 bg-slate-50">
                   <tr>
-                    {['客戶', '商品券', '堂數進度', '實收', '效期', '狀態', '銷售編號'].map(label => (
+                    {['客戶', '商品券', '堂數進度', '實收', '效期', '狀態', '銷售編號', '操作'].map(label => (
                       <th key={label} className="px-5 py-3 text-left text-xs font-medium text-slate-500">{label}</th>
                     ))}
                   </tr>
@@ -649,6 +651,13 @@ export default function VouchersPage() {
                         </td>
                         <td className="px-5 py-4"><Badge variant={status.variant}>{status.label}</Badge></td>
                         <td className="px-5 py-4 font-mono text-xs text-slate-400">{sale.sale_number}</td>
+                        <td className="px-5 py-4">
+                          {isAdmin ? (
+                            <Button variant="ghost" size="sm" onClick={() => setManageSale(sale)}>管理</Button>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
+                        </td>
                       </tr>
                     )
                   })}
@@ -686,6 +695,14 @@ export default function VouchersPage() {
           clients={clients}
           onClose={() => setSaleModalOpen(false)}
           onSaved={() => { setSaleModalOpen(false); setActiveTab('sales'); void load() }}
+        />
+      )}
+      {manageSale && (
+        <VoucherManageModal
+          open
+          sale={manageSale}
+          onClose={() => setManageSale(null)}
+          onChanged={() => { setManageSale(null); void load() }}
         />
       )}
       <ConfirmModal
