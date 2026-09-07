@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   CalendarClock,
-  CircleDollarSign,
+  CheckCircle2,
   Edit2,
   Gift,
-  Layers3,
   Plus,
   ReceiptText,
   Sparkles,
@@ -444,17 +443,13 @@ export default function VouchersPage() {
     || sale.clients?.phone.includes(search)
   ))
 
-  const availableSessions = sales.reduce((total, sale) => (
-    sale.status === 'active'
-      ? total + sale.client_voucher_items.reduce(
-        (subtotal, item) => subtotal + getAvailableQuantity(item), 0,
-      )
-      : total
+  const soldVouchers = sales.filter(sale => sale.status === 'active').length
+  const usedSessions = sales.reduce((total, sale) => (
+    total + sale.client_voucher_items.reduce(
+      (subtotal, item) => subtotal + item.used_quantity,
+      0,
+    )
   ), 0)
-  const monthPrefix = today().slice(0, 7)
-  const monthlySales = sales
-    .filter(sale => sale.purchased_on.startsWith(monthPrefix) && sale.status === 'active')
-    .reduce((total, sale) => total + sale.paid_amount, 0)
 
   async function handleArchive() {
     if (!archiveTarget) return
@@ -509,8 +504,8 @@ export default function VouchersPage() {
         <section className="grid gap-3 md:grid-cols-3">
           {[
             { label: '上架方案', value: `${products.filter(product => product.active && !product.deleted_at).length} 種`, icon: Gift },
-            { label: '客戶可用堂數', value: `${availableSessions} 堂`, icon: Layers3 },
-            { label: '本月登記銷售', value: money(monthlySales), icon: CircleDollarSign },
+            { label: '累計售出', value: `${soldVouchers} 張`, icon: ReceiptText },
+            { label: '累計已使用', value: `${usedSessions} 堂`, icon: CheckCircle2 },
           ].map(stat => (
             <div key={stat.label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
