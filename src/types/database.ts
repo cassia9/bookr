@@ -209,7 +209,7 @@ export interface Database {
           client_voucher_item_id: string
           redemption_id: string | null
           booking_id: string | null
-          action: 'issued' | 'reserved' | 'released' | 'redeemed' | 'adjusted' | 'voided'
+          action: 'issued' | 'reserved' | 'released' | 'redeemed' | 'restored' | 'adjusted' | 'voided'
           quantity: number
           available_after: number
           reserved_after: number
@@ -516,6 +516,10 @@ export interface Database {
           p_use_voucher: boolean
           p_client_voucher_item_id?: string | null
         }
+        Returns: Json
+      }
+      reopen_completed_booking: {
+        Args: { p_booking_id: string }
         Returns: Json
       }
       upsert_booking_with_voucher: {
