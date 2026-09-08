@@ -8,7 +8,7 @@
  */
 import { useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Phone, Clock, AlertTriangle, Plus, ArrowRight, Check, TicketCheck, X as XIcon } from 'lucide-react'
+import { Phone, Clock, AlertTriangle, Plus, ArrowRight, Check, TicketCheck, Undo2, X as XIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
 import { getEligibleClientVoucherItems } from '@/lib/vouchers-api'
@@ -147,6 +147,7 @@ export default function CalendarPage({
   // Modal 狀態
   const [modalBooking, setModalBooking] = useState<Booking | null>(null)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [showReopenConfirm, setShowReopenConfirm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [voucherSaving, setVoucherSaving] = useState(false)
   const [voucherChoice, setVoucherChoice] = useState('none')
@@ -277,6 +278,7 @@ export default function CalendarPage({
     setEditPrice(booking.price)
     setEditNotes(booking.notes ?? '')
     setShowCancelConfirm(false)
+    setShowReopenConfirm(false)
     const activeVoucher = getActiveVoucherUsage(booking)
     setVoucherChoice(activeVoucher?.client_voucher_item_id ?? 'none')
     void loadVoucherOptions(booking)
@@ -285,6 +287,7 @@ export default function CalendarPage({
   function closeModal() {
     setModalBooking(null)
     setShowCancelConfirm(false)
+    setShowReopenConfirm(false)
     if (notesTimer.current) clearTimeout(notesTimer.current)
   }
 
@@ -533,6 +536,52 @@ export default function CalendarPage({
         status: status as Booking['status'],
       })
     }
+  }
+
+  async function handleReopenCompleted() {
+    if (!modalBooking || modalBooking.status !== 'completed') return
+
+    const booking = modalBooking
+    setSaving(true)
+    const { data, error } = await supabase.rpc('reopen_completed_booking', {
+      p_booking_id: booking.id,
+    })
+
+    if (error) {
+      setSaving(false)
+      toast.error('無法修正完課狀態', error.message)
+      return
+    }
+
+    const result = data as { ok?: boolean; error?: string; voucher_restored?: boolean }
+    if (!result?.ok) {
+      const errorMessage: Record<string, string> = {
+        FORBIDDEN: '目前帳號沒有修正完課狀態的權限',
+        BOOKING_NOT_FOUND: '找不到這筆預約，請重新整理後再試',
+        BOOKING_NOT_COMPLETED: '這筆預約已不是完課狀態',
+      }
+      setSaving(false)
+      toast.error('無法修正完課狀態', errorMessage[result?.error ?? ''] ?? '請稍後再試')
+      return
+    }
+
+    const updatedBooking: Booking = { ...booking, status: 'confirmed' }
+    setBookings(current => current.map(item => item.id === booking.id ? updatedBooking : item))
+    setModalBooking(updatedBooking)
+    setShowReopenConfirm(false)
+
+    const refreshed = await refreshBookingVoucher(booking.id, updatedBooking)
+    if (refreshed) {
+      const activeVoucher = getActiveVoucherUsage(refreshed)
+      setVoucherChoice(activeVoucher?.client_voucher_item_id ?? 'none')
+      await loadVoucherOptions(refreshed)
+    }
+
+    setSaving(false)
+    toast.success(
+      '完課狀態已修正',
+      result.voucher_restored ? '預約已恢復為已確認，商品券 1 堂已恢復保留' : '預約已恢復為已確認，可重新編輯',
+    )
   }
 
   // ── 卡片顏色 ────────────────────────────────────────────────────────────────
@@ -923,6 +972,25 @@ export default function CalendarPage({
                 </Button>
               </div>
             </div>
+          ) : showReopenConfirm ? (
+            /* 撤銷完課確認 */
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-amber-700">
+                <Undo2 size={15} />
+                <p className="text-sm font-semibold">確認修正完課狀態？</p>
+              </div>
+              <p className="text-xs leading-5 text-slate-500">
+                預約會恢復為已確認並重新開放編輯；若已扣商品券，1 堂會一併恢復為保留。
+              </p>
+              <div className="flex gap-2">
+                <Button variant="secondary" className="flex-1" onClick={() => setShowReopenConfirm(false)}>
+                  返回
+                </Button>
+                <Button className="flex-1" loading={saving} onClick={handleReopenCompleted}>
+                  確認修正
+                </Button>
+              </div>
+            </div>
           ) : (
             /* 狀態操作按鈕 */
             <div className="space-y-2">
@@ -942,6 +1010,16 @@ export default function CalendarPage({
                 <Button variant="secondary" className="w-full bg-slate-50 text-slate-600 hover:bg-slate-100 border-0"
                   onClick={() => handleStatusChange('no_show')}>
                   未到場
+                </Button>
+              )}
+              {modalBooking.status === 'completed' && (
+                <Button
+                  variant="secondary"
+                  className="w-full border-0 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  onClick={() => setShowReopenConfirm(true)}
+                >
+                  <Undo2 size={15} />
+                  修正完課狀態
                 </Button>
               )}
               {isEditable(modalBooking.status) && (

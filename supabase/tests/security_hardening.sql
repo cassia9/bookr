@@ -62,8 +62,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  24::BIGINT,
-  'authenticated 只有二十四支必要 RPC／輔助函式'
+  26::BIGINT,
+  'authenticated 只有二十六支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -97,7 +97,9 @@ SELECT extensions.ok(
         'sell_voucher_product',
         'void_client_voucher',
         'adjust_client_voucher_item',
-        'set_booking_voucher'
+        'set_booking_voucher',
+        'upsert_booking_with_voucher',
+        'reopen_completed_booking'
       ])
   ),
   'authenticated RPC 全部位於白名單'
@@ -111,7 +113,7 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('service_role', p.oid, 'EXECUTE')
   ),
-  16::BIGINT,
+  17::BIGINT,
   'service_role 只有邀請、LINE 預約與 Messaging Worker 必要 RPC'
 );
 
@@ -137,6 +139,7 @@ SELECT extensions.ok(
         'retry_line_notification_job',
         'skip_line_notification_job',
         'enqueue_line_test_notification',
+        'get_line_customer_center',
         'get_line_webhook_config',
         'record_line_webhook_event'
       ])
