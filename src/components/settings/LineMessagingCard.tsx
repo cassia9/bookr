@@ -544,6 +544,9 @@ function LineFlexPreview({
         </p>
         <span className="text-[11px] text-slate-400">範例資料</span>
       </div>
+      <p className="mb-2 rounded-xl border border-[#DDE8CB] bg-[#F7FAF0] px-3 py-2 text-[11px] leading-4 text-[#58752E]">
+        此處展示使用商品券的情境；若本次預約未使用，商品券區塊會自動隱藏。
+      </p>
       <div className="rounded-[24px] bg-[#DCE5EC] p-3 shadow-inner shadow-slate-300/50">
         <div className="overflow-hidden rounded-[18px] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
           <div className="px-5 py-4" style={{

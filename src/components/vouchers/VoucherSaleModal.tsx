@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { TicketCheck } from 'lucide-react'
 import Button from '../ui/Button'
+import ClientCombobox from '../ui/ClientCombobox'
 import FormField from '../ui/FormField'
 import Input from '../ui/Input'
 import Modal from '../ui/Modal'
@@ -141,15 +142,15 @@ export default function VoucherSaleModal({
     >
       <div className="space-y-5">
         <FormField label="客戶" required error={errors.clientId}>
-          <Select
+          <ClientCombobox
+            clients={clients}
             value={form.clientId}
-            onChange={value => setForm(current => ({ ...current, clientId: value }))}
-            options={clients.map(client => ({
-              value: client.id,
-              label: `${client.full_name} · ${client.phone}`,
-            }))}
-            placeholder="搜尋並選擇既有客戶"
-            disabled={clientLocked}
+            onChange={value => {
+              setForm(current => ({ ...current, clientId: value }))
+              setErrors(current => ({ ...current, clientId: '' }))
+            }}
+            error={Boolean(errors.clientId)}
+            locked={clientLocked}
           />
         </FormField>
 
