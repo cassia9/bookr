@@ -1,5 +1,5 @@
 /**
- * ClientCombobox — 客戶選取 + 即時新增 合一元件
+ * ClientCombobox — 可搜尋的客戶選取元件，可選擇開啟即時新增
  *
  * 行為：
  * 1. 輸入姓名或電話 → 即時過濾既有客戶清單
@@ -13,9 +13,13 @@ import { Check, X, UserPlus, Search } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { shadow } from '../../lib/styles'
 import Button from './Button'
-import type { Client } from '../../types/database'
-
 type Gender = 'male' | 'female' | 'unknown'
+
+interface ClientChoice {
+  id: string
+  full_name: string
+  phone: string | null
+}
 
 const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: 'unknown', label: '未知' },
@@ -24,11 +28,11 @@ const GENDER_OPTIONS: { value: Gender; label: string }[] = [
 ]
 
 interface Props {
-  clients: Client[]
+  clients: ClientChoice[]
   value: string                // selected client_id
   onChange: (clientId: string) => void
   /** 呼叫時插入 DB，回傳新客戶的 id（失敗回傳 null） */
-  onCreateClient: (name: string, phone: string, gender: Gender) => Promise<string | null>
+  onCreateClient?: (name: string, phone: string, gender: Gender) => Promise<string | null>
   error?: boolean
   disabled?: boolean
   /** 鎖定模式：顯示客戶但無法更改（編輯預約 / 從客戶頁帶入） */
@@ -66,7 +70,7 @@ export default function ClientCombobox({
     : clients.slice(0, MAX_RESULTS)
 
   // 是否顯示「建立新客戶」選項：有 query 且 query 不是完全匹配某位客戶
-  const showCreate = query.trim().length > 0 &&
+  const showCreate = Boolean(onCreateClient) && query.trim().length > 0 &&
     !clients.some(c => c.full_name === query.trim())
 
   // 總選項數（用於鍵盤 highlight）
@@ -103,7 +107,7 @@ export default function ClientCombobox({
     if (!selectedClient) setQuery('')
   }
 
-  function selectClient(client: Client) {
+  function selectClient(client: ClientChoice) {
     onChange(client.id)
     setQuery('')
     setOpen(false)
@@ -123,7 +127,7 @@ export default function ClientCombobox({
   }
 
   async function handleCreate() {
-    if (!query.trim() || saving) return
+    if (!onCreateClient || !query.trim() || saving) return
     setSaving(true)
     const id = await onCreateClient(query.trim(), newPhone.trim(), newGender)
     setSaving(false)

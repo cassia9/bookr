@@ -604,6 +604,8 @@ function ChannelsSettings() {
       'practitioner_name',
       'start_time',
       'store_name',
+      'voucher_name',
+      'voucher_remaining',
     ])
     const variablePattern = /{{\s*([a-z_]+)\s*}}/g
 

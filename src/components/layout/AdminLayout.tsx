@@ -1,7 +1,7 @@
 import { Outlet, useNavigate } from 'react-router-dom'
 import {
   CalendarDays, Users, UserCheck, Scissors, BarChart2,
-  Settings, LogOut, Menu, X,
+  Settings, LogOut, Menu, X, Gift,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../../lib/auth'
@@ -14,6 +14,7 @@ const navItems = [
   { to: '/admin/practitioners', icon: UserCheck, label: '老師管理' },
   { to: '/admin/clients', icon: Users, label: '客戶管理' },
   { to: '/admin/services', icon: Scissors, label: '課程管理' },
+  { to: '/admin/vouchers', icon: Gift, label: '商品券' },
   { to: '/admin/dashboard', icon: BarChart2, label: '數據總覽' },
   { to: '/admin/settings', icon: Settings, label: '設定' },
 ]

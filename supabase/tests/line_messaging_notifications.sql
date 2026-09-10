@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT extensions.plan(43);
+SELECT extensions.plan(45);
 
 -- 隔離既有本機 LINE QA 狀態；測試結尾會 ROLLBACK，不影響使用者資料。
 DELETE FROM public.line_notification_outbox
@@ -624,6 +624,46 @@ INSERT INTO public.bookings (
   '00000000-0000-0000-0000-000000000001'
 );
 
+INSERT INTO public.voucher_products (
+  id, store_id, name, selling_price, validity_days, active
+) VALUES (
+  '90000000-0000-0000-0000-000000000083',
+  '00000000-0000-0000-0000-000000000001',
+  'LINE 通知五堂券', 5000, 180, TRUE
+);
+
+INSERT INTO public.client_vouchers (
+  id, store_id, client_id, voucher_product_id, sale_number,
+  product_name_snapshot, paid_amount, payment_method, purchased_on, expires_on
+) VALUES (
+  '91000000-0000-0000-0000-000000000083',
+  '00000000-0000-0000-0000-000000000001',
+  '30000000-0000-0000-0000-000000000081',
+  '90000000-0000-0000-0000-000000000083',
+  'VC-LINE-000083', 'LINE 通知五堂券', 5000, 'cash',
+  CURRENT_DATE, CURRENT_DATE + 180
+);
+
+INSERT INTO public.client_voucher_items (
+  id, store_id, client_voucher_id, service_id, service_name_snapshot,
+  total_quantity, reserved_quantity, used_quantity
+) VALUES (
+  '92000000-0000-0000-0000-000000000083',
+  '00000000-0000-0000-0000-000000000001',
+  '91000000-0000-0000-0000-000000000083',
+  '10000000-0000-0000-0000-000000000081',
+  'LINE 通知測試課程', 5, 1, 0
+);
+
+INSERT INTO public.voucher_redemptions (
+  store_id, booking_id, client_voucher_item_id, status
+) VALUES (
+  '00000000-0000-0000-0000-000000000001',
+  '80000000-0000-0000-0000-000000000083',
+  '92000000-0000-0000-0000-000000000083',
+  'reserved'
+);
+
 SELECT SET_CONFIG('request.jwt.claims', '{"role":"service_role"}', TRUE);
 SET LOCAL ROLE service_role;
 
@@ -639,6 +679,19 @@ SELECT extensions.is(
   '重複掃描提醒視窗不會重複建立工作'
 );
 
+RESET ROLE;
+
+UPDATE public.line_notification_outbox
+SET
+  status = 'skipped',
+  skipped_at = NOW(),
+  error_code = 'test_fixture',
+  updated_at = NOW()
+WHERE booking_id IS DISTINCT FROM '80000000-0000-0000-0000-000000000083';
+
+SELECT SET_CONFIG('request.jwt.claims', '{"role":"service_role"}', TRUE);
+SET LOCAL ROLE service_role;
+
 CREATE TEMP TABLE claimed_line_jobs ON COMMIT DROP AS
 SELECT * FROM public.claim_line_notification_jobs(1);
 
@@ -650,6 +703,18 @@ SELECT extensions.ok(
     FROM claimed_line_jobs
   ),
   'Worker 原子領取一筆工作並取得 Vault Token，不輸出秘密'
+);
+
+SELECT extensions.is(
+  (SELECT voucher_product_name FROM claimed_line_jobs),
+  'LINE 通知五堂券',
+  'Worker 工作包含本次使用的商品券名稱'
+);
+
+SELECT extensions.is(
+  (SELECT voucher_service_remaining FROM claimed_line_jobs),
+  4,
+  'Worker 工作包含保留後的該課程剩餘堂數'
 );
 
 SELECT extensions.ok(

@@ -3,9 +3,9 @@
  * 可從行事曆、客戶管理等多處開啟
  * 使用 upsert_booking RPC 做衝突檢查 + 原子寫入
  */
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Clock, Timer, DollarSign } from 'lucide-react'
+import { Clock, Timer, DollarSign, TicketCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
@@ -17,10 +17,15 @@ import { toast } from '../ui/Snackbar'
 import { inputCls } from '../../lib/styles'
 import { cn } from '../../lib/cn'
 import type { Practitioner, Client, Service } from '../../types/database'
+import {
+  getEligibleClientVoucherItems,
+  type EligibleVoucherItem,
+} from '../../lib/vouchers-api'
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
 
 /** 取得當下最近的下一個 15 分鐘時段，上限 21:00 */
+// eslint-disable-next-line react-refresh/only-export-components
 export function nearestSlot(): string {
   const now = new Date()
   const h = now.getHours()
@@ -68,6 +73,21 @@ interface Props {
   defaultBufferMinutes?: number
 }
 
+interface BookingConflict {
+  start_time: string
+  end_time: string
+  buffer_minutes: number
+  client_name: string
+  service_name: string
+}
+
+interface BookingMutationResult {
+  ok: boolean
+  error?: string
+  id?: string
+  conflict?: BookingConflict
+}
+
 export default function NewBookingModal({
   open, onClose, onSaved,
   practitioners, clients, services, onRefreshClients,
@@ -75,7 +95,7 @@ export default function NewBookingModal({
   initialClientId, initialPractitionerId, initialDate, initialTime,
   defaultBufferMinutes = 30,
 }: Props) {
-  const makeEmpty = () => {
+  const makeEmpty = useCallback(() => {
     if (mode === 'edit' && initialBooking) {
       return {
         client_id:       initialBooking.client_id,
@@ -98,28 +118,82 @@ export default function NewBookingModal({
       buffer_minutes:  defaultBufferMinutes,
       price:           null as number | null,   // null = 自動帶入服務定價
     }
-  }
+  }, [
+    defaultBufferMinutes,
+    initialBooking,
+    initialClientId,
+    initialDate,
+    initialPractitionerId,
+    initialTime,
+    mode,
+  ])
 
   const [form,   setForm]   = useState(makeEmpty)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [voucherChoice, setVoucherChoice] = useState<'auto' | 'none' | string>('auto')
+  const [voucherOptions, setVoucherOptions] = useState<EligibleVoucherItem[]>([])
+  const [vouchersLoading, setVouchersLoading] = useState(false)
 
   // Reset when opened
   useEffect(() => {
-    if (open) {
+    let active = true
+    if (open) queueMicrotask(() => {
+      if (!active) return
       setForm(makeEmpty())
       setErrors({})
-    }
-  }, [open, mode, initialBooking?.id, initialClientId, initialPractitionerId, initialDate, initialTime, defaultBufferMinutes])
+      setVoucherChoice('auto')
+      setVoucherOptions([])
+    })
+    return () => { active = false }
+  }, [open, makeEmpty])
 
   const selectedService = services.find(s => s.id === form.service_id)
+  const selectedVoucher = voucherOptions.find(option => option.itemId === voucherChoice) ?? null
 
-  // 選服務時自動帶入定價（僅在 null 時更新，避免覆蓋手動輸入）
   useEffect(() => {
-    if (selectedService && form.price === null) {
-      setForm(f => ({ ...f, price: selectedService.price }))
-    }
-  }, [form.service_id])
+    let active = true
+    if (!open || !form.client_id || !form.service_id || !form.date) return () => { active = false }
+
+    void getEligibleClientVoucherItems(form.client_id, form.service_id, form.date)
+      .then(options => {
+        if (!active) return
+        setVoucherOptions(options)
+        setVoucherChoice(current => (
+          current !== 'auto' && current !== 'none' && !options.some(option => option.itemId === current)
+            ? 'auto'
+            : current
+        ))
+      })
+      .catch(() => {
+        if (active) setVoucherOptions([])
+      })
+      .finally(() => {
+        if (active) setVouchersLoading(false)
+      })
+
+    return () => { active = false }
+  }, [open, form.client_id, form.service_id, form.date])
+
+  function resetVoucherChoice() {
+    setVoucherChoice('auto')
+    setVoucherOptions([])
+    setVouchersLoading(true)
+  }
+
+  function chooseService(serviceId: string) {
+    const previousService = services.find(service => service.id === form.service_id)
+    const nextService = services.find(service => service.id === serviceId)
+    setForm(current => ({
+      ...current,
+      service_id: serviceId,
+      price: current.price === null || current.price === previousService?.price
+        ? nextService?.price ?? null
+        : current.price,
+    }))
+    setErrors(current => ({ ...current, service_id: '' }))
+    resetVoucherChoice()
+  }
 
   /** Combobox 呼叫：建立新客戶，回傳新 client_id */
   async function handleCreateClient(name: string, phone: string, gender: 'male' | 'female' | 'unknown'): Promise<string | null> {
@@ -132,7 +206,7 @@ export default function NewBookingModal({
     if (error) { toast.error('新增客戶失敗', error.message); return null }
     onRefreshClients()
     toast.success('已新增客戶', name)
-    return (data as any).id as string
+    return data.id
   }
 
   // End time preview
@@ -171,7 +245,10 @@ export default function NewBookingModal({
     const start = new Date(`${form.date}T${form.time}`)
     const end   = new Date(start.getTime() + (selectedService?.duration_minutes ?? 60) * 60000)
 
-    const { data, error } = await supabase.rpc('upsert_booking', {
+    const voucherMode = voucherChoice === 'auto' || voucherChoice === 'none'
+      ? voucherChoice
+      : 'specific'
+    const { data, error } = await supabase.rpc('upsert_booking_with_voucher', {
       p_booking_id:      mode === 'edit' ? initialBooking!.id : null,
       p_client_id:       form.client_id,
       p_practitioner_id: form.practitioner_id,
@@ -182,13 +259,21 @@ export default function NewBookingModal({
       p_notes:           form.notes.trim() || null,
       p_store_id:        STORE_ID,
       p_price:           form.price ?? null,
+      p_voucher_mode:    voucherMode,
+      p_client_voucher_item_id: voucherMode === 'specific' ? voucherChoice : null,
     })
 
     setSaving(false)
 
-    if (error) { toast.error('操作失敗', error.message); return }
+    if (error) {
+      const message = error.message.includes('VOUCHER_NOT_ELIGIBLE_OR_NO_BALANCE')
+        ? '商品券已過期、餘額不足或不適用此課程，請重新選擇'
+        : error.message
+      toast.error('操作失敗', message)
+      return
+    }
 
-    const result = data as { ok: boolean; error?: string; id?: string; conflict?: any }
+    const result = data as unknown as BookingMutationResult
 
     if (!result.ok) {
       if (result.error === 'PRACTITIONER_BLOCKED') {
@@ -226,7 +311,11 @@ export default function NewBookingModal({
           <ClientCombobox
             clients={clients}
             value={form.client_id}
-            onChange={v => { setForm(f => ({ ...f, client_id: v })); setErrors(er => ({ ...er, client_id: '' })) }}
+            onChange={v => {
+              setForm(f => ({ ...f, client_id: v }))
+              setErrors(er => ({ ...er, client_id: '' }))
+              resetVoucherChoice()
+            }}
             onCreateClient={handleCreateClient}
             error={!!errors.client_id}
             locked={!!lockedClientId}
@@ -255,7 +344,7 @@ export default function NewBookingModal({
             <label className="block text-sm font-medium text-slate-700 mb-1.5">課程 *</label>
             <Select
               value={form.service_id}
-              onChange={v => { setForm(f => ({ ...f, service_id: v })); setErrors(er => ({ ...er, service_id: '' })) }}
+              onChange={chooseService}
               placeholder="選擇課程"
               error={!!errors.service_id}
               options={services.map(s => ({
@@ -273,7 +362,11 @@ export default function NewBookingModal({
             <label className="block text-sm font-medium text-slate-700 mb-1.5">日期 *</label>
             <DatePicker
               value={form.date}
-              onChange={v => { setForm(f => ({ ...f, date: v })); setErrors(er => ({ ...er, date: '' })) }}
+              onChange={v => {
+                setForm(f => ({ ...f, date: v }))
+                setErrors(er => ({ ...er, date: '' }))
+                resetVoucherChoice()
+              }}
               error={!!errors.date}
             />
           </div>
@@ -371,7 +464,50 @@ export default function NewBookingModal({
           </div>
         </div>
 
-        {/* Notes */}
+        {/* 商品券 */}
+        <div className="rounded-3xl border border-lime-200 bg-lime-50/60 p-4">
+          <div className="mb-3 flex items-start gap-2">
+            <TicketCheck size={17} className="mt-0.5 shrink-0 text-lime-700" />
+            <div>
+              <p className="text-sm font-semibold text-slate-800">本次商品券</p>
+              <p className="mt-0.5 text-xs leading-5 text-slate-500">只會列出適用此客戶、課程與預約日期的可用商品券。</p>
+            </div>
+          </div>
+          <Select
+            value={voucherChoice}
+            onChange={setVoucherChoice}
+            disabled={!form.client_id || !form.service_id || !form.date || vouchersLoading}
+            placeholder={vouchersLoading ? '正在查詢可用商品券…' : '選擇商品券使用方式'}
+            options={[
+              {
+                value: 'auto',
+                label: voucherOptions.length
+                  ? '自動使用最早到期商品券（推薦）'
+                  : '自動使用（目前沒有適用商品券）',
+              },
+              { value: 'none', label: '此次不使用商品券' },
+              ...voucherOptions.map(option => ({
+                value: option.itemId,
+                label: `${option.productName} · 可用 ${option.availableQuantity} 堂 · ${option.expiresOn ? `${option.expiresOn} 到期` : '永久有效'}`,
+              })),
+            ]}
+          />
+          {voucherChoice === 'auto' && voucherOptions[0] && (
+            <p className="mt-2 text-xs font-medium text-lime-800">
+              預計使用 {voucherOptions[0].productName}，預約後剩餘 {voucherOptions[0].availableQuantity - 1} 堂
+            </p>
+          )}
+          {selectedVoucher && (
+            <p className="mt-2 text-xs font-medium text-lime-800">
+              已指定 {selectedVoucher.productName}，預約後剩餘 {selectedVoucher.availableQuantity - 1} 堂
+            </p>
+          )}
+          {voucherChoice === 'none' && (
+            <p className="mt-2 text-xs font-medium text-slate-500">此次保留原本單次課程價格，不扣商品券。</p>
+          )}
+        </div>
+
+        {/* 備註 */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">備注</label>
           <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}

@@ -19,6 +19,13 @@ interface Booking {
   client?: { full_name: string; phone?: string }
   practitioner?: { id: string; full_name: string; color: string | null }
   service?: { name: string; duration_minutes: number }
+  voucher_redemptions: Array<{
+    status: 'reserved' | 'redeemed' | 'released'
+    client_voucher_item?: {
+      service_name_snapshot: string
+      client_voucher?: { product_name_snapshot: string } | null
+    } | null
+  }>
 }
 
 interface Practitioner {
@@ -69,6 +76,12 @@ function cardStyle(booking: Booking): React.CSSProperties {
 
 function clientLabel(booking: Booking) {
   return booking.status === 'pending' ? '待確認' : (booking.client?.full_name ?? '')
+}
+
+function getVoucherUsage(booking: Booking) {
+  return booking.voucher_redemptions.find(redemption =>
+    redemption.status === 'reserved' || redemption.status === 'redeemed'
+  ) ?? null
 }
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -214,14 +227,24 @@ export default function GanttPage({
         notes, price, buffer_minutes,
         client:clients(full_name, phone),
         practitioner:practitioners(id, full_name, color),
-        service:services(name, duration_minutes)
+        service:services(name, duration_minutes),
+        voucher_redemptions(
+          status,
+          client_voucher_item:client_voucher_items(
+            service_name_snapshot,
+            client_voucher:client_vouchers(product_name_snapshot)
+          )
+        )
       `)
         .gte('start_time', startOfDay.toISOString())
         .lt('start_time',  endOfDay.toISOString())
         .in('status', ['pending', 'confirmed', 'completed', 'no_show'])
       if (selectedPractitionerId) bookQ = bookQ.eq('practitioner_id', selectedPractitionerId)
 
-      const { data: bData } = await bookQ.order('start_time')
+      const { data: bData } = await bookQ
+        .order('start_time')
+        .order('created_at', { referencedTable: 'voucher_redemptions', ascending: false })
+        .limit(1, { referencedTable: 'voucher_redemptions' })
       setBookings((bData || []) as unknown as Booking[])
     } catch (e) {
       console.error(e)
@@ -523,6 +546,20 @@ export default function GanttPage({
             {tooltip.booking.price != null && (
               <p className="text-xs font-semibold text-emerald-600">NT$ {tooltip.booking.price.toLocaleString()}</p>
             )}
+            {(() => {
+              const voucher = getVoucherUsage(tooltip.booking)
+              if (!voucher) return null
+              return (
+                <div className="mt-2 rounded-xl bg-lime-50 px-2.5 py-2 text-[11px] leading-relaxed text-lime-800">
+                  <p className="font-semibold truncate">
+                    商品券 · {voucher.client_voucher_item?.client_voucher?.product_name_snapshot ?? '已套用商品券'}
+                  </p>
+                  <p className="text-lime-700">
+                    {voucher.status === 'redeemed' ? '已扣除 1 堂' : '已保留 1 堂'}
+                  </p>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}

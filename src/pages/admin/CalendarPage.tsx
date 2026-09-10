@@ -8,9 +8,11 @@
  */
 import { useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Phone, Clock, AlertTriangle, Plus, ArrowRight, Check, X as XIcon } from 'lucide-react'
+import { Phone, Clock, AlertTriangle, Plus, ArrowRight, Check, TicketCheck, Undo2, X as XIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
+import { getEligibleClientVoucherItems } from '@/lib/vouchers-api'
+import type { EligibleVoucherItem } from '@/lib/vouchers-api'
 import { toast } from '@/components/ui/Snackbar'
 import { format, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
@@ -38,6 +40,20 @@ interface Service {
   price: number
 }
 
+interface VoucherRedemption {
+  id: string
+  client_voucher_item_id: string
+  status: 'reserved' | 'redeemed' | 'released'
+  created_at: string
+  client_voucher_item: {
+    id: string
+    service_name_snapshot: string
+    client_voucher: {
+      product_name_snapshot: string
+    } | null
+  } | null
+}
+
 interface Booking {
   id: string
   client_id: string
@@ -52,6 +68,7 @@ interface Booking {
   client: { id: string; full_name: string; phone: string } | null
   practitioner: { id: string; full_name: string; color: string | null } | null
   service: { id: string; name: string; duration_minutes: number; price: number } | null
+  voucher_redemptions: VoucherRedemption[]
 }
 
 type ViewMode = 'month' | 'week' | 'day'
@@ -90,6 +107,22 @@ const STATUS_BADGE_VARIANT: Record<string, BadgeVariant> = {
   no_show:   'red',
 }
 
+const VOUCHER_STATUS_LABEL: Record<VoucherRedemption['status'], string> = {
+  reserved: '已保留 1 堂',
+  redeemed: '已扣除 1 堂',
+  released: '已釋放',
+}
+
+function getActiveVoucherUsage(booking: Booking): VoucherRedemption | null {
+  return booking.voucher_redemptions.find(redemption =>
+    redemption.status === 'reserved' || redemption.status === 'redeemed'
+  ) ?? null
+}
+
+function getDisplayVoucherUsage(booking: Booking): VoucherRedemption | null {
+  return getActiveVoucherUsage(booking) ?? booking.voucher_redemptions[0] ?? null
+}
+
 // ── 主元件 ────────────────────────────────────────────────────────────────────
 
 export default function CalendarPage({
@@ -114,7 +147,11 @@ export default function CalendarPage({
   // Modal 狀態
   const [modalBooking, setModalBooking] = useState<Booking | null>(null)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [showReopenConfirm, setShowReopenConfirm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [voucherSaving, setVoucherSaving] = useState(false)
+  const [voucherChoice, setVoucherChoice] = useState('none')
+  const [voucherOptions, setVoucherOptions] = useState<EligibleVoucherItem[]>([])
 
   // 拖曳狀態
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -162,12 +199,21 @@ export default function CalendarPage({
         start_time, end_time, status, notes, price, buffer_minutes,
         client:clients(id, full_name, phone),
         practitioner:practitioners(id, full_name, color),
-        service:services(id, name, duration_minutes, price)
+        service:services(id, name, duration_minutes, price),
+        voucher_redemptions(
+          id, client_voucher_item_id, status, created_at,
+          client_voucher_item:client_voucher_items(
+            id, service_name_snapshot,
+            client_voucher:client_vouchers(product_name_snapshot)
+          )
+        )
       `)
       .eq('store_id', STORE_ID)
       .gte('start_time', start.toISOString())
       .lte('start_time', end.toISOString())
       .order('start_time')
+      .order('created_at', { referencedTable: 'voucher_redemptions', ascending: false })
+      .limit(1, { referencedTable: 'voucher_redemptions' })
 
     if (selectedPractitionerId) {
       query = query.eq('practitioner_id', selectedPractitionerId)
@@ -232,12 +278,103 @@ export default function CalendarPage({
     setEditPrice(booking.price)
     setEditNotes(booking.notes ?? '')
     setShowCancelConfirm(false)
+    setShowReopenConfirm(false)
+    const activeVoucher = getActiveVoucherUsage(booking)
+    setVoucherChoice(activeVoucher?.client_voucher_item_id ?? 'none')
+    void loadVoucherOptions(booking)
   }
 
   function closeModal() {
     setModalBooking(null)
     setShowCancelConfirm(false)
+    setShowReopenConfirm(false)
     if (notesTimer.current) clearTimeout(notesTimer.current)
+  }
+
+  async function loadVoucherOptions(
+    booking: Booking,
+    serviceId = booking.service_id,
+    bookingDate = format(parseISO(booking.start_time), 'yyyy-MM-dd'),
+  ) {
+    try {
+      const eligible = await getEligibleClientVoucherItems(booking.client_id, serviceId, bookingDate)
+      setVoucherOptions(eligible)
+    } catch (error) {
+      console.error('載入可用商品券失敗', error)
+      setVoucherOptions([])
+    }
+  }
+
+  async function refreshBookingVoucher(bookingId: string, baseOverride?: Booking): Promise<Booking | null> {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(`
+        voucher_redemptions(
+          id, client_voucher_item_id, status, created_at,
+          client_voucher_item:client_voucher_items(
+            id, service_name_snapshot,
+            client_voucher:client_vouchers(product_name_snapshot)
+          )
+        )
+      `)
+      .eq('id', bookingId)
+      .order('created_at', { referencedTable: 'voucher_redemptions', ascending: false })
+      .limit(1, { referencedTable: 'voucher_redemptions' })
+      .single()
+
+    if (error) {
+      console.error('更新預約商品券狀態失敗', error)
+      return null
+    }
+
+    const baseBooking = baseOverride ?? (modalBooking?.id === bookingId
+      ? modalBooking
+      : bookings.find(booking => booking.id === bookingId))
+    if (!baseBooking) return null
+
+    const nextBooking: Booking = {
+      ...baseBooking,
+      voucher_redemptions: (data.voucher_redemptions ?? []) as unknown as VoucherRedemption[],
+    }
+    setBookings(current => current.map(booking => booking.id === bookingId ? nextBooking : booking))
+    setModalBooking(current => current?.id === bookingId ? nextBooking : current)
+    return nextBooking
+  }
+
+  async function handleVoucherChoice(nextChoice: string) {
+    if (!modalBooking || voucherSaving || nextChoice === voucherChoice) return
+
+    setVoucherSaving(true)
+    const useVoucher = nextChoice !== 'none'
+    const selectedItemId = nextChoice === 'auto' || nextChoice === 'none' ? null : nextChoice
+    const { data, error } = await supabase.rpc('set_booking_voucher', {
+      p_booking_id: modalBooking.id,
+      p_use_voucher: useVoucher,
+      p_client_voucher_item_id: selectedItemId,
+    })
+
+    if (error) {
+      setVoucherSaving(false)
+      toast.error(
+        '商品券更新失敗',
+        error.message.includes('VOUCHER_NOT_ELIGIBLE') ? '此商品券已不適用或餘額不足' : error.message,
+      )
+      return
+    }
+
+    const result = data as { ok?: boolean; error?: string }
+    if (!result?.ok) {
+      setVoucherSaving(false)
+      toast.error('商品券更新失敗', result?.error ?? '未知錯誤')
+      return
+    }
+
+    const refreshed = await refreshBookingVoucher(modalBooking.id)
+    const activeVoucher = refreshed ? getActiveVoucherUsage(refreshed) : null
+    setVoucherChoice(activeVoucher?.client_voucher_item_id ?? 'none')
+    if (refreshed) await loadVoucherOptions(refreshed)
+    setVoucherSaving(false)
+    toast.success(useVoucher ? '商品券已套用' : '本次預約已改為不使用商品券')
   }
 
   // ── Auto-save ───────────────────────────────────────────────────────────────
@@ -294,8 +431,8 @@ export default function CalendarPage({
 
     // 更新本地 bookings
     const newPractitioner = practitioners.find(p => p.id === pId)
-    setBookings(prev => prev.map(b => b.id !== modalBooking.id ? b : {
-      ...b,
+    const updatedBooking: Booking = {
+      ...modalBooking,
       practitioner_id: pId,
       service_id:      sId,
       start_time:      start.toISOString(),
@@ -304,19 +441,25 @@ export default function CalendarPage({
       notes:           notes.trim() || null,
       practitioner:    newPractitioner
         ? { id: newPractitioner.id, full_name: newPractitioner.full_name, color: newPractitioner.color }
-        : b.practitioner,
+        : modalBooking.practitioner,
       service: svc
         ? { id: svc.id, name: svc.name, duration_minutes: svc.duration_minutes, price: svc.price }
-        : b.service,
+        : modalBooking.service,
+    }
+    setBookings(prev => prev.map(b => b.id !== modalBooking.id ? b : {
+      ...b,
+      ...updatedBooking,
     }))
 
     // 更新 modalBooking 同步
-    setModalBooking(prev => prev ? {
-      ...prev,
-      practitioner_id: pId, service_id: sId,
-      start_time: start.toISOString(), end_time: end.toISOString(),
-      price, notes: notes.trim() || null,
-    } : null)
+    setModalBooking(updatedBooking)
+
+    const refreshed = await refreshBookingVoucher(modalBooking.id, updatedBooking)
+    if (refreshed) {
+      const activeVoucher = getActiveVoucherUsage(refreshed)
+      setVoucherChoice(activeVoucher?.client_voucher_item_id ?? 'none')
+      await loadVoucherOptions(refreshed, sId, date)
+    }
   }
 
   // ── 欄位 auto-save handlers ─────────────────────────────────────────────────
@@ -388,7 +531,57 @@ export default function CalendarPage({
       ))
       setModalBooking(prev => prev ? { ...prev, status: status as Booking['status'] } : null)
       setShowCancelConfirm(false)
+      await refreshBookingVoucher(modalBooking.id, {
+        ...modalBooking,
+        status: status as Booking['status'],
+      })
     }
+  }
+
+  async function handleReopenCompleted() {
+    if (!modalBooking || modalBooking.status !== 'completed') return
+
+    const booking = modalBooking
+    setSaving(true)
+    const { data, error } = await supabase.rpc('reopen_completed_booking', {
+      p_booking_id: booking.id,
+    })
+
+    if (error) {
+      setSaving(false)
+      toast.error('無法修正完課狀態', error.message)
+      return
+    }
+
+    const result = data as { ok?: boolean; error?: string; voucher_restored?: boolean }
+    if (!result?.ok) {
+      const errorMessage: Record<string, string> = {
+        FORBIDDEN: '目前帳號沒有修正完課狀態的權限',
+        BOOKING_NOT_FOUND: '找不到這筆預約，請重新整理後再試',
+        BOOKING_NOT_COMPLETED: '這筆預約已不是完課狀態',
+      }
+      setSaving(false)
+      toast.error('無法修正完課狀態', errorMessage[result?.error ?? ''] ?? '請稍後再試')
+      return
+    }
+
+    const updatedBooking: Booking = { ...booking, status: 'confirmed' }
+    setBookings(current => current.map(item => item.id === booking.id ? updatedBooking : item))
+    setModalBooking(updatedBooking)
+    setShowReopenConfirm(false)
+
+    const refreshed = await refreshBookingVoucher(booking.id, updatedBooking)
+    if (refreshed) {
+      const activeVoucher = getActiveVoucherUsage(refreshed)
+      setVoucherChoice(activeVoucher?.client_voucher_item_id ?? 'none')
+      await loadVoucherOptions(refreshed)
+    }
+
+    setSaving(false)
+    toast.success(
+      '完課狀態已修正',
+      result.voucher_restored ? '預約已恢復為已確認，商品券 1 堂已恢復保留' : '預約已恢復為已確認，可重新編輯',
+    )
   }
 
   // ── 卡片顏色 ────────────────────────────────────────────────────────────────
@@ -779,6 +972,25 @@ export default function CalendarPage({
                 </Button>
               </div>
             </div>
+          ) : showReopenConfirm ? (
+            /* 撤銷完課確認 */
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-amber-700">
+                <Undo2 size={15} />
+                <p className="text-sm font-semibold">確認修正完課狀態？</p>
+              </div>
+              <p className="text-xs leading-5 text-slate-500">
+                預約會恢復為已確認並重新開放編輯；若已扣商品券，1 堂會一併恢復為保留。
+              </p>
+              <div className="flex gap-2">
+                <Button variant="secondary" className="flex-1" onClick={() => setShowReopenConfirm(false)}>
+                  返回
+                </Button>
+                <Button className="flex-1" loading={saving} onClick={handleReopenCompleted}>
+                  確認修正
+                </Button>
+              </div>
+            </div>
           ) : (
             /* 狀態操作按鈕 */
             <div className="space-y-2">
@@ -798,6 +1010,16 @@ export default function CalendarPage({
                 <Button variant="secondary" className="w-full bg-slate-50 text-slate-600 hover:bg-slate-100 border-0"
                   onClick={() => handleStatusChange('no_show')}>
                   未到場
+                </Button>
+              )}
+              {modalBooking.status === 'completed' && (
+                <Button
+                  variant="secondary"
+                  className="w-full border-0 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  onClick={() => setShowReopenConfirm(true)}
+                >
+                  <Undo2 size={15} />
+                  修正完課狀態
                 </Button>
               )}
               {isEditable(modalBooking.status) && (
@@ -835,6 +1057,94 @@ export default function CalendarPage({
                 )}
               </div>
             </div>
+
+            {/* 本次預約使用的商品券 */}
+            {(() => {
+              const activeVoucher = getActiveVoucherUsage(modalBooking)
+              const displayVoucher = getDisplayVoucherUsage(modalBooking)
+              const productName = displayVoucher?.client_voucher_item?.client_voucher?.product_name_snapshot
+              const serviceName = displayVoucher?.client_voucher_item?.service_name_snapshot
+              const activeVoucherInOptions = activeVoucher
+                ? voucherOptions.some(option => option.itemId === activeVoucher.client_voucher_item_id)
+                : true
+              const selectOptions: SelectOption[] = [
+                ...(voucherOptions.length > 0 || activeVoucher
+                  ? [{ value: 'auto', label: '自動使用最適合的商品券' }]
+                  : []),
+                { value: 'none', label: '本次不使用商品券' },
+                ...(!activeVoucherInOptions && activeVoucher
+                  ? [{
+                      value: activeVoucher.client_voucher_item_id,
+                      label: `${productName ?? '目前商品券'} · 目前使用中`,
+                    }]
+                  : []),
+                ...voucherOptions.map(option => ({
+                  value: option.itemId,
+                  label: `${option.productName} · 可用 ${option.availableQuantity} 堂`,
+                })),
+              ]
+              const isReleased = displayVoucher?.status === 'released'
+
+              return (
+                <div className={cn(
+                  'rounded-2xl border px-4 py-3.5',
+                  activeVoucher
+                    ? 'border-lime-200 bg-lime-50/80'
+                    : isReleased
+                    ? 'border-stone-200 bg-stone-50'
+                    : 'border-slate-200 bg-white',
+                )}>
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl',
+                      activeVoucher ? 'bg-lime-200/70 text-lime-800' : 'bg-slate-100 text-slate-500',
+                    )}>
+                      <TicketCheck size={17} strokeWidth={1.8} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-semibold tracking-wide text-slate-500">本次商品券</p>
+                        {displayVoucher && (
+                          <span className={cn(
+                            'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                            activeVoucher ? 'bg-lime-200 text-lime-900' : 'bg-stone-200 text-stone-600',
+                          )}>
+                            {VOUCHER_STATUS_LABEL[displayVoucher.status]}
+                          </span>
+                        )}
+                      </div>
+
+                      {displayVoucher ? (
+                        <div className="mt-1.5">
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {productName ?? '商品券'}
+                          </p>
+                          {serviceName && <p className="mt-0.5 text-xs text-slate-500">對應課程：{serviceName}</p>}
+                          {isReleased && (
+                            <p className="mt-1 text-xs text-stone-500">目前未使用商品券；先前保留的堂數已退回。</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="mt-1.5 text-sm text-slate-600">本次未使用商品券。</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {isEditable(modalBooking.status) && (
+                    <div className="mt-3 border-t border-black/5 pt-3">
+                      <label className="mb-1.5 block text-xs font-medium text-slate-500">更改使用方式</label>
+                      <Select
+                        value={voucherChoice}
+                        onChange={value => void handleVoucherChoice(value)}
+                        options={selectOptions}
+                        disabled={voucherSaving || saving}
+                      />
+                      {voucherSaving && <p className="mt-1.5 text-xs text-slate-400 animate-pulse">更新商品券中…</p>}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {isEditable(modalBooking.status) ? (
               /* ── 可編輯表單 ── */
