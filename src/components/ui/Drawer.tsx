@@ -20,9 +20,9 @@ interface Props {
 }
 
 const widthCls = {
-  sm: 'w-80',
-  md: 'w-96',
-  lg: 'w-[480px]',
+  sm: 'w-full sm:w-80',
+  md: 'w-full sm:w-96',
+  lg: 'w-full sm:w-[480px]',
 }
 
 export default function Drawer({

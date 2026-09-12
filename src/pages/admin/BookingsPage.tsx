@@ -4,6 +4,7 @@
  * 共用 date、selectedEvent、以及所有 CRUD 操作
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar'
 import _withDnD from 'react-big-calendar/lib/addons/dragAndDrop'
 import type { EventInteractionArgs } from 'react-big-calendar/lib/addons/dragAndDrop'
@@ -94,6 +95,26 @@ interface DragConfirm {
   newPractitionerId: string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toCalendarEvent(booking: any): CalEvent {
+  return {
+    id: booking.id,
+    title: `${booking.client?.full_name ?? '—'} · ${booking.service?.name ?? '—'}`,
+    start: new Date(booking.start_time),
+    end: new Date(booking.end_time),
+    resource: {
+      status: booking.status,
+      practitioner: booking.practitioner,
+      client: booking.client,
+      service_id: booking.service_id,
+      service: booking.service,
+      notes: booking.notes,
+      buffer_minutes: booking.buffer_minutes ?? 0,
+      price: booking.price ?? 0,
+    },
+  }
+}
+
 type PageMode    = 'calendar' | 'gantt'
 type CalViewMode = 'month' | 'week' | 'day'
 type GanttMode   = 'day' | 'week'
@@ -109,6 +130,9 @@ function roundToSlot(d: Date): string {
 }
 
 export default function BookingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const linkedBookingId = searchParams.get('booking')
+
   // ── Mode ─────────────────────────────────────────────────────────
   const [pageMode,  setPageMode]  = useState<PageMode>('calendar')
   const [calView,   setCalView]   = useState<CalViewMode>('week')
@@ -149,6 +173,39 @@ export default function BookingsPage() {
 
   useEffect(() => { fetchMeta() }, [])
   useEffect(() => { fetchBookings(); fetchBlocks() }, [date, pageMode, calView, ganttMode])
+  useEffect(() => {
+    if (!linkedBookingId) return
+
+    let cancelled = false
+
+    async function openLinkedBooking() {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*, client:clients(*), practitioner:practitioners(*), service:services(name,duration_minutes,price)')
+        .eq('id', linkedBookingId)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('booking')
+      setSearchParams(nextParams, { replace: true })
+
+      if (error || !data) {
+        toast.info('這筆預約已無法查看')
+        return
+      }
+
+      const event = toCalendarEvent(data)
+      setPageMode('calendar')
+      setCalView('day')
+      setDate(event.start)
+      setSelectedEvent(event)
+    }
+
+    void openLinkedBooking()
+    return () => { cancelled = true }
+  }, [linkedBookingId, searchParams, setSearchParams])
 
   async function fetchMeta() {
     const [{ data: p }, { data: c }, { data: s }, { data: store }] = await Promise.all([
@@ -162,7 +219,11 @@ export default function BookingsPage() {
     setPractitioners(p ?? [])
     setClients(c ?? [])
     setServices(s ?? [])
-    const storeData = store as any
+    const storeData = store as {
+      default_buffer_minutes?: number | null
+      open_time?: string | null
+      close_time?: string | null
+    } | null
     setDefaultBufferMinutes(storeData?.default_buffer_minutes ?? 30)
     // PostgreSQL TIME type returns "HH:MM:SS" – take only "HH:MM"
     setStoreOpenTime((storeData?.open_time  ?? '09:00:00').slice(0, 5))
@@ -202,22 +263,7 @@ export default function BookingsPage() {
 
     if (error) { setLoading(false); return }
 
-    setEvents((data ?? []).map((b: any) => ({
-      id: b.id,
-      title: `${b.client?.full_name ?? '—'} · ${b.service?.name ?? '—'}`,
-      start: new Date(b.start_time),
-      end:   new Date(b.end_time),
-      resource: {
-        status:         b.status,
-        practitioner:   b.practitioner,
-        client:         b.client,
-        service_id:     b.service_id,
-        service:        b.service,
-        notes:          b.notes,
-        buffer_minutes: b.buffer_minutes ?? 0,
-        price:          b.price ?? 0,
-      },
-    })))
+    setEvents((data ?? []).map(toCalendarEvent))
     setLoading(false)
   }
 
@@ -465,7 +511,11 @@ export default function BookingsPage() {
 
     if (error) { toast.error('更新失敗', error.message); setDragConfirm(null); return }
 
-    const result = data as { ok: boolean; error?: string; conflict?: any }
+    const result = data as {
+      ok: boolean
+      error?: string
+      conflict?: { client_name?: string; service_name?: string }
+    }
     if (!result.ok) {
       if (result.error === 'PRACTITIONER_BLOCKED') {
         toast.error('從業人員不可預約', '該時段已被設定為封鎖時段（如休假）')
