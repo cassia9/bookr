@@ -108,12 +108,33 @@ export interface Database {
           end_time: string
           status: BookingStatus
           notes: string | null
+          recurrence_series_id: string | null
+          recurrence_occurrence_index: number | null
           store_id: string
           created_at: string
           updated_at: string
         }
         Insert: Omit<Database['public']['Tables']['bookings']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['bookings']['Insert']>
+      }
+      booking_recurrence_series: {
+        Row: {
+          id: string
+          store_id: string
+          client_id: string
+          practitioner_id: string
+          service_id: string
+          interval_weeks: number
+          occurrence_count: number
+          first_start_time: string
+          last_start_time: string
+          idempotency_key: string
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['booking_recurrence_series']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['booking_recurrence_series']['Insert']>
       }
       voucher_products: {
         Row: {
@@ -537,6 +558,29 @@ export interface Database {
           p_voucher_mode?: 'auto' | 'specific' | 'none'
           p_client_voucher_item_id?: string | null
         }
+        Returns: Json
+      }
+      create_recurring_bookings_with_voucher: {
+        Args: {
+          p_client_id: string
+          p_practitioner_id: string
+          p_service_id: string
+          p_start_time: string
+          p_end_time: string
+          p_interval_weeks: number
+          p_occurrence_count: number
+          p_idempotency_key: string
+          p_buffer_minutes?: number
+          p_notes?: string | null
+          p_store_id?: string
+          p_price?: number | null
+          p_voucher_mode?: 'auto' | 'specific' | 'none'
+          p_client_voucher_item_id?: string | null
+        }
+        Returns: Json
+      }
+      cancel_booking_scope: {
+        Args: { p_booking_id: string; p_scope?: 'single' | 'future' }
         Returns: Json
       }
     }
