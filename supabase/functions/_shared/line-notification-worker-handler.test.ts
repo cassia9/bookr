@@ -36,6 +36,7 @@ function validJob(
     store_timezone: "Asia/Taipei",
     voucher_product_name: null,
     voucher_service_remaining: null,
+    recurrence_count: null,
     ...overrides,
   };
 }
@@ -206,6 +207,27 @@ Deno.test("Worker 在預約卡片顯示商品券與使用後餘額", async () =>
   assert(serialized.includes("本次使用商品券"), "卡片應標示商品券區塊");
   assert(serialized.includes("進階修復五堂券"), "卡片應顯示商品券名稱");
   assert(serialized.includes("剩餘 4 堂"), "卡片應顯示使用後餘額");
+});
+
+Deno.test("Worker 將循環預約合併為一張摘要卡片", async () => {
+  let sentMessage: unknown = null;
+  const setup = dependencies([
+    validJob({ recurrence_count: 6 }),
+  ], {
+    send: async (options: { message: unknown }) => {
+      sentMessage = options.message;
+      return { requestId: "line-recurring-request-1" };
+    },
+  });
+
+  const handler = createLineNotificationWorkerHandler(setup.values);
+  const response = await handler(request());
+  const body = await response.json();
+  const serialized = JSON.stringify(sentMessage);
+
+  assert(body.sent === 1, "循環預約應只送出一筆摘要工作");
+  assert(serialized.includes("循環預約"), "卡片應標示循環預約");
+  assert(serialized.includes("共 6 堂"), "卡片應顯示系列堂數");
 });
 
 Deno.test("Worker 可發送不綁定預約的管理員測試推播", async () => {

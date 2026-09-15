@@ -42,6 +42,7 @@ export interface LineNotificationJob {
   store_timezone: string | null;
   voucher_product_name: string | null;
   voucher_service_remaining: number | null;
+  recurrence_count: number | null;
 }
 
 export interface LineNotificationWorkerDependencies {
@@ -194,13 +195,19 @@ export function createLineNotificationWorkerHandler(
           voucher_remaining: job.voucher_service_remaining == null
             ? ""
             : String(job.voucher_service_remaining),
+          recurrence_count: job.recurrence_count == null
+            ? ""
+            : String(job.recurrence_count),
         };
-        const renderedText = job.event_type === "test"
+        const baseRenderedText = job.event_type === "test"
           ? validateLineMessageTemplate(job.template_content as string)
           : renderLineMessageTemplate(
             job.template_content as string,
             templateValues,
           );
+        const renderedText = job.event_type !== "test" && (job.recurrence_count ?? 0) > 1
+          ? `${baseRenderedText}\n${job.event_type === "booking_cancelled" ? "本次起" : "循環預約"}共 ${job.recurrence_count} 堂。`
+          : baseRenderedText;
         const message = job.event_type === "test"
           ? renderedText
           : buildLineBookingFlexMessage(

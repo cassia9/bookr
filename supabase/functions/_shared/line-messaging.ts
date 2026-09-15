@@ -48,6 +48,7 @@ export interface LineTemplateValues {
   store_name: string;
   voucher_name: string;
   voucher_remaining: string;
+  recurrence_count?: string;
 }
 
 const bookingCardStyles: Record<LineBookingNotificationType, {
@@ -153,6 +154,7 @@ export function buildLineBookingFlexMessage(
   const intro = bookingCardIntro(renderedText);
   const voucherName = values.voucher_name.trim();
   const voucherRemaining = values.voucher_remaining.trim();
+  const recurrenceCount = Number(values.recurrence_count || 0);
 
   if (!altText) {
     throw new LineMessagingError(
@@ -229,6 +231,38 @@ export function buildLineBookingFlexMessage(
           values.start_time,
         ),
         bookingDetailRow("店家", values.store_name),
+        ...(recurrenceCount > 1
+          ? [{
+            type: "box",
+            layout: "vertical",
+            margin: "xl",
+            paddingAll: "14px",
+            cornerRadius: "12px",
+            backgroundColor: "#F1F0FF",
+            contents: [
+              {
+                type: "text",
+                text: eventType === "booking_cancelled"
+                  ? "循環預約批次取消"
+                  : "循環預約",
+                size: "xs",
+                color: "#5B5BD6",
+                weight: "bold",
+              },
+              {
+                type: "text",
+                text: eventType === "booking_cancelled"
+                  ? `本次起共 ${recurrenceCount} 堂已取消`
+                  : `共 ${recurrenceCount} 堂 · 此卡顯示第一堂`,
+                size: "sm",
+                color: "#30306F",
+                weight: "bold",
+                wrap: true,
+                margin: "sm",
+              },
+            ],
+          }]
+          : []),
         ...(voucherName
           ? [{
             type: "box",
