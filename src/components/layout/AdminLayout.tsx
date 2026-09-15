@@ -8,6 +8,11 @@ import { useAuth } from '../../lib/auth'
 import { cn } from '../../lib/cn'
 import SidebarNavItem from '../ui/SidebarNavItem'
 import BookrLogo from '../ui/BookrLogo'
+import {
+  NotificationBell,
+  NotificationCenterProvider,
+  NotificationCenterSurface,
+} from '../notifications/NotificationCenter'
 
 const navItems = [
   { to: '/admin/bookings', icon: CalendarDays, label: '預約管理' },
@@ -29,10 +34,19 @@ export default function AdminLayout() {
     navigate('/login')
   }
 
+  function handleOpenBooking(bookingId: string) {
+    navigate(`/admin/bookings?booking=${encodeURIComponent(bookingId)}`)
+  }
+
   const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin)
 
   return (
-    <div className="flex h-screen bg-white">
+    <NotificationCenterProvider
+      userId={profile?.id ?? null}
+      storeId={profile?.store_id ?? null}
+      onOpenBooking={handleOpenBooking}
+    >
+      <div className="flex h-screen bg-white">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -56,6 +70,7 @@ export default function AdminLayout() {
             </div>
             <span className="font-bold text-text-primary text-base tracking-tight">Bookr</span>
           </div>
+          <NotificationBell className="ml-auto hidden lg:block" />
           <button
             onClick={() => setSidebarOpen(false)}
             className="ml-auto lg:hidden text-text-secondary hover:text-text-primary"
@@ -111,12 +126,15 @@ export default function AdminLayout() {
             <Menu size={20} />
           </button>
           <span className="ml-3 font-bold text-text-primary tracking-tight">Bookr</span>
+          <NotificationBell className="ml-auto" />
         </header>
 
         <main className="flex-1 overflow-auto bg-slate-50">
           <Outlet />
         </main>
       </div>
-    </div>
+      <NotificationCenterSurface />
+      </div>
+    </NotificationCenterProvider>
   )
 }

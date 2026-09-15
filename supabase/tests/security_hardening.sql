@@ -62,8 +62,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  26::BIGINT,
-  'authenticated 只有二十六支必要 RPC／輔助函式'
+  28::BIGINT,
+  'authenticated 只有二十八支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -99,7 +99,9 @@ SELECT extensions.ok(
         'adjust_client_voucher_item',
         'set_booking_voucher',
         'upsert_booking_with_voucher',
-        'reopen_completed_booking'
+        'reopen_completed_booking',
+        'mark_in_app_notification_read',
+        'mark_all_in_app_notifications_read'
       ])
   ),
   'authenticated RPC 全部位於白名單'
@@ -342,6 +344,36 @@ SELECT extensions.ok(
 
 -- 本測試會在結尾 ROLLBACK；先暫時移除與固定測試 UUID 衝突的本地 QA 預約，
 -- 避免非空本地資料庫造成重複鍵或筆數誤判。
+DELETE FROM public.voucher_ledger
+WHERE booking_id IN (
+  SELECT id
+  FROM public.bookings
+  WHERE service_id IN (
+    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000002'
+  )
+  OR practitioner_id IN (
+    '20000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000002',
+    '20000000-0000-0000-0000-000000000003'
+  )
+);
+
+DELETE FROM public.voucher_redemptions
+WHERE booking_id IN (
+  SELECT id
+  FROM public.bookings
+  WHERE service_id IN (
+    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000002'
+  )
+  OR practitioner_id IN (
+    '20000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000002',
+    '20000000-0000-0000-0000-000000000003'
+  )
+);
+
 DELETE FROM public.bookings
 WHERE service_id IN (
   '10000000-0000-0000-0000-000000000001',
