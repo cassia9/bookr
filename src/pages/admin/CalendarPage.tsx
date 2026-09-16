@@ -8,7 +8,7 @@
  */
 import { useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Phone, Clock, AlertTriangle, Plus, ArrowRight, Check, TicketCheck, Undo2, X as XIcon } from 'lucide-react'
+import { Phone, Clock, AlertTriangle, Plus, ArrowRight, Check, Repeat2, TicketCheck, Undo2, X as XIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
 import { getEligibleClientVoucherItems } from '@/lib/vouchers-api'
@@ -65,6 +65,8 @@ interface Booking {
   notes: string | null
   price: number
   buffer_minutes: number
+  recurrence_series_id: string | null
+  recurrence_occurrence_index: number | null
   client: { id: string; full_name: string; phone: string } | null
   practitioner: { id: string; full_name: string; color: string | null } | null
   service: { id: string; name: string; duration_minutes: number; price: number } | null
@@ -79,7 +81,7 @@ interface CalendarPageProps {
   defaultDate?: Date
   startHour?: number
   endHour?: number
-  onNewBooking?: (date: Date) => void
+  onNewBooking?: (date: Date, time?: string) => void
 }
 
 interface DayPopover {
@@ -197,6 +199,7 @@ export default function CalendarPage({
       .select(`
         id, client_id, practitioner_id, service_id,
         start_time, end_time, status, notes, price, buffer_minutes,
+        recurrence_series_id, recurrence_occurrence_index,
         client:clients(id, full_name, phone),
         practitioner:practitioners(id, full_name, color),
         service:services(id, name, duration_minutes, price),
@@ -517,25 +520,50 @@ export default function CalendarPage({
       confirmed: () => toast.success('已確認預約'),
       completed: () => toast.success('已標記完課'),
       no_show:   () => toast.warning('已標記未到場'),
-      cancelled: () => toast.info('已取消預約'),
     }
     labelMap[status]?.()
 
-    if (status === 'cancelled') {
-      // 從行事曆移除 + 關閉 modal
-      setBookings(prev => prev.filter(b => b.id !== modalBooking.id))
-      closeModal()
-    } else {
-      setBookings(prev => prev.map(b =>
-        b.id === modalBooking.id ? { ...b, status: status as Booking['status'] } : b
-      ))
-      setModalBooking(prev => prev ? { ...prev, status: status as Booking['status'] } : null)
-      setShowCancelConfirm(false)
-      await refreshBookingVoucher(modalBooking.id, {
-        ...modalBooking,
-        status: status as Booking['status'],
-      })
+    setBookings(prev => prev.map(b =>
+      b.id === modalBooking.id ? { ...b, status: status as Booking['status'] } : b
+    ))
+    setModalBooking(prev => prev ? { ...prev, status: status as Booking['status'] } : null)
+    setShowCancelConfirm(false)
+    await refreshBookingVoucher(modalBooking.id, {
+      ...modalBooking,
+      status: status as Booking['status'],
+    })
+  }
+
+  async function handleCancel(scope: 'single' | 'future') {
+    if (!modalBooking) return
+    setSaving(true)
+    const { data, error } = await supabase.rpc('cancel_booking_scope', {
+      p_booking_id: modalBooking.id,
+      p_scope: scope,
+    })
+    setSaving(false)
+
+    if (error) {
+      toast.error('取消失敗', error.message)
+      return
     }
+
+    const result = data as { ok?: boolean; error?: string; affected_count?: number }
+    if (!result?.ok) {
+      const message: Record<string, string> = {
+        BOOKING_ALREADY_STARTED: '已開始的預約不能批次取消',
+        NO_FUTURE_BOOKINGS: '本次之後沒有可取消的預約',
+      }
+      toast.error('取消失敗', message[result?.error ?? ''] ?? result?.error ?? '未知錯誤')
+      return
+    }
+
+    toast.info(
+      scope === 'future' ? '已取消本次及之後的預約' : '已取消本次預約',
+      scope === 'future' ? `共取消 ${result.affected_count ?? 0} 堂` : undefined,
+    )
+    closeModal()
+    await fetchBookings()
   }
 
   async function handleReopenCompleted() {
@@ -642,6 +670,21 @@ export default function CalendarPage({
     setDayPopover({ date, style })
   }
 
+  function openTimeCell(
+    date: Date,
+    hour: number,
+    event: React.MouseEvent<HTMLDivElement>,
+  ) {
+    if (!onNewBooking || (event.target as HTMLElement).closest('button')) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const relativeY = Math.max(0, Math.min(rect.height - 1, event.clientY - rect.top))
+    const minute = Math.min(45, Math.floor((relativeY / rect.height) * 4) * 15)
+    onNewBooking(
+      date,
+      `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+    )
+  }
+
   // ── 拖曳換時段 ──────────────────────────────────────────────────────────────
 
   async function rescheduleBooking(bookingId: string, newDateStr: string, newHour: number) {
@@ -723,13 +766,12 @@ export default function CalendarPage({
                       <div
                         key={date.toISOString()}
                         onClick={e => {
-                          if (allBk.length === 0) return
-                          if (isPopoverOpen) { setDayPopover(null); return }
-                          openDayPopover(date, e.currentTarget)
+                          if (e.target !== e.currentTarget && !(e.target as HTMLElement).closest('[data-calendar-day-number]')) return
+                          onNewBooking?.(date)
                         }}
                         className={cn(
                           'min-h-20 p-2 rounded-xl border transition-colors',
-                          allBk.length > 0 ? 'cursor-pointer' : '',
+                          onNewBooking ? 'cursor-pointer' : '',
                           date.getMonth() === currentDate.getMonth()
                             ? 'bg-white border-slate-100 hover:border-slate-200'
                             : 'bg-slate-50/50 border-slate-50',
@@ -742,7 +784,7 @@ export default function CalendarPage({
                           <div className={cn(
                             'text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full shrink-0',
                             isToday(date) ? 'bg-black text-white' : 'text-slate-600',
-                          )}>
+                          )} data-calendar-day-number>
                             {date.getDate()}
                           </div>
                           {/* FR-D: 狀態 badge */}
@@ -820,11 +862,17 @@ export default function CalendarPage({
                   ))}
                 </div>
                 {/* 時間格 */}
-                {Array.from({ length: endHour - startHour }, (_, i) => i + startHour).map(hour => (
+                {Array.from({ length: 24 }, (_, hour) => hour).map(hour => (
                   <div key={hour} className="grid border-b border-slate-50 min-h-16"
                     style={{ gridTemplateColumns: '64px repeat(7, 1fr)' }}>
-                    <div className="text-right pr-3 pt-2 text-xs text-slate-300 border-r border-slate-100 shrink-0">
-                      {hour}:00
+                    <div className={cn(
+                      'text-right pr-3 pt-2 text-xs border-r border-slate-100 shrink-0',
+                      hour < startHour || hour >= endHour ? 'bg-slate-50 text-slate-300' : 'text-slate-400',
+                    )}>
+                      {String(hour).padStart(2, '0')}:00
+                      {(hour === startHour - 1 || hour === endHour) && (
+                        <div className="text-[9px] text-slate-300">營業外</div>
+                      )}
                     </div>
                     {datesForView.map(date => {
                       const hBk = bookingsOnHour(date, hour)
@@ -833,10 +881,12 @@ export default function CalendarPage({
                       return (
                         <div key={date.toISOString()}
                           className={cn(
-                            'px-1 py-1 border-r border-slate-100 space-y-0.5 transition-colors',
+                            'px-1 py-1 border-r border-slate-100 space-y-0.5 transition-colors cursor-crosshair',
+                            (hour < startHour || hour >= endHour) && 'bg-slate-50/70',
                             isToday(date) && 'bg-indigo-50/20',
                             isDropTarget && 'bg-indigo-100/60 ring-1 ring-inset ring-indigo-300',
                           )}
+                          onClick={event => openTimeCell(date, hour, event)}
                           onDragOver={e => { e.preventDefault(); setDropTarget({ date: dateStr, hour }) }}
                           onDragLeave={() => setDropTarget(null)}
                           onDrop={e => {
@@ -891,7 +941,7 @@ export default function CalendarPage({
                     {format(currentDate, 'M月 d日 (EEEE)', { locale: zhTW })}
                   </h3>
                 </div>
-                {Array.from({ length: endHour - startHour }, (_, i) => i + startHour).map(hour => {
+                {Array.from({ length: 24 }, (_, hour) => hour).map(hour => {
                   const hBk = bookingsOnHour(currentDate, hour)
                   const dateStr = format(currentDate, 'yyyy-MM-dd')
                   const isDropTarget = dropTarget?.date === dateStr && dropTarget?.hour === hour
@@ -899,6 +949,7 @@ export default function CalendarPage({
                     <div key={hour}
                       className={cn(
                         'flex gap-3 px-4 py-2 border-b border-slate-50 min-h-14 transition-colors',
+                        (hour < startHour || hour >= endHour) && 'bg-slate-50/70',
                         isDropTarget && 'bg-indigo-50 ring-1 ring-inset ring-indigo-200',
                       )}
                       onDragOver={e => { e.preventDefault(); setDropTarget({ date: dateStr, hour }) }}
@@ -910,8 +961,13 @@ export default function CalendarPage({
                         setDraggingId(null)
                       }}
                     >
-                      <div className="w-12 text-right text-xs text-slate-300 pt-1 shrink-0">{hour}:00</div>
-                      <div className="flex-1 flex flex-wrap gap-2">
+                      <div className="w-12 text-right text-xs text-slate-300 pt-1 shrink-0">
+                        {String(hour).padStart(2, '0')}:00
+                      </div>
+                      <div
+                        className="flex-1 flex flex-wrap gap-2 cursor-crosshair"
+                        onClick={event => openTimeCell(currentDate, hour, event)}
+                      >
                         {hBk.map(b => (
                           <button key={b.id}
                             draggable={isEditable(b.status)}
@@ -960,17 +1016,37 @@ export default function CalendarPage({
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-red-600">
                 <AlertTriangle size={15} />
-                <p className="text-sm font-semibold">確認取消此預約？</p>
+                <p className="text-sm font-semibold">
+                  {modalBooking.recurrence_series_id ? '要取消哪些循環預約？' : '確認取消此預約？'}
+                </p>
               </div>
-              <p className="text-xs text-red-400">取消後此預約將從行事曆移除（客戶紀錄仍保留）</p>
-              <div className="flex gap-2">
-                <Button variant="secondary" className="flex-1" onClick={() => setShowCancelConfirm(false)}>
-                  返回
-                </Button>
-                <Button variant="danger" className="flex-1" loading={saving} onClick={() => handleStatusChange('cancelled')}>
-                  確認取消
-                </Button>
-              </div>
+              <p className="text-xs leading-5 text-red-400">
+                {modalBooking.recurrence_series_id
+                  ? '可只取消本次，或取消本次及之後尚未開始的預約；已完課與未到場紀錄不受影響。'
+                  : '取消後此預約將從行事曆移除（客戶紀錄仍保留）。'}
+              </p>
+              {modalBooking.recurrence_series_id ? (
+                <div className="space-y-2">
+                  <Button variant="danger" className="w-full" loading={saving} onClick={() => handleCancel('single')}>
+                    只取消本次
+                  </Button>
+                  <Button variant="secondary" className="w-full border-red-200 text-red-600 hover:bg-red-50" disabled={saving} onClick={() => handleCancel('future')}>
+                    取消本次及之後的預約
+                  </Button>
+                  <Button variant="ghost" className="w-full" disabled={saving} onClick={() => setShowCancelConfirm(false)}>
+                    返回
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button variant="secondary" className="flex-1" onClick={() => setShowCancelConfirm(false)}>
+                    返回
+                  </Button>
+                  <Button variant="danger" className="flex-1" loading={saving} onClick={() => handleCancel('single')}>
+                    確認取消
+                  </Button>
+                </div>
+              )}
             </div>
           ) : showReopenConfirm ? (
             /* 撤銷完課確認 */
@@ -1040,6 +1116,15 @@ export default function CalendarPage({
               <Badge variant={STATUS_BADGE_VARIANT[modalBooking.status]}>
                 {STATUS_LABEL[modalBooking.status]}
               </Badge>
+              {modalBooking.recurrence_series_id && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-600">
+                  <Repeat2 size={12} />
+                  循環預約
+                  {modalBooking.recurrence_occurrence_index
+                    ? ` · 第 ${modalBooking.recurrence_occurrence_index} 堂`
+                    : ''}
+                </span>
+              )}
               {saving && <span className="text-xs text-slate-400 animate-pulse">儲存中…</span>}
             </div>
 
@@ -1185,7 +1270,7 @@ export default function CalendarPage({
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1.5">時間</label>
-                    <TimePicker value={editTime} onChange={handleTimeChange} startHour={startHour} endHour={endHour} />
+                    <TimePicker value={editTime} onChange={handleTimeChange} startHour={0} endHour={23} />
                   </div>
                 </div>
 

@@ -3,9 +3,9 @@
  * 可從行事曆、客戶管理等多處開啟
  * 使用 upsert_booking RPC 做衝突檢查 + 原子寫入
  */
-import { useCallback, useState, useEffect } from 'react'
-import { format, parseISO } from 'date-fns'
-import { Clock, Timer, DollarSign, TicketCheck } from 'lucide-react'
+import { useCallback, useState, useEffect, useMemo, useRef } from 'react'
+import { addWeeks, differenceInCalendarDays, format, parseISO } from 'date-fns'
+import { CalendarClock, Clock, Timer, DollarSign, Repeat2, TicketCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
@@ -13,6 +13,8 @@ import Select from '../ui/Select'
 import ClientCombobox from '../ui/ClientCombobox'
 import DatePicker from '../ui/DatePicker'
 import TimePicker from '../ui/TimePicker'
+import Toggle from '../ui/Toggle'
+import Input from '../ui/Input'
 import { toast } from '../ui/Snackbar'
 import { inputCls } from '../../lib/styles'
 import { cn } from '../../lib/cn'
@@ -24,16 +26,17 @@ import {
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
 
-/** 取得當下最近的下一個 15 分鐘時段，上限 21:00 */
+/** 取得當下最近的下一個 15 分鐘時段，上限 23:45 */
 // eslint-disable-next-line react-refresh/only-export-components
 export function nearestSlot(): string {
   const now = new Date()
   const h = now.getHours()
   const m = now.getMinutes()
   const nextM = Math.ceil((m + 1) / 15) * 15
-  const slotH = nextM >= 60 ? Math.min(h + 1, 21) : Math.min(h, 21)
+  if (h === 23 && nextM >= 60) return '23:45'
+  const slotH = nextM >= 60 ? Math.min(h + 1, 23) : Math.min(h, 23)
   const slotM = nextM >= 60 ? 0 : nextM
-  if (slotH === 21 && slotM > 0) return '21:00'
+  if (slotH === 23 && slotM > 45) return '23:45'
   return `${String(slotH).padStart(2, '0')}:${String(slotM).padStart(2, '0')}`
 }
 
@@ -86,6 +89,25 @@ interface BookingMutationResult {
   error?: string
   id?: string
   conflict?: BookingConflict
+  occurrence_index?: number
+  occurrence_start?: string
+  affected_count?: number
+}
+
+type RecurrenceEndMode = 'count' | 'until'
+
+function recurrenceCount(
+  startDate: string,
+  intervalWeeks: number,
+  endMode: RecurrenceEndMode,
+  count: number,
+  untilDate: string,
+) {
+  if (endMode === 'count') return count
+  if (!startDate || !untilDate) return 0
+  const start = new Date(`${startDate}T12:00:00`)
+  const until = new Date(`${untilDate}T12:00:00`)
+  return Math.floor(differenceInCalendarDays(until, start) / (intervalWeeks * 7)) + 1
 }
 
 export default function NewBookingModal({
@@ -134,6 +156,12 @@ export default function NewBookingModal({
   const [voucherChoice, setVoucherChoice] = useState<'auto' | 'none' | string>('auto')
   const [voucherOptions, setVoucherOptions] = useState<EligibleVoucherItem[]>([])
   const [vouchersLoading, setVouchersLoading] = useState(false)
+  const [repeatEnabled, setRepeatEnabled] = useState(false)
+  const [repeatIntervalWeeks, setRepeatIntervalWeeks] = useState(1)
+  const [repeatEndMode, setRepeatEndMode] = useState<RecurrenceEndMode>('count')
+  const [repeatCount, setRepeatCount] = useState(4)
+  const [repeatUntilDate, setRepeatUntilDate] = useState('')
+  const recurrenceIdempotencyKey = useRef(crypto.randomUUID())
 
   // Reset when opened
   useEffect(() => {
@@ -144,12 +172,34 @@ export default function NewBookingModal({
       setErrors({})
       setVoucherChoice('auto')
       setVoucherOptions([])
+      setRepeatEnabled(false)
+      setRepeatIntervalWeeks(1)
+      setRepeatEndMode('count')
+      setRepeatCount(4)
+      setRepeatUntilDate('')
+      recurrenceIdempotencyKey.current = crypto.randomUUID()
     })
     return () => { active = false }
   }, [open, makeEmpty])
 
   const selectedService = services.find(s => s.id === form.service_id)
   const selectedVoucher = voucherOptions.find(option => option.itemId === voucherChoice) ?? null
+  const effectiveRepeatCount = useMemo(() => recurrenceCount(
+    form.date,
+    repeatIntervalWeeks,
+    repeatEndMode,
+    repeatCount,
+    repeatUntilDate,
+  ), [form.date, repeatCount, repeatEndMode, repeatIntervalWeeks, repeatUntilDate])
+  const repeatLastDate = repeatEnabled && effectiveRepeatCount >= 1 && form.date
+    ? format(
+      addWeeks(
+        new Date(`${form.date}T12:00:00`),
+        repeatIntervalWeeks * (effectiveRepeatCount - 1),
+      ),
+      'yyyy/MM/dd',
+    )
+    : ''
 
   useEffect(() => {
     let active = true
@@ -234,6 +284,19 @@ export default function NewBookingModal({
     if (!form.service_id)      e.service_id      = '請選擇課程'
     if (!form.date)            e.date            = '請選擇日期'
     if (!form.time)            e.time            = '請選擇時間'
+    if (repeatEnabled && mode === 'create') {
+      if (effectiveRepeatCount < 2) e.recurrence = '循環預約至少需要 2 堂'
+      if (effectiveRepeatCount > 52) e.recurrence = '循環預約最多 52 堂'
+      if (repeatEndMode === 'until' && !repeatUntilDate) e.recurrence = '請選擇結束日期'
+      if (repeatLastDate && differenceInCalendarDays(
+        new Date(repeatLastDate.replaceAll('/', '-') + 'T12:00:00'),
+        new Date(`${form.date}T12:00:00`),
+      ) > 365) e.recurrence = '循環期間最長為 12 個月'
+      if (voucherChoice !== 'auto' && voucherChoice !== 'none'
+        && selectedVoucher && selectedVoucher.availableQuantity < effectiveRepeatCount) {
+        e.recurrence = `指定商品券僅剩 ${selectedVoucher.availableQuantity} 堂，不足以支付整個系列`
+      }
+    }
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -248,20 +311,38 @@ export default function NewBookingModal({
     const voucherMode = voucherChoice === 'auto' || voucherChoice === 'none'
       ? voucherChoice
       : 'specific'
-    const { data, error } = await supabase.rpc('upsert_booking_with_voucher', {
-      p_booking_id:      mode === 'edit' ? initialBooking!.id : null,
-      p_client_id:       form.client_id,
-      p_practitioner_id: form.practitioner_id,
-      p_service_id:      form.service_id,
-      p_start_time:      start.toISOString(),
-      p_end_time:        end.toISOString(),
-      p_buffer_minutes:  form.buffer_minutes,
-      p_notes:           form.notes.trim() || null,
-      p_store_id:        STORE_ID,
-      p_price:           form.price ?? null,
-      p_voucher_mode:    voucherMode,
-      p_client_voucher_item_id: voucherMode === 'specific' ? voucherChoice : null,
-    })
+    const mutation = repeatEnabled && mode === 'create'
+      ? supabase.rpc('create_recurring_bookings_with_voucher', {
+        p_client_id:       form.client_id,
+        p_practitioner_id: form.practitioner_id,
+        p_service_id:      form.service_id,
+        p_start_time:      start.toISOString(),
+        p_end_time:        end.toISOString(),
+        p_interval_weeks:  repeatIntervalWeeks,
+        p_occurrence_count: effectiveRepeatCount,
+        p_idempotency_key: recurrenceIdempotencyKey.current,
+        p_buffer_minutes:  form.buffer_minutes,
+        p_notes:           form.notes.trim() || null,
+        p_store_id:        STORE_ID,
+        p_price:           form.price ?? null,
+        p_voucher_mode:    voucherMode,
+        p_client_voucher_item_id: voucherMode === 'specific' ? voucherChoice : null,
+      })
+      : supabase.rpc('upsert_booking_with_voucher', {
+        p_booking_id:      mode === 'edit' ? initialBooking!.id : null,
+        p_client_id:       form.client_id,
+        p_practitioner_id: form.practitioner_id,
+        p_service_id:      form.service_id,
+        p_start_time:      start.toISOString(),
+        p_end_time:        end.toISOString(),
+        p_buffer_minutes:  form.buffer_minutes,
+        p_notes:           form.notes.trim() || null,
+        p_store_id:        STORE_ID,
+        p_price:           form.price ?? null,
+        p_voucher_mode:    voucherMode,
+        p_client_voucher_item_id: voucherMode === 'specific' ? voucherChoice : null,
+      })
+    const { data, error } = await mutation
 
     setSaving(false)
 
@@ -277,20 +358,32 @@ export default function NewBookingModal({
 
     if (!result.ok) {
       if (result.error === 'PRACTITIONER_BLOCKED') {
-        toast.error('從業人員不可預約', '該時段已被設定為封鎖時段（如休假），請更換時間或人員')
+        const occurrence = result.occurrence_start
+          ? `（第 ${result.occurrence_index} 堂，${format(new Date(result.occurrence_start), 'M/d HH:mm')}）`
+          : ''
+        toast.error('從業人員不可預約', `該時段已被設定為封鎖時段，請更換時間或人員${occurrence}`)
       } else if (result.error === 'TIME_CONFLICT' && result.conflict) {
         const c = result.conflict
         const cStart = format(new Date(c.start_time), 'HH:mm')
         const cEnd   = format(new Date(c.end_time),   'HH:mm')
         const bufMsg = c.buffer_minutes > 0 ? `（含 ${c.buffer_minutes} 分鐘緩衝）` : ''
-        toast.error('時間衝突', `${c.client_name} · ${c.service_name} ${cStart}–${cEnd}${bufMsg}`)
+        const occurrence = result.occurrence_start
+          ? ` · 第 ${result.occurrence_index} 堂 ${format(new Date(result.occurrence_start), 'M/d')}`
+          : ''
+        toast.error('時間衝突', `${c.client_name} · ${c.service_name} ${cStart}–${cEnd}${bufMsg}${occurrence}`)
+      } else if (result.error === 'VOUCHER_NOT_ELIGIBLE_OR_NO_BALANCE') {
+        toast.error('商品券堂數不足', `第 ${result.occurrence_index ?? '—'} 堂無法使用指定商品券，系列尚未建立`)
       } else {
         toast.error('操作失敗', result.error ?? '未知錯誤')
       }
       return
     }
 
-    const label = mode === 'edit' ? '預約已更新' : '預約已建立'
+    const label = mode === 'edit'
+      ? '預約已更新'
+      : repeatEnabled
+        ? `已建立 ${effectiveRepeatCount} 堂循環預約`
+        : '預約已建立'
     toast.success(label, `${format(start, 'M/d HH:mm')} · ${selectedService?.name ?? ''}`)
     onSaved()
   }
@@ -376,9 +469,127 @@ export default function NewBookingModal({
               value={form.time}
               onChange={v => { setForm(f => ({ ...f, time: v })); setErrors(er => ({ ...er, time: '' })) }}
               error={!!errors.time}
+              startHour={0}
+              endHour={23}
             />
           </div>
         </div>
+
+        {mode === 'create' && (
+          <div className="rounded-3xl border border-indigo-100 bg-indigo-50/50 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-2.5">
+                <Repeat2 size={18} className="mt-0.5 shrink-0 text-indigo-600" />
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">重複預約</p>
+                  <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                    適合固定每週或隔週上課；任一堂衝突時整組都不會建立。
+                  </p>
+                </div>
+              </div>
+              <Toggle
+                checked={repeatEnabled}
+                onChange={checked => {
+                  setRepeatEnabled(checked)
+                  setErrors(current => ({ ...current, recurrence: '' }))
+                }}
+                ariaLabel="重複預約"
+              />
+            </div>
+
+            {repeatEnabled && (
+              <div className="mt-4 space-y-3 border-t border-indigo-100 pt-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-600">重複頻率</label>
+                  <Select
+                    value={String(repeatIntervalWeeks)}
+                    onChange={value => {
+                      setRepeatIntervalWeeks(Number(value))
+                      setErrors(current => ({ ...current, recurrence: '' }))
+                    }}
+                    options={[1, 2, 3, 4].map(weeks => ({
+                      value: String(weeks),
+                      label: weeks === 1 ? '每週' : `每 ${weeks} 週`,
+                    }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-600">結束方式</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={repeatEndMode === 'count' ? 'primary' : 'secondary'}
+                      onClick={() => setRepeatEndMode('count')}
+                    >
+                      指定堂數
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={repeatEndMode === 'until' ? 'primary' : 'secondary'}
+                      onClick={() => {
+                        setRepeatEndMode('until')
+                        if (!repeatUntilDate && form.date) {
+                          setRepeatUntilDate(format(
+                            addWeeks(new Date(`${form.date}T12:00:00`), repeatIntervalWeeks * 3),
+                            'yyyy-MM-dd',
+                          ))
+                        }
+                      }}
+                    >
+                      指定日期
+                    </Button>
+                  </div>
+                </div>
+
+                {repeatEndMode === 'count' ? (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-600">總堂數</label>
+                    <Input
+                      type="number"
+                      min={2}
+                      max={52}
+                      value={repeatCount}
+                      onChange={event => {
+                        setRepeatCount(Number(event.target.value))
+                        setErrors(current => ({ ...current, recurrence: '' }))
+                      }}
+                      suffix={<span className="text-xs">堂</span>}
+                      error={!!errors.recurrence}
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-600">重複至</label>
+                    <DatePicker
+                      value={repeatUntilDate}
+                      onChange={value => {
+                        setRepeatUntilDate(value)
+                        setErrors(current => ({ ...current, recurrence: '' }))
+                      }}
+                      error={!!errors.recurrence}
+                    />
+                  </div>
+                )}
+
+                {errors.recurrence ? (
+                  <p className="text-xs font-medium text-red-500">{errors.recurrence}</p>
+                ) : effectiveRepeatCount >= 2 && repeatLastDate ? (
+                  <div className="flex items-start gap-2 rounded-2xl bg-white/80 px-3 py-2.5 text-xs text-indigo-700">
+                    <CalendarClock size={14} className="mt-0.5 shrink-0" />
+                    <p>
+                      共 <span className="font-semibold">{effectiveRepeatCount} 堂</span>，
+                      最後一堂為 <span className="font-semibold">{repeatLastDate}</span>，
+                      時間皆為 <span className="font-semibold">{form.time || '尚未選擇'}</span>。
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* End time + buffer preview */}
         {endTimePreview && (
@@ -494,12 +705,15 @@ export default function NewBookingModal({
           />
           {voucherChoice === 'auto' && voucherOptions[0] && (
             <p className="mt-2 text-xs font-medium text-lime-800">
-              預計使用 {voucherOptions[0].productName}，預約後剩餘 {voucherOptions[0].availableQuantity - 1} 堂
+              {repeatEnabled && mode === 'create'
+                ? '將依到期日優先使用所有可用商品券；不足的堂數會採單堂計價。'
+                : `預計使用 ${voucherOptions[0].productName}，預約後剩餘 ${voucherOptions[0].availableQuantity - 1} 堂`}
             </p>
           )}
           {selectedVoucher && (
             <p className="mt-2 text-xs font-medium text-lime-800">
-              已指定 {selectedVoucher.productName}，預約後剩餘 {selectedVoucher.availableQuantity - 1} 堂
+              已指定 {selectedVoucher.productName}，預約後剩餘{' '}
+              {selectedVoucher.availableQuantity - (repeatEnabled && mode === 'create' ? effectiveRepeatCount : 1)} 堂
             </p>
           )}
           {voucherChoice === 'none' && (
