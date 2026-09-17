@@ -12,6 +12,8 @@
     "test:db": "supabase test db",
     "test": "bun run test:functions && bun run test:db",
     "local:admin": "deno run --env-file=.env.local --allow-env --allow-net=127.0.0.1:54321 scripts/create-local-admin.ts",
+    "release:check:staging": "node scripts/check-release-target.mjs staging",
+    "release:check:production": "node scripts/check-release-target.mjs production",
     "preview": "vite preview"
   },
   "dependencies": {
