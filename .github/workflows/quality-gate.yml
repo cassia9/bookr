@@ -1,0 +1,69 @@
+name: 品質閘門
+
+on:
+  pull_request:
+    branches:
+      - main
+      - staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-and-functions:
+    name: 前端與 Edge Functions
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取得程式碼
+        uses: actions/checkout@v4
+
+      - name: 安裝 Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: 安裝 Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: 安裝相依套件
+        run: bun install --frozen-lockfile
+
+      - name: 型別檢查
+        run: bun run typecheck
+
+      - name: Edge Function 測試
+        run: bun run test:functions
+
+      - name: 正式建置
+        run: bun run build
+
+  database:
+    name: Supabase 資料庫
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取得程式碼
+        uses: actions/checkout@v4
+
+      - name: 安裝 Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: 安裝相依套件
+        run: bun install --frozen-lockfile
+
+      - name: 啟動本地 Supabase
+        run: bunx supabase start
+
+      - name: 執行資料庫測試
+        run: bun run test:db
+
+      - name: 停止本地 Supabase
+        if: always()
+        run: bunx supabase stop --no-backup
