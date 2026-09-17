@@ -62,8 +62,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  28::BIGINT,
-  'authenticated 只有二十八支必要 RPC／輔助函式'
+  30::BIGINT,
+  'authenticated 只有三十支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -99,6 +99,8 @@ SELECT extensions.ok(
         'adjust_client_voucher_item',
         'set_booking_voucher',
         'upsert_booking_with_voucher',
+        'create_recurring_bookings_with_voucher',
+        'cancel_booking_scope',
         'reopen_completed_booking',
         'mark_in_app_notification_read',
         'mark_all_in_app_notifications_read'
@@ -194,12 +196,13 @@ SELECT extensions.is(
         'client_vouchers',
         'client_voucher_items',
         'voucher_redemptions',
-        'voucher_ledger'
+        'voucher_ledger',
+        'booking_recurrence_series'
       ])
       AND c.relrowsecurity
   ),
-  22::BIGINT,
-  '二十二張核心資料表全部啟用 RLS'
+  23::BIGINT,
+  '二十三張核心資料表全部啟用 RLS'
 );
 
 SELECT extensions.is(

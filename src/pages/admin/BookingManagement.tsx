@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, Plus } from 'lucide-react'
+import { format } from 'date-fns'
 import { cn } from '@/lib/cn'
 import { supabase } from '@/lib/supabase'
 import CalendarPage from './CalendarPage'
 import GanttPage from './GanttPage'
-import NewBookingModal from '@/components/booking/NewBookingModal'
+import NewBookingModal, { nearestSlot } from '@/components/booking/NewBookingModal'
 import type { Practitioner, Client, Service } from '@/types/database'
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
@@ -17,6 +18,8 @@ export default function BookingManagement() {
   const [calendarView, setCalendarView] = useState<CalendarView>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showNewBooking, setShowNewBooking] = useState(false)
+  const [newBookingDate, setNewBookingDate] = useState<string | undefined>()
+  const [newBookingTime, setNewBookingTime] = useState<string | undefined>()
   const [refreshKey, setRefreshKey] = useState(0)
 
   const [practitioners, setPractitioners] = useState<Practitioner[]>([])
@@ -78,6 +81,12 @@ export default function BookingManagement() {
     })
   }
 
+  function openNewBooking(date = new Date(), time?: string) {
+    setNewBookingDate(format(date, 'yyyy-MM-dd'))
+    setNewBookingTime(time ?? nearestSlot())
+    setShowNewBooking(true)
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* 頂部標題欄 */}
@@ -90,7 +99,7 @@ export default function BookingManagement() {
             </p>
           </div>
           <button
-            onClick={() => setShowNewBooking(true)}
+            onClick={() => openNewBooking()}
             className="flex items-center gap-1.5 px-5 py-2.5 bg-black text-white rounded-xl hover:bg-gray-800 transition font-medium shadow-md hover:shadow-lg text-sm"
           >
             <Plus className="w-4 h-4" />
@@ -183,6 +192,7 @@ export default function BookingManagement() {
             defaultDate={currentDate}
             startHour={startHour}
             endHour={endHour}
+            onNewBooking={openNewBooking}
           />
         ) : (
           <GanttPage
@@ -206,6 +216,8 @@ export default function BookingManagement() {
           setClients(data ?? [])
         }}
         defaultBufferMinutes={defaultBufferMinutes}
+        initialDate={newBookingDate}
+        initialTime={newBookingTime}
       />
     </div>
   )
