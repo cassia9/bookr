@@ -40,7 +40,11 @@ export default function BookingManagement() {
       setPractitioners(p ?? [])
       setClients(c ?? [])
       setServices(s ?? [])
-      const storeData = store as any
+      const storeData = store as {
+        default_buffer_minutes?: number
+        open_time?: string
+        close_time?: string
+      } | null
       setDefaultBufferMinutes(storeData?.default_buffer_minutes ?? 30)
       setStartHour(parseInt(storeData?.open_time ?? '09:00', 10))
       setEndHour(parseInt(storeData?.close_time ?? '21:00', 10))
@@ -193,6 +197,8 @@ export default function BookingManagement() {
             startHour={startHour}
             endHour={endHour}
             onNewBooking={openNewBooking}
+            onCalendarViewChange={setCalendarView}
+            onCalendarDateChange={setCurrentDate}
           />
         ) : (
           <GanttPage
