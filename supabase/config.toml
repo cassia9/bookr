@@ -1,5 +1,5 @@
-# Supabase 項目配置
-project_id = "xfdpcjpjpczqyuqzdqmr"
+# 本地 Supabase 專案識別；遠端部署必須明確傳入對應環境的 project ref。
+project_id = "bookr-local"
 
 [api]
 port = 54321

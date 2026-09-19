@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT extensions.plan(35);
+SELECT extensions.plan(39);
 
 -- ============================================================
 -- 結構檢查：SECURITY DEFINER、RPC 白名單、GRANT、RLS
@@ -32,8 +32,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('anon', p.oid, 'EXECUTE')
   ),
-  5::BIGINT,
-  'anon 只有五支公開 RPC'
+  6::BIGINT,
+  'anon 只有六支公開 RPC'
 );
 
 SELECT extensions.ok(
@@ -46,6 +46,7 @@ SELECT extensions.ok(
       AND p.proname <> ALL (ARRAY[
         'get_store_by_code',
         'get_store_by_slug',
+        'get_public_booking_catalog',
         'get_available_slots',
         'create_booking_public',
         'validate_invitation_token'
@@ -62,8 +63,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  30::BIGINT,
-  'authenticated 只有三十支必要 RPC／輔助函式'
+  31::BIGINT,
+  'authenticated 只有三十一支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -76,6 +77,7 @@ SELECT extensions.ok(
       AND p.proname <> ALL (ARRAY[
         'get_store_by_code',
         'get_store_by_slug',
+        'get_public_booking_catalog',
         'get_available_slots',
         'create_booking_public',
         'validate_invitation_token',
@@ -233,8 +235,8 @@ SELECT extensions.is(
       AND grantee = 'anon'
       AND privilege_type = 'SELECT'
   ),
-  3::BIGINT,
-  'anon 只可 SELECT 三張公開資料表'
+  0::BIGINT,
+  'anon 不可直接 SELECT 公開預約資料表'
 );
 
 SELECT extensions.ok(
@@ -243,9 +245,9 @@ SELECT extensions.ok(
     FROM information_schema.role_table_grants
     WHERE table_schema = 'public'
       AND grantee = 'anon'
-      AND table_name <> ALL (ARRAY['stores', 'services', 'practitioners'])
+      AND table_name = ANY (ARRAY['stores', 'services', 'practitioners'])
   ),
-  'anon 沒有其他資料表權限'
+  'anon 對店家、課程與從業人員都沒有直接資料表權限'
 );
 
 SELECT extensions.ok(
@@ -306,6 +308,7 @@ SELECT extensions.is(
       AND p.proname = ANY (ARRAY[
         'get_store_by_code',
         'get_store_by_slug',
+        'get_public_booking_catalog',
         'get_available_slots',
         'create_booking_public',
         'create_line_booking'
@@ -314,8 +317,8 @@ SELECT extensions.is(
       AND COALESCE(p.proconfig, ARRAY[]::TEXT[])
         @> ARRAY['search_path=""']
   ),
-  5::BIGINT,
-  '公開查詢與兩支預約 RPC 均為固定安全路徑的 SECURITY DEFINER'
+  6::BIGINT,
+  '公開目錄、查詢與兩支預約 RPC 均為固定安全路徑的 SECURITY DEFINER'
 );
 
 SELECT extensions.ok(
@@ -388,10 +391,16 @@ OR practitioner_id IN (
   '20000000-0000-0000-0000-000000000003'
 );
 
-INSERT INTO public.stores (id, name)
-VALUES ('00000000-0000-0000-0000-000000000002', '測試店家二')
+INSERT INTO public.stores (id, name, store_code)
+VALUES (
+  '00000000-0000-0000-0000-000000000002',
+  '測試店家二',
+  'test-store-two'
+)
 ON CONFLICT (id) DO UPDATE
-SET name = EXCLUDED.name;
+SET
+  name = EXCLUDED.name,
+  store_code = EXCLUDED.store_code;
 
 INSERT INTO public.services (
   id, name, duration_minutes, price, active, store_id
@@ -703,11 +712,7 @@ SELECT extensions.throws_ok(
 );
 
 SELECT extensions.is(
-  public.get_store_by_code((
-    SELECT s.store_code
-    FROM public.stores AS s
-    WHERE s.id = '00000000-0000-0000-0000-000000000002'
-  )),
+  public.get_store_by_code('test-store-two'),
   '00000000-0000-0000-0000-000000000002'::UUID,
   '匿名預約流程仍可用店家代碼解析店家'
 );
@@ -746,6 +751,39 @@ SELECT extensions.is(
 );
 
 SET LOCAL ROLE anon;
+
+SELECT extensions.throws_ok(
+  $$ SELECT phone FROM public.practitioners LIMIT 1 $$,
+  '42501',
+  'permission denied for table practitioners',
+  '匿名使用者不可直接讀取從業人員電話'
+);
+
+SELECT extensions.ok(
+  public.get_public_booking_catalog(
+    '00000000-0000-0000-0000-000000000001'
+  ) IS NOT NULL,
+  '匿名預約頁可取得公開目錄'
+);
+
+SELECT extensions.ok(
+  NOT (
+    public.get_public_booking_catalog(
+      '00000000-0000-0000-0000-000000000001'
+    ) #> '{practitioners,0}'
+  ) ? 'phone',
+  '公開從業人員資料不包含電話'
+);
+
+SELECT extensions.is(
+  jsonb_array_length(
+    public.get_public_booking_catalog(
+      '00000000-0000-0000-0000-000000000001'
+    ) -> 'services'
+  ),
+  1,
+  '公開目錄只回傳指定店家的有效課程'
+);
 
 SELECT extensions.is(
   public.create_booking_public(
