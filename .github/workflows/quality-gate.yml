@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 取得程式碼
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 安裝 Bun
         uses: oven-sh/setup-bun@v2
@@ -29,7 +29,7 @@ jobs:
       - name: 安裝 Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.x
+          deno-version: v2.1.4
 
       - name: 安裝相依套件
         run: bun install --frozen-lockfile
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 取得程式碼
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 安裝 Bun
         uses: oven-sh/setup-bun@v2
