@@ -35,6 +35,7 @@ import IconButton from '@/components/ui/IconButton'
 import CustomerChannelIdentities from '@/components/clients/CustomerChannelIdentities'
 import VoucherSaleModal from '@/components/vouchers/VoucherSaleModal'
 import { cn } from '@/lib/cn'
+import { parseIntegerInput } from '@/lib/numeric-input'
 import {
   getAvailableQuantity,
   getClientVouchers,
@@ -381,6 +382,7 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
   const [expandedId,  setExpandedId]  = useState<string | null>(null)
   // 每筆預約的 local edit state: bookingId → {price, notes}
   const [editMap,     setEditMap]     = useState<Record<string, { price: string; notes: string }>>({})
+  const [priceErrors, setPriceErrors] = useState<Record<string, string>>({})
   const [savingId,    setSavingId]    = useState<string | null>(null)
   // cancel inline confirm
   const [cancelTarget, setCancelTarget] = useState<string | null>(null)
@@ -439,9 +441,20 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
   // 更新價格（blur 儲存）
   async function savePrice(bookingId: string) {
     const raw = editMap[bookingId]?.price ?? '0'
-    const newPrice = Math.max(0, parseInt(raw.replace(/\D/g, '')) || 0)
+    const newPrice = parseIntegerInput(raw)
+    if (newPrice === null || newPrice > 999999) {
+      setPriceErrors(current => ({
+        ...current,
+        [bookingId]: '價格必須是 0–999,999 之間的整數',
+      }))
+      return
+    }
+    setPriceErrors(current => ({ ...current, [bookingId]: '' }))
     const original = bookings.find(b => b.id === bookingId)?.price ?? 0
-    if (newPrice === original) return
+    if (newPrice === original) {
+      setEditMap(prev => ({ ...prev, [bookingId]: { ...prev[bookingId], price: String(newPrice) } }))
+      return
+    }
 
     setSavingId(bookingId)
     const { error } = await supabase
@@ -636,17 +649,24 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
 
                         {/* 價格 */}
                         {isEditable ? (
-                          <FormField label="價格（NT$）" disabled={isSaving}>
+                          <FormField label="價格（NT$）" error={priceErrors[b.id]} disabled={isSaving}>
                             <Input
-                              type="number"
-                              min={0}
+                              type="text"
+                              inputMode="numeric"
                               value={edit.price}
                               prefix={<DollarSign size={14} />}
-                              onChange={e => setEditMap(prev => ({
-                                ...prev,
-                                [b.id]: { ...prev[b.id], price: e.target.value },
-                              }))}
+                              onChange={e => {
+                                setEditMap(prev => ({
+                                  ...prev,
+                                  [b.id]: { ...prev[b.id], price: e.target.value },
+                                }))
+                                setPriceErrors(current => ({ ...current, [b.id]: '' }))
+                              }}
                               onBlur={() => savePrice(b.id)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') e.currentTarget.blur()
+                              }}
+                              error={Boolean(priceErrors[b.id])}
                               disabled={isSaving}
                             />
                           </FormField>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createService, updateService, type Service } from '@/lib/services-api'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -7,6 +7,7 @@ import Textarea from '@/components/ui/Textarea'
 import FormField from '@/components/ui/FormField'
 import Alert from '@/components/ui/Alert'
 import Toggle from '@/components/ui/Toggle'
+import { parseIntegerInput } from '@/lib/numeric-input'
 
 interface ServiceFormProps {
   service?: Service | null
@@ -14,41 +15,42 @@ interface ServiceFormProps {
   onCancel: () => void
 }
 
+function formFromService(service?: Service | null) {
+  return {
+    name: service?.name ?? '',
+    description: service?.description ?? '',
+    duration_minutes: String(service?.duration_minutes ?? 60),
+    price: String(service?.price ?? 0),
+    active: service?.active ?? true,
+  }
+}
+
 export default function ServiceForm({ service, onSuccess, onCancel }: ServiceFormProps) {
-  const [form, setForm] = useState({
-    name: '',
-    description: '',
-    duration_minutes: 60,
-    price: 0,
-    active: true,
-  })
+  const [form, setForm] = useState(() => formFromService(service))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (service) {
-      setForm({
-        name: service.name,
-        description: service.description || '',
-        duration_minutes: service.duration_minutes,
-        price: service.price,
-        active: service.active,
-      })
+  function validate(): { durationMinutes: number; price: number } | null {
+    if (!form.name.trim()) { setError('課程名稱不能為空'); return null }
+    if (form.name.length > 100) { setError('課程名稱不能超過 100 個字'); return null }
+    const durationMinutes = parseIntegerInput(form.duration_minutes)
+    if (durationMinutes === null || durationMinutes < 15 || durationMinutes > 480) {
+      setError('時長必須是 15–480 之間的整數分鐘')
+      return null
     }
-  }, [service])
-
-  function validate(): boolean {
-    if (!form.name.trim()) { setError('課程名稱不能為空'); return false }
-    if (form.name.length > 100) { setError('課程名稱不能超過 100 個字'); return false }
-    if (form.duration_minutes < 15 || form.duration_minutes > 480) { setError('時長必須在 15–480 分鐘之間'); return false }
-    if (form.price < 0 || form.price > 999999) { setError('定價必須在 0–999,999 之間'); return false }
-    return true
+    const price = parseIntegerInput(form.price)
+    if (price === null || price > 999999) {
+      setError('定價必須是 0–999,999 之間的整數')
+      return null
+    }
+    return { durationMinutes, price }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault()
     setError(null)
-    if (!validate()) return
+    const values = validate()
+    if (!values) return
     setLoading(true)
     try {
       if (service) {
@@ -56,16 +58,16 @@ export default function ServiceForm({ service, onSuccess, onCancel }: ServiceFor
           service_id: service.id,
           name: form.name.trim(),
           description: form.description.trim() || undefined,
-          duration_minutes: form.duration_minutes,
-          price: form.price,
+          duration_minutes: values.durationMinutes,
+          price: values.price,
           active: form.active,
         })
       } else {
         await createService({
           name: form.name.trim(),
           description: form.description.trim() || undefined,
-          duration_minutes: form.duration_minutes,
-          price: form.price,
+          duration_minutes: values.durationMinutes,
+          price: values.price,
           active: form.active,
         })
       }
@@ -90,7 +92,7 @@ export default function ServiceForm({ service, onSuccess, onCancel }: ServiceFor
           <Button variant="secondary" className="flex-1" onClick={onCancel} disabled={loading}>
             取消
           </Button>
-          <Button variant="primary" className="flex-1" loading={loading} onClick={handleSubmit as any}>
+          <Button variant="primary" className="flex-1" loading={loading} onClick={handleSubmit}>
             {isEdit ? '更新課程' : '新增課程'}
           </Button>
         </div>
@@ -125,19 +127,19 @@ export default function ServiceForm({ service, onSuccess, onCancel }: ServiceFor
         <div className="grid grid-cols-2 gap-3">
           <FormField label="時長（分鐘）" required hint="15–480">
             <Input
-              type="number"
+              type="text"
+              inputMode="numeric"
               value={form.duration_minutes}
-              onChange={e => setForm(f => ({ ...f, duration_minutes: Math.max(15, Math.min(480, parseInt(e.target.value) || 0)) }))}
-              min={15} max={480}
+              onChange={e => setForm(f => ({ ...f, duration_minutes: e.target.value }))}
               disabled={loading}
             />
           </FormField>
           <FormField label="定價（NT$）" required>
             <Input
-              type="number"
+              type="text"
+              inputMode="numeric"
               value={form.price}
-              onChange={e => setForm(f => ({ ...f, price: Math.max(0, Math.min(999999, parseFloat(e.target.value) || 0)) }))}
-              min={0} max={999999}
+              onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
               disabled={loading}
               prefix={<span className="text-xs">NT$</span>}
             />

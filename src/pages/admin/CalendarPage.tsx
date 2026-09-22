@@ -17,6 +17,7 @@ import { toast } from '@/components/ui/Snackbar'
 import { format, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
 import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import type { SelectOption } from '@/components/ui/Select'
 import DatePicker from '@/components/ui/DatePicker'
@@ -25,6 +26,7 @@ import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import Alert from '@/components/ui/Alert'
 import type { BadgeVariant } from '@/components/ui/Badge'
+import { parseIntegerInput } from '@/lib/numeric-input'
 
 // ── 型別 ──────────────────────────────────────────────────────────────────────
 
@@ -169,12 +171,13 @@ export default function CalendarPage({
   // Day Popover（月視圖點擊格子）
   const [dayPopover, setDayPopover] = useState<DayPopover | null>(null)
 
-  // 編輯中的欄位（local state，auto-save on change）
+  // 編輯中的欄位（價格保留原始文字，完成輸入後才驗證與儲存）
   const [editPractitionerId, setEditPractitionerId] = useState('')
   const [editServiceId, setEditServiceId] = useState('')
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
-  const [editPrice, setEditPrice] = useState<number>(0)
+  const [editPrice, setEditPrice] = useState('0')
+  const [editPriceError, setEditPriceError] = useState('')
   const [editNotes, setEditNotes] = useState('')
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -292,7 +295,8 @@ export default function CalendarPage({
     setEditServiceId(booking.service_id)
     setEditDate(format(parseISO(booking.start_time), 'yyyy-MM-dd'))
     setEditTime(format(parseISO(booking.start_time), 'HH:mm'))
-    setEditPrice(booking.price)
+    setEditPrice(String(booking.price))
+    setEditPriceError('')
     setEditNotes(booking.notes ?? '')
     setShowCancelConfirm(false)
     setShowReopenConfirm(false)
@@ -409,7 +413,9 @@ export default function CalendarPage({
     const sId   = overrides?.serviceId      ?? editServiceId
     const date  = overrides?.date           ?? editDate
     const time  = overrides?.time           ?? editTime
-    const price = overrides?.price          !== undefined ? overrides.price : editPrice
+    const price = overrides?.price !== undefined
+      ? overrides.price
+      : parseIntegerInput(editPrice) ?? modalBooking.price
     const notes = overrides?.notes          !== undefined ? overrides.notes : editNotes
 
     const svc = services.find(s => s.id === sId)
@@ -494,8 +500,9 @@ export default function CalendarPage({
     const svc = services.find(s => s.id === id)
     setEditServiceId(id)
     // 課程切換時帶入定價
-    const newPrice = svc?.price ?? editPrice
-    setEditPrice(newPrice)
+    const newPrice = svc?.price ?? modalBooking?.price ?? 0
+    setEditPrice(String(newPrice))
+    setEditPriceError('')
     autoSave({ serviceId: id, price: newPrice })
   }
 
@@ -509,9 +516,20 @@ export default function CalendarPage({
     autoSave({ time: val })
   }
 
-  function handlePriceChange(val: number) {
+  function handlePriceChange(val: string) {
     setEditPrice(val)
-    autoSave({ price: val })
+    setEditPriceError('')
+  }
+
+  function savePrice() {
+    const price = parseIntegerInput(editPrice)
+    if (price === null || price > 999999) {
+      setEditPriceError('實收金額必須是 0–999,999 之間的整數')
+      return
+    }
+    setEditPrice(String(price))
+    setEditPriceError('')
+    if (price !== modalBooking?.price) void autoSave({ price })
   }
 
   function handleNotesChange(val: string) {
@@ -1313,18 +1331,21 @@ export default function CalendarPage({
                       </span>
                     )}
                   </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-sm text-slate-400 pointer-events-none">NT$</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={editPrice}
-                      onChange={e => handlePriceChange(Number(e.target.value))}
-                      onBlur={e => autoSave({ price: Number(e.target.value) })}
-                      className="w-full h-10 pl-10 pr-3 text-sm border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-shadow"
-                    />
-                  </div>
-                  {editPrice !== (services.find(s => s.id === editServiceId)?.price ?? editPrice) && (
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={editPrice}
+                    onChange={e => handlePriceChange(e.target.value)}
+                    onBlur={savePrice}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') e.currentTarget.blur()
+                    }}
+                    prefix={<span className="text-xs font-semibold">NT$</span>}
+                    error={Boolean(editPriceError)}
+                  />
+                  {editPriceError && <p className="mt-1.5 text-xs text-red-500">{editPriceError}</p>}
+                  {parseIntegerInput(editPrice) !== null
+                    && parseIntegerInput(editPrice) !== services.find(s => s.id === editServiceId)?.price && (
                     <p className="text-xs text-amber-500 mt-1 pl-1">已套用優惠價（與定價不同）</p>
                   )}
                 </div>

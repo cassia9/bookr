@@ -18,6 +18,7 @@ import Input from '../ui/Input'
 import { toast } from '../ui/Snackbar'
 import { inputCls } from '../../lib/styles'
 import { cn } from '../../lib/cn'
+import { parseIntegerInput } from '../../lib/numeric-input'
 import type { Practitioner, Client, Service } from '../../types/database'
 import {
   getEligibleClientVoucherItems,
@@ -127,7 +128,7 @@ export default function NewBookingModal({
         time:            format(parseISO(initialBooking.start_time), 'HH:mm'),
         notes:           initialBooking.notes ?? '',
         buffer_minutes:  initialBooking.buffer_minutes ?? defaultBufferMinutes,
-        price:           initialBooking.price ?? null as number | null,
+        price:           initialBooking.price === undefined ? '' : String(initialBooking.price),
       }
     }
     return {
@@ -138,7 +139,7 @@ export default function NewBookingModal({
       time:            initialTime ?? nearestSlot(),
       notes:           '',
       buffer_minutes:  defaultBufferMinutes,
-      price:           null as number | null,   // null = 自動帶入服務定價
+      price:           '',   // 空白 = 自動帶入服務定價
     }
   }, [
     defaultBufferMinutes,
@@ -237,8 +238,8 @@ export default function NewBookingModal({
     setForm(current => ({
       ...current,
       service_id: serviceId,
-      price: current.price === null || current.price === previousService?.price
-        ? nextService?.price ?? null
+      price: current.price === '' || current.price === String(previousService?.price ?? '')
+        ? String(nextService?.price ?? '')
         : current.price,
     }))
     setErrors(current => ({ ...current, service_id: '' }))
@@ -284,6 +285,10 @@ export default function NewBookingModal({
     if (!form.service_id)      e.service_id      = '請選擇課程'
     if (!form.date)            e.date            = '請選擇日期'
     if (!form.time)            e.time            = '請選擇時間'
+    const price = form.price === '' ? null : parseIntegerInput(form.price)
+    if (form.price !== '' && (price === null || price > 999999)) {
+      e.price = '實收金額必須是 0–999,999 之間的整數'
+    }
     if (repeatEnabled && mode === 'create') {
       if (effectiveRepeatCount < 2) e.recurrence = '循環預約至少需要 2 堂'
       if (effectiveRepeatCount > 52) e.recurrence = '循環預約最多 52 堂'
@@ -305,6 +310,8 @@ export default function NewBookingModal({
     if (!validate()) { toast.warning('請填寫必要欄位'); return }
     setSaving(true)
 
+    const price = form.price === '' ? null : parseIntegerInput(form.price)
+
     const start = new Date(`${form.date}T${form.time}`)
     const end   = new Date(start.getTime() + (selectedService?.duration_minutes ?? 60) * 60000)
 
@@ -324,7 +331,7 @@ export default function NewBookingModal({
         p_buffer_minutes:  form.buffer_minutes,
         p_notes:           form.notes.trim() || null,
         p_store_id:        STORE_ID,
-        p_price:           form.price ?? null,
+        p_price:           price,
         p_voucher_mode:    voucherMode,
         p_client_voucher_item_id: voucherMode === 'specific' ? voucherChoice : null,
       })
@@ -338,7 +345,7 @@ export default function NewBookingModal({
         p_buffer_minutes:  form.buffer_minutes,
         p_notes:           form.notes.trim() || null,
         p_store_id:        STORE_ID,
-        p_price:           form.price ?? null,
+        p_price:           price,
         p_voucher_mode:    voucherMode,
         p_client_voucher_item_id: voucherMode === 'specific' ? voucherChoice : null,
       })
@@ -648,31 +655,30 @@ export default function NewBookingModal({
               <DollarSign size={14} strokeWidth={1.5} className="text-slate-400" />
               實收金額
             </label>
-            {selectedService && form.price !== selectedService.price && (
+            {selectedService && form.price !== String(selectedService.price) && (
               <button
                 type="button"
-                onClick={() => setForm(f => ({ ...f, price: selectedService.price }))}
+                onClick={() => setForm(f => ({ ...f, price: String(selectedService.price) }))}
                 className="text-xs text-indigo-500 hover:text-indigo-700 transition"
               >
                 還原定價 NT${selectedService.price.toLocaleString()}
               </button>
             )}
           </div>
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 rounded-2xl border border-slate-100">
-            <span className="text-sm text-slate-400 font-medium">NT$</span>
-            <input
-              type="number"
-              min={0}
-              step={50}
-              value={form.price ?? ''}
-              onChange={e => setForm(f => ({ ...f, price: e.target.value === '' ? null : Number(e.target.value) }))}
-              placeholder={selectedService ? String(selectedService.price) : '0'}
-              className="flex-1 bg-transparent text-slate-900 font-semibold text-base outline-none min-w-0"
-            />
-            {form.price !== null && form.price === 0 && (
-              <span className="text-xs text-amber-500 font-medium">免費</span>
-            )}
-          </div>
+          <Input
+            type="text"
+            inputMode="numeric"
+            value={form.price}
+            onChange={e => {
+              setForm(f => ({ ...f, price: e.target.value }))
+              setErrors(current => ({ ...current, price: '' }))
+            }}
+            placeholder={selectedService ? String(selectedService.price) : '0'}
+            prefix={<span className="text-xs font-semibold">NT$</span>}
+            suffix={form.price === '0' ? <span className="text-xs font-medium text-amber-500">免費</span> : undefined}
+            error={Boolean(errors.price)}
+          />
+          {errors.price && <p className="mt-1.5 text-xs text-red-500">{errors.price}</p>}
         </div>
 
         {/* 商品券 */}
