@@ -42,9 +42,22 @@ interface StoreInfo {
   booking_confirmation_mode: string
 }
 
+type PublicService = Pick<
+  Service,
+  'id' | 'name' | 'description' | 'duration_minutes' | 'price'
+>
+
+type PublicPractitioner = Pick<Practitioner, 'id' | 'full_name' | 'title' | 'color'>
+
+interface PublicBookingCatalog {
+  store: StoreInfo
+  services: PublicService[]
+  practitioners: PublicPractitioner[]
+}
+
 interface BookingDraft {
-  service:            Service | null
-  practitionerChoice: Practitioner | null
+  service:            PublicService | null
+  practitionerChoice: PublicPractitioner | null
   date:               string
   slot:               SlotItem | null
   name:               string
@@ -98,8 +111,8 @@ export default function BookingPage() {
   const [step, setStep] = useState(1)
   const [store, setStore] = useState<StoreInfo | null>(null)
   const [storeError, setStoreError] = useState(storeParam ? '' : '無效的預約連結')
-  const [services, setServices] = useState<Service[]>([])
-  const [practitioners, setPractitioners] = useState<Practitioner[]>([])
+  const [services, setServices] = useState<PublicService[]>([])
+  const [practitioners, setPractitioners] = useState<PublicPractitioner[]>([])
 
   // LINE LIFF state
   const [lineAvatar, setLineAvatar] = useState<string | null>(null)
@@ -166,33 +179,24 @@ export default function BookingPage() {
   useEffect(() => {
     if (!resolvedStoreId) return
 
-    Promise.all([
-      supabase.from('stores')
-        .select('name,phone,address,open_time,close_time,logo_url,liff_id,booking_enabled,booking_confirmation_mode')
-        .eq('id', resolvedStoreId).single(),
-      supabase.from('services')
-        .select('*').eq('store_id', resolvedStoreId).eq('active', true).order('name'),
-      supabase.from('practitioners')
-        .select('*').eq('store_id', resolvedStoreId).eq('active', true).order('created_at'),
-    ]).then(([{ data: s, error: sErr }, { data: sv }, { data: p }]) => {
-      if (sErr || !s) { setStoreError('找不到此預約頁面'); return }
-      if (!s.booking_enabled) { setStoreError('此店家目前暫停線上預約'); return }
-      setStore({
-        name:                     s.name ?? '',
-        phone:                    s.phone ?? null,
-        address:                  s.address ?? null,
-        open_time:               (s.open_time  ?? '09:00:00').slice(0, 5),
-        close_time:              (s.close_time ?? '21:00:00').slice(0, 5),
-        logo_url:                 s.logo_url ?? null,
-        liff_id:                  s.liff_id ?? null,
-        booking_enabled:          s.booking_enabled ?? true,
-        booking_confirmation_mode: s.booking_confirmation_mode ?? 'manual',
-      })
-      setServices(sv ?? [])
-      setPractitioners(p ?? [])
+    supabase.rpc('get_public_booking_catalog', {
+      p_store_id: resolvedStoreId,
+    }).then(({ data, error }) => {
+      if (error) {
+        console.error('載入公開預約資料失敗', error)
+        setStoreError('預約資料暫時無法載入，請稍後再試')
+        return
+      }
+
+      const catalog = data as unknown as PublicBookingCatalog | null
+      if (!catalog?.store) { setStoreError('找不到此預約頁面'); return }
+      if (!catalog.store.booking_enabled) { setStoreError('此店家目前暫停線上預約'); return }
+      setStore(catalog.store)
+      setServices(catalog.services ?? [])
+      setPractitioners(catalog.practitioners ?? [])
 
       // 嘗試初始化 LINE LIFF
-      initLiff(s.liff_id)
+      initLiff(catalog.store.liff_id)
     })
   }, [resolvedStoreId, initLiff])
 
@@ -421,8 +425,8 @@ export default function BookingPage() {
 // ── Step 1: 選擇服務 ───────────────────────────────────────────────────
 
 function Step1Service({ services, onSelect }: {
-  services: Service[]
-  onSelect: (s: Service) => void
+  services: PublicService[]
+  onSelect: (s: PublicService) => void
 }) {
   return (
     <div>
@@ -468,9 +472,9 @@ function Step1Service({ services, onSelect }: {
 // ── Step 2: 選擇從業人員 ───────────────────────────────────────────────
 
 function Step2Practitioner({ practitioners, selected, onSelect, onBack }: {
-  practitioners: Practitioner[]
-  selected: Practitioner | null
-  onSelect: (p: Practitioner | null) => void
+  practitioners: PublicPractitioner[]
+  selected: PublicPractitioner | null
+  onSelect: (p: PublicPractitioner | null) => void
   onBack: () => void
 }) {
   return (

@@ -6,7 +6,7 @@
  * - cancelled 不顯示在行事曆；completed 顯示但較淡
  * - 所有登入用戶皆可編輯
  */
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Phone, Clock, AlertTriangle, Plus, ArrowRight, Check, Repeat2, TicketCheck, Undo2, X as XIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -23,6 +23,7 @@ import DatePicker from '@/components/ui/DatePicker'
 import TimePicker from '@/components/ui/TimePicker'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
+import Alert from '@/components/ui/Alert'
 import type { BadgeVariant } from '@/components/ui/Badge'
 
 // ── 型別 ──────────────────────────────────────────────────────────────────────
@@ -82,6 +83,8 @@ interface CalendarPageProps {
   startHour?: number
   endHour?: number
   onNewBooking?: (date: Date, time?: string) => void
+  onCalendarViewChange?: (view: ViewMode) => void
+  onCalendarDateChange?: (date: Date) => void
 }
 
 interface DayPopover {
@@ -134,17 +137,18 @@ export default function CalendarPage({
   startHour = 9,
   endHour = 21,
   onNewBooking,
+  onCalendarViewChange,
+  onCalendarDateChange,
 }: CalendarPageProps) {
-  const [view, setView] = useState<ViewMode>(defaultView)
-  const [currentDate, setCurrentDate] = useState(defaultDate || new Date())
-
-  // 父層切換視圖或日期時同步
-  useEffect(() => { setView(defaultView) }, [defaultView])
-  useEffect(() => { if (defaultDate) setCurrentDate(defaultDate) }, [defaultDate?.toDateString()])
+  const [fallbackDate] = useState(() => new Date())
+  const view = defaultView
+  const currentDate = defaultDate ?? fallbackDate
   const [bookings, setBookings] = useState<Booking[]>([])
   const [practitioners, setPractitioners] = useState<Practitioner[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [bookingsError, setBookingsError] = useState('')
+  const [metaError, setMetaError] = useState('')
 
   // Modal 狀態
   const [modalBooking, setModalBooking] = useState<Booking | null>(null)
@@ -174,24 +178,52 @@ export default function CalendarPage({
   const [editNotes, setEditNotes] = useState('')
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => { fetchMeta() }, [])
-  useEffect(() => { fetchBookings() }, [currentDate, view, selectedPractitionerId])
+  // ── 日期範圍計算 ─────────────────────────────────────────────────────────────
+
+  const getDateRange = useCallback((): { start: Date; end: Date } => {
+    const y = currentDate.getFullYear()
+    const m = currentDate.getMonth()
+    const d = currentDate.getDate()
+
+    if (view === 'month') {
+      return { start: new Date(y, m, 1), end: new Date(y, m + 1, 0, 23, 59, 59) }
+    }
+    if (view === 'week') {
+      const dow = currentDate.getDay()
+      const start = new Date(y, m, d - dow)
+      const end   = new Date(y, m, d - dow + 6, 23, 59, 59)
+      return { start, end }
+    }
+    return {
+      start: new Date(y, m, d, 0, 0, 0),
+      end:   new Date(y, m, d, 23, 59, 59),
+    }
+  }, [currentDate, view])
 
   // ── 資料抓取 ────────────────────────────────────────────────────────────────
 
-  async function fetchMeta() {
-    const [{ data: p }, { data: s }] = await Promise.all([
+  const fetchMeta = useCallback(async () => {
+    const [{ data: p, error: practitionerError }, { data: s, error: serviceError }] = await Promise.all([
       supabase.from('practitioners').select('id, full_name, color')
         .eq('store_id', STORE_ID).eq('active', true).is('deleted_at', null),
       supabase.from('services').select('id, name, duration_minutes, price')
         .eq('store_id', STORE_ID).eq('active', true),
     ])
+
+    if (practitionerError || serviceError) {
+      console.error('載入行事曆基本資料失敗', practitionerError ?? serviceError)
+      setMetaError('老師或課程資料暫時無法載入，請重新整理後再試。')
+      return
+    }
+
+    setMetaError('')
     setPractitioners(p ?? [])
     setServices(s ?? [])
-  }
+  }, [])
 
-  async function fetchBookings() {
+  const fetchBookings = useCallback(async () => {
     setIsLoading(true)
+    setBookingsError('')
     const { start, end } = getDateRange()
 
     let query = supabase
@@ -223,30 +255,22 @@ export default function CalendarPage({
     }
 
     const { data, error } = await query
-    if (!error) setBookings((data ?? []) as unknown as Booking[])
+    if (error) {
+      console.error('載入行事曆預約失敗', error)
+      setBookings([])
+      setBookingsError('預約資料暫時無法載入，請重新整理後再試。')
+    } else {
+      setBookings((data ?? []) as unknown as Booking[])
+    }
     setIsLoading(false)
-  }
+  }, [getDateRange, selectedPractitionerId])
 
-  // ── 日期範圍計算 ─────────────────────────────────────────────────────────────
+  useEffect(() => { void Promise.resolve().then(fetchMeta) }, [fetchMeta])
+  useEffect(() => { void Promise.resolve().then(fetchBookings) }, [fetchBookings])
 
-  function getDateRange(): { start: Date; end: Date } {
-    const y = currentDate.getFullYear()
-    const m = currentDate.getMonth()
-    const d = currentDate.getDate()
-
-    if (view === 'month') {
-      return { start: new Date(y, m, 1), end: new Date(y, m + 1, 0, 23, 59, 59) }
-    }
-    if (view === 'week') {
-      const dow = currentDate.getDay()
-      const start = new Date(y, m, d - dow)
-      const end   = new Date(y, m, d - dow + 6, 23, 59, 59)
-      return { start, end }
-    }
-    return {
-      start: new Date(y, m, d, 0, 0, 0),
-      end:   new Date(y, m, d, 23, 59, 59),
-    }
+  function retryLoading() {
+    void fetchMeta()
+    void fetchBookings()
   }
 
   function getDatesForView(): Date[] {
@@ -258,16 +282,6 @@ export default function CalendarPage({
       cur.setDate(cur.getDate() + 1)
     }
     return view === 'week' ? dates.slice(0, 7) : dates
-  }
-
-  // ── 日期導航 ────────────────────────────────────────────────────────────────
-
-  function navigate(dir: 1 | -1) {
-    const d = new Date(currentDate)
-    if (view === 'month') d.setMonth(d.getMonth() + dir)
-    else if (view === 'week') d.setDate(d.getDate() + dir * 7)
-    else d.setDate(d.getDate() + dir)
-    setCurrentDate(d)
   }
 
   // ── Modal 開啟 ──────────────────────────────────────────────────────────────
@@ -419,7 +433,11 @@ export default function CalendarPage({
 
     if (error) { toast.error('儲存失敗', error.message); return }
 
-    const result = data as { ok: boolean; error?: string; conflict?: any }
+    const result = data as {
+      ok: boolean
+      error?: string
+      conflict?: { client_name: string; service_name: string }
+    }
     if (!result.ok) {
       if (result.error === 'PRACTITIONER_BLOCKED') {
         toast.error('從業人員不可預約', '該時段為封鎖時段，請更換時間或人員')
@@ -630,25 +648,12 @@ export default function CalendarPage({
 
   const datesForView = getDatesForView()
 
-  const headerTitle = (() => {
-    if (view === 'month') return format(currentDate, 'yyyy年 M月', { locale: zhTW })
-    if (view === 'week') {
-      const s = datesForView[0], e = datesForView[6]
-      return `${format(s, 'M/d')} – ${format(e, 'M/d')}`
-    }
-    return format(currentDate, 'yyyy年 M月 d日 (EEEE)', { locale: zhTW })
-  })()
-
   const isToday = (d: Date) =>
     d.toDateString() === new Date().toDateString()
 
   // 全部（含 cancelled），用於月視圖 badge 統計與 popover
   const allBookingsOnDate = (d: Date) =>
     bookings.filter(b => new Date(b.start_time).toDateString() === d.toDateString())
-
-  // 不含 cancelled，用於週/日視圖卡片顯示
-  const bookingsOnDate = (d: Date) =>
-    allBookingsOnDate(d).filter(b => b.status !== 'cancelled')
 
   const bookingsOnHour = (d: Date, h: number) =>
     bookings.filter(b => {
@@ -735,11 +740,22 @@ export default function CalendarPage({
 
       {/* ── 內容區 ── */}
       <div className="flex-1 overflow-auto p-4">
+        {(metaError || bookingsError) && (
+          <Alert variant="error" title="行事曆載入失敗" className="mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>{bookingsError || metaError}</span>
+              <Button type="button" variant="secondary" size="sm" onClick={retryLoading}>
+                重新載入
+              </Button>
+            </div>
+          </Alert>
+        )}
+
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black" />
           </div>
-        ) : (
+        ) : bookingsError ? null : (
           <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
 
             {/* 月視圖 */}
@@ -1374,7 +1390,11 @@ export default function CalendarPage({
                   </button>
                 )}
                 <button
-                  onClick={() => { setView('day'); setCurrentDate(dayPopover.date); setDayPopover(null) }}
+                  onClick={() => {
+                    onCalendarViewChange?.('day')
+                    onCalendarDateChange?.(dayPopover.date)
+                    setDayPopover(null)
+                  }}
                   className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 px-2.5 py-1 rounded-lg transition-colors"
                 >
                   日視圖
