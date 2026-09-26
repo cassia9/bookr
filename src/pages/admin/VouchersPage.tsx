@@ -40,6 +40,7 @@ import Textarea from '../../components/ui/Textarea'
 import Toggle from '../../components/ui/Toggle'
 import { toast } from '../../components/ui/Snackbar'
 import { cn } from '../../lib/cn'
+import { parseIntegerInput } from '../../lib/numeric-input'
 
 interface ServiceOption {
   id: string
@@ -186,7 +187,8 @@ function ProductModal({
     return sum + (service?.price ?? 0) * (Number(item.quantity) || 0)
   }, 0), [form.items, services])
 
-  const sellingPrice = Number(form.sellingPrice) || 0
+  const parsedSellingPrice = parseIntegerInput(form.sellingPrice)
+  const sellingPrice = parsedSellingPrice ?? 0
   const totalSessions = form.items.reduce(
     (sum, item) => sum + (Number(item.quantity) || 0),
     0,
@@ -202,7 +204,9 @@ function ProductModal({
   function validate() {
     const next: Record<string, string> = {}
     if (!form.name.trim()) next.name = '請輸入方案名稱'
-    if (form.sellingPrice === '' || sellingPrice < 0) next.sellingPrice = '請輸入正確售價'
+    if (parsedSellingPrice === null || parsedSellingPrice > 2147483647) {
+      next.sellingPrice = '售價必須是 0–2,147,483,647 之間的整數'
+    }
     if (form.validityDays && Number(form.validityDays) < 1) next.validityDays = '效期至少 1 天'
     if (!form.items.length || form.items.some(item => !item.serviceId || Number(item.quantity) < 1)) {
       next.items = '請選擇課程並設定至少 1 堂'
@@ -272,11 +276,15 @@ function ProductModal({
         <div className="grid grid-cols-2 gap-3">
           <FormField label="優惠售價" required error={errors.sellingPrice}>
             <Input
-              type="number"
-              min="0"
+              type="text"
+              inputMode="numeric"
               value={form.sellingPrice}
-              onChange={event => setForm(current => ({ ...current, sellingPrice: event.target.value }))}
+              onChange={event => {
+                setForm(current => ({ ...current, sellingPrice: event.target.value }))
+                setErrors(current => ({ ...current, sellingPrice: '' }))
+              }}
               prefix={<span className="text-xs font-semibold">NT$</span>}
+              error={Boolean(errors.sellingPrice)}
             />
           </FormField>
           <FormField label="購買後效期" hint="留白代表永久有效" error={errors.validityDays}>

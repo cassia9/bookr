@@ -13,6 +13,7 @@ import {
   type SellVoucherInput,
   type VoucherProductWithItems,
 } from '../../lib/vouchers-api'
+import { parseIntegerInput } from '../../lib/numeric-input'
 
 export interface VoucherClientOption {
   id: string
@@ -97,24 +98,29 @@ export default function VoucherSaleModal({
 
   function validate() {
     const next: Record<string, string> = {}
+    const paidAmount = parseIntegerInput(form.paidAmount)
     if (!form.clientId) next.clientId = '請選擇客戶'
     if (!form.productId) next.productId = '請選擇商品券方案'
     if (!form.purchasedOn) next.purchasedOn = '請選擇購買日期'
-    if (form.paidAmount === '' || Number(form.paidAmount) < 0) next.paidAmount = '請輸入正確實收金額'
-    if (Number(form.paidAmount) === 0 && !form.notes.trim()) next.notes = '0 元贈送券必須填寫原因'
+    if (paidAmount === null || paidAmount > 2147483647) {
+      next.paidAmount = '實收金額必須是 0–2,147,483,647 之間的整數'
+    }
+    if (paidAmount === 0 && !form.notes.trim()) next.notes = '0 元贈送券必須填寫原因'
     setErrors(next)
     return Object.keys(next).length === 0
   }
 
   async function handleSell() {
     if (!validate()) return
+    const paidAmount = parseIntegerInput(form.paidAmount)
+    if (paidAmount === null) return
     setSaving(true)
     try {
       const result = await sellVoucher({
         productId: form.productId,
         clientId: form.clientId,
         purchasedOn: form.purchasedOn,
-        paidAmount: Number(form.paidAmount),
+        paidAmount,
         paymentMethod: form.paymentMethod,
         notes: form.notes,
       })
@@ -200,11 +206,15 @@ export default function VoucherSaleModal({
           </FormField>
           <FormField label="實收金額" required error={errors.paidAmount}>
             <Input
-              type="number"
-              min="0"
+              type="text"
+              inputMode="numeric"
               value={form.paidAmount}
-              onChange={event => setForm(current => ({ ...current, paidAmount: event.target.value }))}
+              onChange={event => {
+                setForm(current => ({ ...current, paidAmount: event.target.value }))
+                setErrors(current => ({ ...current, paidAmount: '' }))
+              }}
               prefix={<span className="text-xs font-semibold">NT$</span>}
+              error={Boolean(errors.paidAmount)}
             />
           </FormField>
         </div>
