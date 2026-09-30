@@ -503,7 +503,7 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
         </>
       }
     >
-      <div className="px-6 py-5 space-y-6">
+      <div className="space-y-6 px-4 py-5 sm:px-6">
 
         {/* 聯絡資訊 */}
         <div className="space-y-1.5">
@@ -883,28 +883,29 @@ export default function ClientsPage() {
     <div className="h-full flex flex-col bg-slate-50">
 
       {/* 頁首 */}
-      <div className="shrink-0 bg-white border-b border-slate-200 px-8 py-5">
-        <div className="flex items-center justify-between">
-          <div>
+      <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-8 sm:py-5">
+        <div className="flex items-start justify-between gap-3 sm:items-center">
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               <Users size={20} className="text-slate-600" />
               客戶管理
             </h1>
-            <p className="text-sm text-slate-400 mt-0.5">
+            <p className="mt-0.5 truncate text-sm text-slate-400">
               共 {clients.length} 位客戶
               {totalBookings > 0 && ` · ${totalBookings} 次完課 · 總消費 ${fmtMoney(totalSpent)}`}
             </p>
           </div>
-          <Button onClick={() => setAddOpen(true)}>
+          <Button className="shrink-0" onClick={() => setAddOpen(true)}>
             <Plus size={15} strokeWidth={2} />
-            新增客戶
+            <span className="hidden sm:inline">新增客戶</span>
+            <span className="sm:hidden">新增</span>
           </Button>
         </div>
       </div>
 
       {/* 搜尋列 */}
-      <div className="shrink-0 px-8 py-4">
-        <div className="max-w-sm">
+      <div className="shrink-0 px-4 py-3 sm:px-8 sm:py-4">
+        <div className="max-w-sm sm:max-w-md">
           <SearchInput
             value={search}
             onChange={value => {
@@ -917,7 +918,7 @@ export default function ClientsPage() {
       </div>
 
       {/* 表格區 */}
-      <div className="flex-1 overflow-auto px-8 pb-6">
+      <div className="flex-1 overflow-auto px-4 pb-6 sm:px-8">
         {loading ? (
           <div className="flex items-center justify-center h-48">
             <Spinner size="lg" />
@@ -935,8 +936,80 @@ export default function ClientsPage() {
             )}
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            <table className="w-full">
+          <>
+            <div className="space-y-3 md:hidden">
+              {paged.map(client => {
+                const lineProfile = lineProfiles[client.id]
+                return (
+                  <button
+                    key={client.id}
+                    type="button"
+                    onClick={() => openDrawer(client)}
+                    className={cn(
+                      'w-full rounded-[22px] border bg-white p-4 text-left shadow-sm transition active:scale-[0.99]',
+                      drawerClient?.id === client.id ? 'border-violet-200 bg-violet-50/40' : 'border-slate-200',
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      {lineProfile?.avatarUrl ? (
+                        <img
+                          src={lineProfile.avatarUrl}
+                          alt="LINE 頭像"
+                          className="h-11 w-11 shrink-0 rounded-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100">
+                          <span className="text-base font-bold text-slate-600">{client.full_name[0]}</span>
+                        </div>
+                      )}
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-bold text-slate-900">{client.full_name}</p>
+                          {lineProfile && <Badge variant="green">LINE</Badge>}
+                        </div>
+                        <p className="mt-1 flex items-center gap-1.5 font-mono text-xs text-slate-500">
+                          <Phone size={12} /> {client.phone}
+                        </p>
+                        {(lineProfile?.displayName || client.notes) && (
+                          <p className="mt-1.5 line-clamp-1 text-xs text-slate-400">
+                            {lineProfile?.displayName || client.notes}
+                          </p>
+                        )}
+                      </div>
+                      <ChevronRight size={18} className="mt-3 shrink-0 text-slate-300" />
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-3 divide-x divide-slate-100 rounded-2xl bg-slate-50 px-2 py-3">
+                      <div className="px-2">
+                        <p className="font-mono text-base font-bold tabular-nums text-slate-900">{client.booking_count}</p>
+                        <p className="text-[10px] text-slate-400">累計預約</p>
+                      </div>
+                      <div className="px-2">
+                        <p className="font-mono text-base font-bold tabular-nums text-emerald-700">{client.completed_count}</p>
+                        <p className="text-[10px] text-slate-400">已完課</p>
+                      </div>
+                      <div className="min-w-0 px-2">
+                        <p className="truncate font-mono text-sm font-bold tabular-nums text-slate-900">
+                          {client.last_booking_at ? fmtDate(client.last_booking_at).slice(5) : '—'}
+                        </p>
+                        <p className="text-[10px] text-slate-400">最後預約</p>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+
+              {totalPages > 1 && (
+                <div className="flex justify-center pt-1">
+                  <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
+                </div>
+              )}
+            </div>
+
+            <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white md:block">
+              <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">姓名</th>
@@ -1025,15 +1098,16 @@ export default function ClientsPage() {
                   )
                 })}
               </tbody>
-            </table>
+              </table>
 
-            {/* 分頁 */}
-            {totalPages > 1 && (
-              <div className="px-5 py-3 border-t border-slate-100 flex justify-end">
-                <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
-              </div>
-            )}
-          </div>
+              {/* 分頁 */}
+              {totalPages > 1 && (
+                <div className="flex justify-end border-t border-slate-100 px-5 py-3">
+                  <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
 
