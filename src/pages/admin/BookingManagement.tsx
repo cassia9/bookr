@@ -15,7 +15,11 @@ type CalendarView = 'month' | 'week' | 'day'
 
 export default function BookingManagement() {
   const [viewMode, setViewMode] = useState<ViewMode>('calendar')
-  const [calendarView, setCalendarView] = useState<CalendarView>('week')
+  const [calendarView, setCalendarView] = useState<CalendarView>(() => (
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches
+      ? 'day'
+      : 'week'
+  ))
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showNewBooking, setShowNewBooking] = useState(false)
   const [newBookingDate, setNewBookingDate] = useState<string | undefined>()
@@ -85,6 +89,12 @@ export default function BookingManagement() {
     })
   }
 
+  const formatCompactDate = (date: Date) => date.toLocaleDateString('zh-TW', {
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+  })
+
   function openNewBooking(date = new Date(), time?: string) {
     setNewBookingDate(format(date, 'yyyy-MM-dd'))
     setNewBookingTime(time ?? nearestSlot())
@@ -92,32 +102,33 @@ export default function BookingManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="flex h-full min-h-0 flex-col bg-slate-50">
       {/* 頂部標題欄 */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 shadow-md">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h1 className="text-4xl font-bold text-text-primary">預約管理</h1>
+      <div className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-6">
+        <div className="mb-4 flex items-start justify-between gap-3 sm:items-center">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-black tracking-tight text-text-primary sm:text-4xl">預約管理</h1>
             <p className="text-sm text-text-secondary mt-1">
               {viewMode === 'calendar' ? `行事曆 - ${calendarView === 'month' ? '月' : calendarView === 'week' ? '週' : '日'}視圖` : '甘特圖視圖'}
             </p>
           </div>
           <button
             onClick={() => openNewBooking()}
-            className="flex items-center gap-1.5 px-5 py-2.5 bg-black text-white rounded-xl hover:bg-gray-800 transition font-medium shadow-md hover:shadow-lg text-sm"
+            className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-2xl bg-black px-3.5 py-2.5 text-sm font-medium text-white shadow-md transition active:scale-95 sm:px-5 sm:hover:bg-gray-800 sm:hover:shadow-lg"
           >
             <Plus className="w-4 h-4" />
-            新增預約
+            <span className="hidden sm:inline">新增預約</span>
+            <span className="sm:hidden">新增</span>
           </button>
         </div>
 
         {/* 第二行：視圖切換 + 日期導航 */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center bg-slate-100 rounded-lg p-1 gap-1">
+        <div className="grid gap-3 sm:flex sm:items-center">
+          <div className="grid grid-cols-2 items-center gap-1 rounded-xl bg-slate-100 p-1 sm:flex sm:rounded-lg">
             <button
               onClick={() => setViewMode('calendar')}
               className={cn(
-                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                'min-h-9 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors sm:rounded-md',
                 viewMode === 'calendar'
                   ? 'bg-black text-white shadow-sm'
                   : 'text-text-secondary hover:text-text-primary hover:bg-slate-200'
@@ -129,7 +140,7 @@ export default function BookingManagement() {
             <button
               onClick={() => setViewMode('gantt')}
               className={cn(
-                'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                'min-h-9 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors sm:rounded-md',
                 viewMode === 'gantt'
                   ? 'bg-black text-white shadow-sm'
                   : 'text-text-secondary hover:text-text-primary hover:bg-slate-200'
@@ -141,13 +152,13 @@ export default function BookingManagement() {
           </div>
 
           {viewMode === 'calendar' && (
-            <div className="flex items-center bg-slate-100 rounded-lg p-1 gap-1">
+            <div className="grid grid-cols-3 items-center gap-1 rounded-xl bg-slate-100 p-1 sm:flex sm:rounded-lg">
               {(['month', 'week', 'day'] as CalendarView[]).map(view => (
                 <button
                   key={view}
                   onClick={() => setCalendarView(view)}
                   className={cn(
-                    'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                    'min-h-9 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors sm:rounded-md',
                     calendarView === view
                       ? 'bg-black text-white shadow-sm'
                       : 'text-text-secondary hover:text-text-primary hover:bg-white'
@@ -159,27 +170,32 @@ export default function BookingManagement() {
             </div>
           )}
 
-          <div className="flex items-center gap-1 ml-auto">
+          <div className="flex min-w-0 items-center gap-1 sm:ml-auto">
             <button
               onClick={handlePrevDate}
-              className="p-2 hover:bg-slate-100 rounded-lg transition text-text-secondary hover:text-text-primary"
+              aria-label="上一個日期區間"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-secondary transition active:bg-slate-100 sm:hover:bg-slate-100 sm:hover:text-text-primary"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <div className="text-center min-w-48">
-              <p className="text-base font-semibold text-text-primary">
+            <div className="min-w-0 flex-1 text-center sm:min-w-48 sm:flex-none">
+              <p className="hidden text-base font-semibold text-text-primary sm:block">
                 {formatDate(currentDate)}
+              </p>
+              <p className="truncate text-sm font-bold text-text-primary sm:hidden">
+                {formatCompactDate(currentDate)}
               </p>
             </div>
             <button
               onClick={handleNextDate}
-              className="p-2 hover:bg-slate-100 rounded-lg transition text-text-secondary hover:text-text-primary"
+              aria-label="下一個日期區間"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-secondary transition active:bg-slate-100 sm:hover:bg-slate-100 sm:hover:text-text-primary"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
             <button
               onClick={() => setCurrentDate(new Date())}
-              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition font-medium shadow-md text-sm ml-1"
+              className="ml-1 min-h-10 shrink-0 rounded-xl bg-black px-3 py-2 text-sm font-medium text-white shadow-md transition active:scale-95 sm:px-4 sm:hover:bg-gray-800"
             >
               今天
             </button>
@@ -188,7 +204,7 @@ export default function BookingManagement() {
       </div>
 
       {/* 內容區域 */}
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {viewMode === 'calendar' ? (
           <CalendarPage
             key={refreshKey}
