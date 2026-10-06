@@ -100,7 +100,7 @@ function ChangeIndicator({ change }: { change: number | null }) {
   if (change === null) return <span className="text-xs text-slate-400">—</span>
   const up = change >= 0
   return (
-    <span className={`flex items-center gap-0.5 text-xs font-medium ${up ? 'text-emerald-600' : 'text-red-500'}`}>
+    <span className={`flex flex-wrap items-center gap-x-0.5 text-xs font-medium ${up ? 'text-emerald-600' : 'text-red-500'}`}>
       {up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
       {up ? '+' : ''}{change.toFixed(1)}%
       <span className="text-slate-400 font-normal ml-0.5">vs 上月</span>
@@ -120,13 +120,13 @@ interface KpiCardProps {
 
 function KpiCard({ icon, label, value, sub, accent = 'bg-slate-100 text-slate-600' }: KpiCardProps) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>
+        <span className="whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
         <span className={`p-1.5 rounded-xl ${accent}`}>{icon}</span>
       </div>
-      <div>
-        <p className="text-2xl font-bold text-slate-900 tabular-nums">{value}</p>
+      <div className="min-w-0">
+        <p className="truncate text-xl font-bold tabular-nums text-slate-900 sm:text-2xl">{value}</p>
         {sub && <div className="mt-1">{sub}</div>}
       </div>
     </div>
@@ -135,12 +135,24 @@ function KpiCard({ icon, label, value, sub, accent = 'bg-slate-100 text-slate-60
 
 // ── 子元件：自訂 Tooltip ───────────────────────────────────────────────────────
 
-function ChartTooltip({ active, payload, label }: any) {
+interface ChartTooltipEntry {
+  name: string
+  value: number
+  color: string
+}
+
+interface ChartTooltipProps {
+  active?: boolean
+  payload?: ChartTooltipEntry[]
+  label?: string
+}
+
+function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-sm">
       <p className="font-semibold text-slate-800 mb-2">{label}</p>
-      {payload.map((entry: any) => (
+      {payload.map(entry => (
         <div key={entry.name} className="flex items-center justify-between gap-6">
           <span className="flex items-center gap-1.5 text-slate-500">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
@@ -177,7 +189,6 @@ export default function DashboardPage() {
 
   // KPI — 固定本月，不跟著 period 切換
   useEffect(() => {
-    setLoadingKpi(true)
     supabase.rpc('get_dashboard_kpi').then(({ data, error }) => {
       if (!error && data?.[0]) setKpi(data[0] as KPI)
       setLoadingKpi(false)
@@ -201,7 +212,10 @@ export default function DashboardPage() {
     setLoadingDetail(false)
   }, [period])
 
-  useEffect(() => { loadDetail() }, [loadDetail])
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => { void loadDetail() })
+    return () => window.cancelAnimationFrame(frame)
+  }, [loadDetail])
 
   // 課程最大值（進度條用）
   const maxBookingCount = Math.max(...services.map(s => s.booking_count), 1)
@@ -220,21 +234,21 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-slate-50">
 
       {/* ── 頁首 ── */}
-      <div className="bg-white border-b border-slate-200 px-8 py-5">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-slate-200 bg-white px-4 py-4 sm:px-8 sm:py-5">
+        <div className="grid gap-4 sm:flex sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">數據總覽</h1>
             <p className="text-sm text-slate-400 mt-0.5">{today}</p>
           </div>
 
           {/* 時間段切換 */}
-          <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-0.5">
+          <div className="grid grid-cols-3 items-center gap-0.5 rounded-xl bg-slate-100 p-1 sm:flex">
             {PERIODS.map(p => (
               <button
                 key={p.id}
                 onClick={() => setPeriod(p.id)}
                 className={[
-                  'px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all',
+                  'min-h-10 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-all sm:min-h-0 sm:px-3.5',
                   period === p.id
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-700',
@@ -247,11 +261,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="px-8 py-6 space-y-6">
+      <div className="space-y-5 px-4 py-5 sm:space-y-6 sm:px-8 sm:py-6">
 
         {/* ── 待確認提醒橫幅 ── */}
         {!loadingKpi && kpi && kpi.pending_count > 0 && (
-          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3.5">
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 sm:flex sm:items-center sm:px-5 sm:py-3.5">
             <AlertCircle size={16} className="text-amber-500 shrink-0" />
             <p className="text-sm text-amber-800 flex-1">
               <span className="font-semibold">{kpi.pending_count} 筆預約</span>
@@ -259,7 +273,7 @@ export default function DashboardPage() {
             </p>
             <button
               onClick={() => navigate('/admin/bookings')}
-              className="text-xs font-medium text-amber-700 underline underline-offset-2 shrink-0 hover:text-amber-900 transition-colors"
+              className="col-start-2 justify-self-start text-xs font-medium text-amber-700 underline underline-offset-2 transition-colors hover:text-amber-900 sm:col-auto sm:ml-auto sm:shrink-0"
             >
               前往處理 →
             </button>
@@ -268,13 +282,13 @@ export default function DashboardPage() {
 
         {/* ── KPI 卡（固定本月） ── */}
         {loadingKpi ? (
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
             {[1,2,3,4].map(i => (
               <div key={i} className="bg-white rounded-2xl border border-slate-200 h-28 animate-pulse" />
             ))}
           </div>
         ) : kpi ? (
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
             <KpiCard
               icon={<CalendarDays size={15} />}
               label="今日預約"
@@ -325,10 +339,10 @@ export default function DashboardPage() {
             <Spinner size="lg" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid gap-5 lg:grid-cols-2">
 
             {/* 老師排行 */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
               <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
                 <Users size={15} className="text-slate-500" />
                 <h2 className="text-sm font-semibold text-slate-800">老師排行</h2>
@@ -343,7 +357,40 @@ export default function DashboardPage() {
                   <p className="text-sm">此期間無資料</p>
                 </div>
               ) : (
-                <table className="w-full">
+                <>
+                  <div className="divide-y divide-slate-100 md:hidden">
+                    {practitioners.map((p, i) => (
+                      <div key={p.practitioner_id} className="p-4">
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-5 text-center font-mono text-xs text-slate-300">{i + 1}</span>
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: p.color || '#94a3b8' }}
+                          />
+                          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{p.full_name}</p>
+                          {p.booking_count > 0 ? rateBadge(p.completion_rate) : <Minus size={12} className="text-slate-300" />}
+                        </div>
+                        <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-slate-50 px-3 py-2.5">
+                          <div>
+                            <p className="font-mono text-sm font-bold tabular-nums text-slate-800">{p.booking_count}</p>
+                            <p className="text-[10px] text-slate-400">預約</p>
+                          </div>
+                          <div>
+                            <p className="font-mono text-sm font-bold tabular-nums text-emerald-700">{p.completed_count}</p>
+                            <p className="text-[10px] text-slate-400">完課</p>
+                          </div>
+                          <div className="min-w-0 text-right">
+                            <p className="truncate text-sm font-bold tabular-nums text-slate-800">
+                              {p.revenue > 0 ? `NT$ ${p.revenue.toLocaleString()}` : '—'}
+                            </p>
+                            <p className="text-[10px] text-slate-400">收入</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <table className="hidden w-full md:table">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100">
                       <th className="px-4 py-2.5 text-left text-xs text-slate-400 font-semibold">老師</th>
@@ -382,12 +429,13 @@ export default function DashboardPage() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                  </table>
+                </>
               )}
             </div>
 
             {/* 熱門課程 Top 5 */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
               <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
                 <BookOpen size={15} className="text-slate-500" />
                 <h2 className="text-sm font-semibold text-slate-800">熱門課程 Top 5</h2>
@@ -402,21 +450,21 @@ export default function DashboardPage() {
                   <p className="text-sm">此期間無資料</p>
                 </div>
               ) : (
-                <div className="px-5 py-4 space-y-4">
+                <div className="space-y-4 px-4 py-4 sm:px-5">
                   {services.map((s, i) => {
                     const pct = (s.booking_count / maxBookingCount) * 100
                     return (
                       <div key={s.service_id}>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <div className="flex items-center gap-2">
+                        <div className="mb-1.5 flex min-w-0 items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
                             <span className="text-xs text-slate-300 w-4 text-center font-mono">{i + 1}</span>
-                            <span className="text-sm font-medium text-slate-700">{s.service_name}</span>
+                            <span className="min-w-0 text-sm font-medium text-slate-700">{s.service_name}</span>
                           </div>
-                          <div className="flex items-center gap-3 text-right">
+                          <div className="flex shrink-0 items-center gap-2 text-right sm:gap-3">
                             <span className="text-xs text-slate-400 tabular-nums">
                               {s.booking_count} 筆
                             </span>
-                            <span className="text-sm font-semibold text-slate-800 tabular-nums w-24">
+                            <span className="w-20 text-sm font-semibold tabular-nums text-slate-800 sm:w-24">
                               {s.revenue > 0 ? `NT$ ${s.revenue.toLocaleString()}` : '—'}
                             </span>
                           </div>
@@ -437,8 +485,8 @@ export default function DashboardPage() {
         )}
 
         {/* ── 趨勢圖 ── */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-4 sm:px-6">
             <h2 className="text-sm font-semibold text-slate-800">預約量與收入趨勢</h2>
             <span className="ml-auto text-xs text-slate-400">
               {PERIODS.find(p => p.id === period)?.label}
@@ -455,7 +503,7 @@ export default function DashboardPage() {
               <p className="text-sm">此期間無預約資料</p>
             </div>
           ) : (
-            <div className="px-4 py-5">
+            <div className="px-0 py-5 sm:px-4">
               <ResponsiveContainer width="100%" height={220}>
                 <ComposedChart data={daily} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />

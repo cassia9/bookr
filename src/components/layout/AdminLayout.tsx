@@ -1,7 +1,7 @@
-import { Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   CalendarDays, Users, UserCheck, Scissors, BarChart2,
-  Settings, LogOut, Menu, X, Gift,
+  Settings, LogOut, X, Gift, House, MoreHorizontal,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../../lib/auth'
@@ -15,6 +15,7 @@ import {
 } from '../notifications/NotificationCenter'
 
 const navItems = [
+  { to: '/admin/today', icon: House, label: '今日工作台' },
   { to: '/admin/bookings', icon: CalendarDays, label: '預約管理' },
   { to: '/admin/practitioners', icon: UserCheck, label: '老師管理' },
   { to: '/admin/clients', icon: Users, label: '客戶管理' },
@@ -24,9 +25,16 @@ const navItems = [
   { to: '/admin/settings', icon: Settings, label: '設定' },
 ]
 
+const mobilePrimaryItems = [
+  { to: '/admin/today', icon: House, label: '今日' },
+  { to: '/admin/bookings', icon: CalendarDays, label: '預約' },
+  { to: '/admin/clients', icon: Users, label: '客戶' },
+]
+
 export default function AdminLayout() {
   const { profile, isAdmin, signOut } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   async function handleSignOut() {
@@ -39,6 +47,9 @@ export default function AdminLayout() {
   }
 
   const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin)
+  const isMoreActive = !mobilePrimaryItems.some(({ to }) => (
+    location.pathname === to || location.pathname.startsWith(`${to}/`)
+  ))
 
   return (
     <NotificationCenterProvider
@@ -119,21 +130,59 @@ export default function AdminLayout() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar (mobile) */}
         <header className="h-16 bg-white border-b border-border flex items-center px-4 lg:hidden">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-text-secondary hover:text-text-primary"
-          >
-            <Menu size={20} />
-          </button>
-          <span className="ml-3 font-bold text-text-primary tracking-tight">Bookr</span>
+          <span className="font-bold text-text-primary tracking-tight">Bookr</span>
           <NotificationBell className="ml-auto" />
         </header>
 
-        <main className="flex-1 overflow-auto bg-slate-50">
+        <main className="flex-1 overflow-auto bg-slate-50 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">
           <Outlet />
         </main>
       </div>
       <NotificationCenterSurface />
+
+      <nav
+        aria-label="手機主要導覽"
+        className="fixed inset-x-0 bottom-0 z-20 grid h-[calc(4.25rem+env(safe-area-inset-bottom))] grid-cols-4 border-t border-slate-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_30px_-24px_rgba(15,23,42,0.55)] backdrop-blur lg:hidden"
+      >
+        {mobilePrimaryItems.map(({ to, icon: Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) => cn(
+              'relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl text-[11px] font-semibold transition-colors',
+              isActive ? 'text-violet-600' : 'text-slate-400 active:text-slate-700',
+            )}
+          >
+            {({ isActive }) => (
+              <>
+                <span className={cn(
+                  'absolute top-1.5 h-0.5 w-5 rounded-full bg-violet-600 transition-opacity',
+                  isActive ? 'opacity-100' : 'opacity-0',
+                )} />
+                <Icon size={20} strokeWidth={isActive ? 2.25 : 1.75} />
+                <span>{label}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          aria-expanded={sidebarOpen}
+          aria-label="更多功能"
+          className={cn(
+            'relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl text-[11px] font-semibold transition-colors',
+            sidebarOpen || isMoreActive ? 'text-violet-600' : 'text-slate-400 active:text-slate-700',
+          )}
+        >
+          <span className={cn(
+            'absolute top-1.5 h-0.5 w-5 rounded-full bg-violet-600 transition-opacity',
+            sidebarOpen || isMoreActive ? 'opacity-100' : 'opacity-0',
+          )} />
+          <MoreHorizontal size={20} strokeWidth={sidebarOpen || isMoreActive ? 2.25 : 1.75} />
+          <span>更多</span>
+        </button>
+      </nav>
       </div>
     </NotificationCenterProvider>
   )

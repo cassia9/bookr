@@ -12,6 +12,7 @@ import SettingsPage from './pages/admin/SettingsPage'
 import ClientsPage from './pages/admin/ClientsPage'
 import DashboardPage from './pages/admin/DashboardPage'
 import VouchersPage from './pages/admin/VouchersPage'
+import TodayPage from './pages/admin/TodayPage'
 // import SettingsPage from './pages/admin/SettingsPage'
 // InviteMemberPage 已整合為 SettingsPage 內的 Modal
 // MembersPage 已整合進 SettingsPage
@@ -39,7 +40,8 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="bookings" replace />} />
+            <Route index element={<Navigate to="today" replace />} />
+            <Route path="today" element={<TodayPage />} />
             <Route path="bookings" element={<BookingManagement />} />
             <Route path="practitioners" element={<PractitionerManagement />} />
             <Route path="services" element={<ServicesPage />} />
