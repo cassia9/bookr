@@ -757,7 +757,7 @@ export default function CalendarPage({
     <div className="flex flex-col h-full bg-slate-50">
 
       {/* ── 內容區 ── */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-2 sm:p-4">
         {(metaError || bookingsError) && (
           <Alert variant="error" title="行事曆載入失敗" className="mb-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -774,17 +774,17 @@ export default function CalendarPage({
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black" />
           </div>
         ) : bookingsError ? null : (
-          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm sm:rounded-2xl sm:border-0 sm:shadow-lg">
 
             {/* 月視圖 */}
             {view === 'month' && (
-              <div className="p-5">
-                <div className="grid grid-cols-7 mb-2">
+              <div className="p-1.5 pb-2 sm:p-5">
+                <div className="mb-1 grid grid-cols-7 sm:mb-2">
                   {['日','一','二','三','四','五','六'].map(d => (
-                    <div key={d} className="text-center text-xs font-medium text-slate-400 py-2">{d}</div>
+                    <div key={d} className="py-1.5 text-center text-[11px] font-semibold text-slate-400 sm:py-2 sm:text-xs sm:font-medium">{d}</div>
                   ))}
                 </div>
-                <div className="grid grid-cols-7 gap-1">
+                <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
                   {/* 首日前的空格 */}
                   {Array.from({ length: datesForView[0].getDay() }).map((_, i) => (
                     <div key={`empty-${i}`} />
@@ -794,7 +794,8 @@ export default function CalendarPage({
                     const activeBk = allBk.filter(b => b.status !== 'cancelled')
                     const completedCount = allBk.filter(b => b.status === 'completed').length
                     const cancelledCount = allBk.filter(b => b.status === 'cancelled').length
-                    const overflowCount  = activeBk.length > 3 ? activeBk.length - 3 : 0
+                    const mobileOverflowCount = activeBk.length > 2 ? activeBk.length - 2 : 0
+                    const desktopOverflowCount = activeBk.length > 3 ? activeBk.length - 3 : 0
                     const isPopoverOpen  = dayPopover?.date.toDateString() === date.toDateString()
                     return (
                       <div
@@ -804,7 +805,7 @@ export default function CalendarPage({
                           onNewBooking?.(date)
                         }}
                         className={cn(
-                          'min-h-20 p-2 rounded-xl border transition-colors',
+                          'min-h-[72px] rounded-md border p-1 transition-colors sm:min-h-20 sm:rounded-xl sm:p-2',
                           onNewBooking ? 'cursor-pointer' : '',
                           date.getMonth() === currentDate.getMonth()
                             ? 'bg-white border-slate-100 hover:border-slate-200'
@@ -814,24 +815,24 @@ export default function CalendarPage({
                         )}
                       >
                         {/* 日期數字 + 右上角 badge */}
-                        <div className="flex items-start justify-between mb-1">
+                        <div className="mb-1 flex items-start justify-between gap-0.5">
                           <div className={cn(
-                            'text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full shrink-0',
+                            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold sm:h-6 sm:w-6 sm:text-xs',
                             isToday(date) ? 'bg-black text-white' : 'text-slate-600',
                           )} data-calendar-day-number>
                             {date.getDate()}
                           </div>
                           {/* FR-D: 狀態 badge */}
                           {(completedCount > 0 || cancelledCount > 0) && (
-                            <div className="flex items-center gap-1 flex-wrap justify-end">
+                            <div className="flex flex-wrap items-center justify-end gap-1">
                               {completedCount > 0 && (
-                                <span className="flex items-center gap-0.5 text-[10px] font-medium text-emerald-600 bg-emerald-50 rounded-full px-1.5 py-0.5 leading-none">
+                                <span className="flex items-center gap-0 text-[9px] font-semibold leading-none text-emerald-600 sm:gap-0.5 sm:rounded-full sm:bg-emerald-50 sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:font-medium">
                                   <Check size={9} strokeWidth={2.5} />
                                   {completedCount}
                                 </span>
                               )}
                               {cancelledCount > 0 && (
-                                <span className="flex items-center gap-0.5 text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-1.5 py-0.5 leading-none">
+                                <span className="flex items-center gap-0 text-[9px] font-semibold leading-none text-slate-400 sm:gap-0.5 sm:rounded-full sm:bg-slate-100 sm:px-1.5 sm:py-0.5 sm:text-[10px] sm:font-medium">
                                   <XIcon size={9} strokeWidth={2.5} />
                                   {cancelledCount}
                                 </span>
@@ -840,9 +841,9 @@ export default function CalendarPage({
                           )}
                         </div>
 
-                        {/* FR-A: 最多 3 筆卡片 */}
+                        {/* FR-A: 手機最多 2 筆、桌機最多 3 筆卡片 */}
                         <div className="space-y-0.5">
-                          {activeBk.slice(0, 3).map(b => (
+                          {activeBk.slice(0, 3).map((b, index) => (
                             <button
                               key={b.id}
                               onClick={e => { e.stopPropagation(); openModal(b) }}
@@ -851,19 +852,31 @@ export default function CalendarPage({
                                 setHoverTooltip({ booking: b, x: rect.right + 8, y: rect.top })
                               }}
                               onMouseLeave={() => setHoverTooltip(null)}
-                              className="w-full text-left text-xs px-1.5 py-0.5 rounded-md text-white font-medium truncate hover:brightness-110 transition-all"
+                              className={cn(
+                                'w-full truncate rounded-[4px] px-1 py-0.5 text-left text-[10px] font-semibold leading-tight text-white transition-all hover:brightness-110 sm:rounded-md sm:px-1.5 sm:text-xs sm:font-medium',
+                                index === 2 && 'hidden sm:block',
+                              )}
                               style={cardStyle(b)}
                             >
                               {clientLabel(b)}
                             </button>
                           ))}
-                          {/* 溢出徽章 */}
-                          {overflowCount > 0 && (
+                          {/* 手機版溢出徽章 */}
+                          {mobileOverflowCount > 0 && (
                             <button
                               onClick={e => { e.stopPropagation(); openDayPopover(date, e.currentTarget.parentElement?.parentElement as HTMLElement ?? e.currentTarget) }}
-                              className="w-full text-left text-[10px] text-indigo-500 font-medium px-1.5 py-0.5 rounded-md hover:bg-indigo-50 transition-colors"
+                              className="w-full rounded-[4px] px-1 py-0.5 text-left text-[9px] font-semibold leading-tight text-indigo-600 transition-colors hover:bg-indigo-50 sm:hidden"
                             >
-                              +{overflowCount} 筆預約
+                              +{mobileOverflowCount} 筆
+                            </button>
+                          )}
+                          {/* 桌機版溢出徽章 */}
+                          {desktopOverflowCount > 0 && (
+                            <button
+                              onClick={e => { e.stopPropagation(); openDayPopover(date, e.currentTarget.parentElement?.parentElement as HTMLElement ?? e.currentTarget) }}
+                              className="hidden w-full rounded-md px-1.5 py-0.5 text-left text-[10px] font-medium text-indigo-500 transition-colors hover:bg-indigo-50 sm:block"
+                            >
+                              +{desktopOverflowCount} 筆預約
                             </button>
                           )}
                         </div>
