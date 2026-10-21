@@ -774,7 +774,7 @@ export default function CalendarPage({
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black" />
           </div>
         ) : bookingsError ? null : (
-          <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm sm:rounded-2xl sm:border-0 sm:shadow-lg">
+          <div className="overflow-hidden rounded-[2px] border border-slate-200/80 bg-white shadow-sm sm:rounded-2xl sm:border-0 sm:shadow-lg">
 
             {/* 月視圖 */}
             {view === 'month' && (
@@ -805,7 +805,7 @@ export default function CalendarPage({
                           onNewBooking?.(date)
                         }}
                         className={cn(
-                          'min-h-[72px] rounded-md border p-1 transition-colors sm:min-h-20 sm:rounded-xl sm:p-2',
+                          'min-h-[72px] rounded-[2px] border p-1 transition-colors sm:min-h-20 sm:rounded-xl sm:p-2',
                           onNewBooking ? 'cursor-pointer' : '',
                           date.getMonth() === currentDate.getMonth()
                             ? 'bg-white border-slate-100 hover:border-slate-200'
@@ -853,7 +853,7 @@ export default function CalendarPage({
                               }}
                               onMouseLeave={() => setHoverTooltip(null)}
                               className={cn(
-                                'w-full truncate rounded-[4px] px-1 py-0.5 text-left text-[10px] font-semibold leading-tight text-white transition-all hover:brightness-110 sm:rounded-md sm:px-1.5 sm:text-xs sm:font-medium',
+                                'w-full truncate rounded-[2px] px-1 py-0.5 text-left text-[10px] font-semibold leading-tight text-white transition-all hover:brightness-110 sm:rounded-md sm:px-1.5 sm:text-xs sm:font-medium',
                                 index === 2 && 'hidden sm:block',
                               )}
                               style={cardStyle(b)}
@@ -865,7 +865,7 @@ export default function CalendarPage({
                           {mobileOverflowCount > 0 && (
                             <button
                               onClick={e => { e.stopPropagation(); openDayPopover(date, e.currentTarget.parentElement?.parentElement as HTMLElement ?? e.currentTarget) }}
-                              className="w-full rounded-[4px] px-1 py-0.5 text-left text-[9px] font-semibold leading-tight text-indigo-600 transition-colors hover:bg-indigo-50 sm:hidden"
+                              className="w-full rounded-[2px] px-1 py-0.5 text-left text-[9px] font-semibold leading-tight text-indigo-600 transition-colors hover:bg-indigo-50 sm:hidden"
                             >
                               +{mobileOverflowCount} 筆
                             </button>
