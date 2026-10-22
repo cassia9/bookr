@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, CheckCircle, User, Clock,
          CalendarDays, Phone, MessageSquare, MapPin, AlertCircle, UserPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
+import { getPublicStoreClosures, type PublicStoreClosure } from '@/lib/store-closures-api'
 import {
   getCurrentLineIdToken,
   initializeLineBooking,
@@ -86,6 +87,7 @@ async function getFunctionErrorResult(error: unknown): Promise<BookingResult | n
 
 function bookingErrorMessage(code?: string) {
   if (code === 'CONFLICT') return '此時段剛被預約，請返回重新選擇時段'
+  if (code === 'STORE_CLOSED') return '店家當日休息，請返回選擇其他日期'
   if (code === 'PHONE_LINK_CONFLICT') return '此電話已連結其他 LINE 帳號，請聯絡店家協助確認'
   if (code === 'PHONE_ALREADY_REGISTERED') return '新電話已由其他客戶使用，請聯絡店家協助修改'
   if (code === 'LINE_TOKEN_REJECTED' || code === 'INVALID_LINE_TOKEN') {
@@ -113,6 +115,7 @@ export default function BookingPage() {
   const [storeError, setStoreError] = useState(storeParam ? '' : '無效的預約連結')
   const [services, setServices] = useState<PublicService[]>([])
   const [practitioners, setPractitioners] = useState<PublicPractitioner[]>([])
+  const [storeClosures, setStoreClosures] = useState<PublicStoreClosure[]>([])
 
   // LINE LIFF state
   const [lineAvatar, setLineAvatar] = useState<string | null>(null)
@@ -200,6 +203,15 @@ export default function BookingPage() {
     })
   }, [resolvedStoreId, initLiff])
 
+  useEffect(() => {
+    if (!resolvedStoreId) return
+    const startDate = format(new Date(), 'yyyy-MM-dd')
+    const endDate = format(addMonths(new Date(), 2), 'yyyy-MM-dd')
+    void getPublicStoreClosures(resolvedStoreId, startDate, endDate)
+      .then(setStoreClosures)
+      .catch(error => console.error('載入店休日失敗', error))
+  }, [resolvedStoreId])
+
   // ── Submit ─────────────────────────────────────────────────────────
   async function handleSubmit() {
     if (!draft.service || !draft.slot || !draft.name.trim() || !draft.phone.trim() || !resolvedStoreId) return
@@ -248,6 +260,7 @@ export default function BookingPage() {
       })
 
       if (!error) result = data as BookingResult
+      else if (error.message.includes('STORE_CLOSED')) result = { ok: false, code: 'STORE_CLOSED' }
     }
 
     setSubmitting(false)
@@ -365,6 +378,7 @@ export default function BookingPage() {
         )}
         {step === 3 && (
           <Step3Date
+            closures={storeClosures}
             onSelect={date => { setDraft(d => ({ ...d, date, slot: null })); setStep(4) }}
             onBack={() => setStep(2)}
           />
@@ -531,7 +545,8 @@ function Step2Practitioner({ practitioners, selected, onSelect, onBack }: {
 
 // ── Step 3: 選擇日期 ───────────────────────────────────────────────────
 
-function Step3Date({ onSelect, onBack }: {
+function Step3Date({ closures, onSelect, onBack }: {
+  closures: PublicStoreClosure[]
   onSelect: (date: string) => void
   onBack: () => void
 }) {
@@ -580,24 +595,45 @@ function Step3Date({ onSelect, onBack }: {
             const d      = new Date(view.y, view.m, i + 1)
             const dStr   = format(d, 'yyyy-MM-dd')
             const isToday = isSameDay(d, today)
-            const disabled = (d < minDate && !isToday) || d > maxDate
+            const closure = closures.find(item => item.start_date <= dStr && item.end_date >= dStr)
+            const disabled = (d < minDate && !isToday) || d > maxDate || Boolean(closure)
             return (
               <button
                 key={i}
                 disabled={disabled}
+                title={closure?.public_label}
                 onClick={() => onSelect(dStr)}
                 className={cn(
-                  'aspect-square flex items-center justify-center rounded-xl text-sm font-medium transition-all',
+                  'relative aspect-square flex items-center justify-center rounded-xl text-sm font-medium transition-all',
+                  closure ? 'bg-rose-50 text-rose-300 cursor-not-allowed' :
                   disabled  ? 'text-slate-200 cursor-not-allowed' :
                   isToday   ? 'bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100' :
                               'text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 active:scale-95',
                 )}
               >
                 {i + 1}
+                {closure && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-rose-300" />}
               </button>
             )
           })}
         </div>
+        {closures.some(item => (
+          item.start_date <= format(new Date(view.y, view.m + 1, 0), 'yyyy-MM-dd')
+          && item.end_date >= format(new Date(view.y, view.m, 1), 'yyyy-MM-dd')
+        )) && (
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+            {closures
+              .filter(item => (
+                item.start_date <= format(new Date(view.y, view.m + 1, 0), 'yyyy-MM-dd')
+                && item.end_date >= format(new Date(view.y, view.m, 1), 'yyyy-MM-dd')
+              ))
+              .map(item => (
+                <span key={`${item.start_date}-${item.end_date}`} className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-600">
+                  {item.public_label} · {item.start_date === item.end_date ? item.start_date.slice(5) : `${item.start_date.slice(5)}–${item.end_date.slice(5)}`}
+                </span>
+              ))}
+          </div>
+        )}
       </div>
     </div>
   )

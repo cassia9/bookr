@@ -5,7 +5,7 @@
  */
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import { addWeeks, differenceInCalendarDays, format, parseISO } from 'date-fns'
-import { CalendarClock, Clock, Timer, DollarSign, Repeat2, TicketCheck } from 'lucide-react'
+import { AlertTriangle, CalendarClock, Clock, Timer, DollarSign, Repeat2, TicketCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
@@ -24,6 +24,7 @@ import {
   getEligibleClientVoucherItems,
   type EligibleVoucherItem,
 } from '../../lib/vouchers-api'
+import { getPublicStoreClosures, type PublicStoreClosure } from '../../lib/store-closures-api'
 
 const STORE_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -162,6 +163,7 @@ export default function NewBookingModal({
   const [repeatEndMode, setRepeatEndMode] = useState<RecurrenceEndMode>('count')
   const [repeatCount, setRepeatCount] = useState(4)
   const [repeatUntilDate, setRepeatUntilDate] = useState('')
+  const [storeClosures, setStoreClosures] = useState<PublicStoreClosure[]>([])
   const recurrenceIdempotencyKey = useRef(crypto.randomUUID())
 
   // Reset when opened
@@ -201,6 +203,7 @@ export default function NewBookingModal({
       'yyyy/MM/dd',
     )
     : ''
+  const closureRangeEnd = repeatLastDate ? repeatLastDate.replaceAll('/', '-') : form.date
 
   useEffect(() => {
     let active = true
@@ -225,6 +228,19 @@ export default function NewBookingModal({
 
     return () => { active = false }
   }, [open, form.client_id, form.service_id, form.date])
+
+  useEffect(() => {
+    let active = true
+    if (!open || !form.date) return () => { active = false }
+    void getPublicStoreClosures(STORE_ID, form.date, closureRangeEnd || form.date)
+      .then(closures => {
+        if (active) setStoreClosures(closures)
+      })
+      .catch(() => {
+        if (active) setStoreClosures([])
+      })
+    return () => { active = false }
+  }, [closureRangeEnd, form.date, open])
 
   function resetVoucherChoice() {
     setVoucherChoice('auto')
@@ -481,6 +497,21 @@ export default function NewBookingModal({
             />
           </div>
         </div>
+
+        {storeClosures.length > 0 && (
+          <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-semibold">店休期間的特殊預約</p>
+              <p className="mt-0.5 text-xs leading-5 text-amber-700">
+                {storeClosures.map(closure => (
+                  `${closure.public_label}（${closure.start_date}${closure.end_date === closure.start_date ? '' : `–${closure.end_date}`}）`
+                )).join('、')}
+                。客戶端不開放這些日期，但管理員仍可替熟客建立；送出後會留下稽核紀錄。
+              </p>
+            </div>
+          </div>
+        )}
 
         {mode === 'create' && (
           <div className="rounded-3xl border border-indigo-100 bg-indigo-50/50 p-4">
