@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarOff, Edit2, Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 import {
   archiveStoreClosure,
   getStoreClosures,
@@ -35,6 +36,14 @@ interface ClosureForm {
   category: StoreClosureCategory
   publicLabel: string
   internalNote: string
+}
+
+interface ConflictBooking {
+  id: string
+  start_time: string
+  clients: { full_name: string } | null
+  practitioners: { full_name: string } | null
+  services: { name: string } | null
 }
 
 function blankForm(): ClosureForm {
@@ -93,6 +102,9 @@ export default function StoreClosuresSection() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [archiveTarget, setArchiveTarget] = useState<StoreClosure | null>(null)
   const [archiving, setArchiving] = useState(false)
+  const [conflicts, setConflicts] = useState<ConflictBooking[]>([])
+  const [conflictConfirmOpen, setConflictConfirmOpen] = useState(false)
+  const [checkingConflicts, setCheckingConflicts] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -145,8 +157,7 @@ export default function StoreClosuresSection() {
     return Object.keys(next).length === 0
   }
 
-  async function handleSave() {
-    if (!validate()) return
+  async function persistClosure() {
     setSaving(true)
     try {
       const result = await saveStoreClosure({
@@ -170,6 +181,42 @@ export default function StoreClosuresSection() {
       toast.error('無法儲存店休', operationError(error))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleSave() {
+    if (!validate()) return
+    setCheckingConflicts(true)
+    try {
+      const rangeStart = new Date(`${form.startDate}T00:00:00`).toISOString()
+      const rangeEndExclusive = new Date(`${form.endDate}T00:00:00`)
+      rangeEndExclusive.setDate(rangeEndExclusive.getDate() + 1)
+
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          id, start_time,
+          clients (full_name),
+          practitioners (full_name),
+          services (name)
+        `)
+        .neq('status', 'cancelled')
+        .lt('start_time', rangeEndExclusive.toISOString())
+        .gt('end_time', rangeStart)
+        .order('start_time')
+
+      if (error) throw error
+      const found = (data ?? []) as unknown as ConflictBooking[]
+      if (found.length > 0) {
+        setConflicts(found)
+        setConflictConfirmOpen(true)
+      } else {
+        await persistClosure()
+      }
+    } catch (error) {
+      toast.error('無法檢查既有預約', operationError(error))
+    } finally {
+      setCheckingConflicts(false)
     }
   }
 
@@ -255,7 +302,7 @@ export default function StoreClosuresSection() {
         footer={(
           <div className="flex gap-2">
             <Button variant="secondary" className="flex-1" onClick={() => setModalOpen(false)}>取消</Button>
-            <Button className="flex-1" loading={saving} onClick={handleSave}>儲存店休</Button>
+            <Button className="flex-1" loading={saving || checkingConflicts} onClick={handleSave}>儲存店休</Button>
           </div>
         )}
       >
@@ -315,6 +362,50 @@ export default function StoreClosuresSection() {
 
           <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-700">
             儲存後會立即停止客戶在這段日期送出預約；若日期內已有預約，系統會提示筆數但不會自動取消。
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={conflictConfirmOpen}
+        onClose={() => setConflictConfirmOpen(false)}
+        title={`店休期間已有 ${conflicts.length} 筆預約`}
+        footer={(
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setConflictConfirmOpen(false)}>返回調整</Button>
+            <Button
+              className="flex-1"
+              loading={saving}
+              onClick={() => {
+                setConflictConfirmOpen(false)
+                void persistClosure()
+              }}
+            >
+              保留預約並儲存店休
+            </Button>
+          </div>
+        )}
+      >
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+            儲存店休不會自動取消、改期或通知以下客戶，請稍後到預約管理逐筆處理。
+          </div>
+          <div className="max-h-64 space-y-2 overflow-y-auto">
+            {conflicts.map(booking => (
+              <div key={booking.id} className="rounded-2xl border border-slate-200 px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-800">{booking.clients?.full_name ?? '未知客戶'}</p>
+                  <p className="shrink-0 font-mono text-xs text-slate-500">
+                    {new Intl.DateTimeFormat('zh-TW', {
+                      month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+                    }).format(new Date(booking.start_time))}
+                  </p>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  {booking.services?.name ?? '未知課程'} · {booking.practitioners?.full_name ?? '未指定人員'}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </Modal>

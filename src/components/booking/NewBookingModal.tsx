@@ -8,6 +8,7 @@ import { addWeeks, differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { AlertTriangle, CalendarClock, Clock, Timer, DollarSign, Repeat2, TicketCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import Modal from '../ui/Modal'
+import ConfirmModal from '../ui/ConfirmModal'
 import Button from '../ui/Button'
 import Select from '../ui/Select'
 import ClientCombobox from '../ui/ClientCombobox'
@@ -164,6 +165,7 @@ export default function NewBookingModal({
   const [repeatCount, setRepeatCount] = useState(4)
   const [repeatUntilDate, setRepeatUntilDate] = useState('')
   const [storeClosures, setStoreClosures] = useState<PublicStoreClosure[]>([])
+  const [overrideConfirmOpen, setOverrideConfirmOpen] = useState(false)
   const recurrenceIdempotencyKey = useRef(crypto.randomUUID())
 
   // Reset when opened
@@ -322,8 +324,7 @@ export default function NewBookingModal({
     return Object.keys(e).length === 0
   }
 
-  async function handleSave() {
-    if (!validate()) { toast.warning('請填寫必要欄位'); return }
+  async function persistBooking() {
     setSaving(true)
 
     const price = form.price === '' ? null : parseIntegerInput(form.price)
@@ -409,6 +410,15 @@ export default function NewBookingModal({
         : '預約已建立'
     toast.success(label, `${format(start, 'M/d HH:mm')} · ${selectedService?.name ?? ''}`)
     onSaved()
+  }
+
+  function handleSave() {
+    if (!validate()) { toast.warning('請填寫必要欄位'); return }
+    if (storeClosures.length > 0) {
+      setOverrideConfirmOpen(true)
+      return
+    }
+    void persistBooking()
   }
 
   // 鎖定客戶（編輯模式 or 從客戶頁帶入）
@@ -770,6 +780,19 @@ export default function NewBookingModal({
           <Button variant="secondary" className="flex-1" onClick={onClose}>取消</Button>
           <Button className="flex-1" loading={saving} onClick={handleSave}>{submitLabel}</Button>
         </div>
+
+        <ConfirmModal
+          open={overrideConfirmOpen}
+          onClose={() => setOverrideConfirmOpen(false)}
+          onConfirm={() => {
+            setOverrideConfirmOpen(false)
+            void persistBooking()
+          }}
+          loading={saving}
+          title="確認建立店休日特殊預約"
+          description="客戶端不開放這個日期。確認後仍會建立預約，並留下管理員覆寫店休的稽核紀錄。"
+          confirmLabel="確認建立特殊預約"
+        />
       </div>
     </Modal>
   )
