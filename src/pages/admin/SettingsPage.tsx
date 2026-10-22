@@ -15,6 +15,7 @@ import Toggle from '@/components/ui/Toggle'
 import { toast } from '@/components/ui/Snackbar'
 import LineChannelCard from '@/components/settings/LineChannelCard'
 import LineMessagingCard from '@/components/settings/LineMessagingCard'
+import StoreClosuresSection from '@/components/settings/StoreClosuresSection'
 import type {
   LineMessagingStatus,
   LineTestRecipient,
@@ -227,6 +228,8 @@ function BasicSettings() {
           ))}
         </div>
       </section>
+
+      <StoreClosuresSection />
 
       <div className="flex justify-end">
         <Button variant="primary" loading={saving} onClick={handleSave}>

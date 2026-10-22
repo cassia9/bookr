@@ -34,6 +34,8 @@ import { toast } from '@/components/ui/Snackbar'
 import IconButton from '@/components/ui/IconButton'
 import CustomerChannelIdentities from '@/components/clients/CustomerChannelIdentities'
 import VoucherSaleModal from '@/components/vouchers/VoucherSaleModal'
+import VoucherManageModal from '@/components/vouchers/VoucherManageModal'
+import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/cn'
 import { parseIntegerInput } from '@/lib/numeric-input'
 import {
@@ -42,6 +44,7 @@ import {
   getVoucherProducts,
   type ClientVoucherWithItems,
   type VoucherProductWithItems,
+  type VoucherSaleWithRelations,
 } from '@/lib/vouchers-api'
 import type { ClientStat } from '@/types/database'
 
@@ -257,10 +260,12 @@ const STATUS_ACTIONS: Partial<Record<BookingStatus, { label: string; next: Booki
 // ── 客戶商品券 ───────────────────────────────────────────────────────────────
 
 function ClientVoucherSection({ client, active }: { client: ClientStat; active: boolean }) {
+  const { isAdmin } = useAuth()
   const [vouchers, setVouchers] = useState<ClientVoucherWithItems[]>([])
   const [products, setProducts] = useState<VoucherProductWithItems[]>([])
   const [loading, setLoading] = useState(true)
   const [saleOpen, setSaleOpen] = useState(false)
+  const [manageVoucher, setManageVoucher] = useState<VoucherSaleWithRelations | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -336,10 +341,24 @@ function ClientVoucherSection({ client, active }: { client: ClientStat; active: 
                   <p className="truncate text-sm font-medium text-slate-800">{voucher.product_name_snapshot}</p>
                   <span className="shrink-0 font-mono text-xs font-semibold text-[#668B32]">剩 {remaining} 堂</span>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  {reserved > 0 ? `${reserved} 堂已預約 · ` : ''}
-                  {voucher.expires_on ? `有效至 ${voucher.expires_on}` : '永久有效'}
-                </p>
+                <div className="mt-1 flex items-end justify-between gap-2">
+                  <p className="text-[11px] text-slate-400">
+                    {reserved > 0 ? `${reserved} 堂已預約 · ` : ''}
+                    {voucher.expires_on ? `有效至 ${voucher.expires_on}` : '永久有效'}
+                  </p>
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setManageVoucher({
+                        ...voucher,
+                        clients: { id: client.id, full_name: client.full_name, phone: client.phone },
+                      })}
+                    >
+                      調整堂數
+                    </Button>
+                  )}
+                </div>
               </div>
             )
           })}
@@ -359,6 +378,14 @@ function ClientVoucherSection({ client, active }: { client: ClientStat; active: 
           clients={[{ id: client.id, full_name: client.full_name, phone: client.phone }]}
           onClose={() => setSaleOpen(false)}
           onSaved={() => { setSaleOpen(false); void load() }}
+        />
+      )}
+      {manageVoucher && (
+        <VoucherManageModal
+          open
+          sale={manageVoucher}
+          onClose={() => setManageVoucher(null)}
+          onChanged={() => { setManageVoucher(null); void load() }}
         />
       )}
     </div>
