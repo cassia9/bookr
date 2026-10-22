@@ -32,8 +32,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('anon', p.oid, 'EXECUTE')
   ),
-  6::BIGINT,
-  'anon 只有六支公開 RPC'
+  7::BIGINT,
+  'anon 只有七支公開 RPC'
 );
 
 SELECT extensions.ok(
@@ -47,6 +47,7 @@ SELECT extensions.ok(
         'get_store_by_code',
         'get_store_by_slug',
         'get_public_booking_catalog',
+        'get_public_store_closures',
         'get_available_slots',
         'create_booking_public',
         'validate_invitation_token'
@@ -63,8 +64,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  31::BIGINT,
-  'authenticated 只有三十一支必要 RPC／輔助函式'
+  35::BIGINT,
+  'authenticated 只有三十五支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -78,6 +79,7 @@ SELECT extensions.ok(
         'get_store_by_code',
         'get_store_by_slug',
         'get_public_booking_catalog',
+        'get_public_store_closures',
         'get_available_slots',
         'create_booking_public',
         'validate_invitation_token',
@@ -92,6 +94,8 @@ SELECT extensions.ok(
         'get_practitioner_stats',
         'get_service_stats',
         'get_daily_stats',
+        'save_store_closure',
+        'archive_store_closure',
         'manage_store_line_connection',
         'get_store_line_messaging_status',
         'save_voucher_product',
@@ -99,6 +103,7 @@ SELECT extensions.ok(
         'sell_voucher_product',
         'void_client_voucher',
         'adjust_client_voucher_item',
+        'import_client_voucher_opening_balance',
         'set_booking_voucher',
         'upsert_booking_with_voucher',
         'create_recurring_bookings_with_voucher',
