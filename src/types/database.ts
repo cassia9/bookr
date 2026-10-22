@@ -2,6 +2,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
 export type UserRole = 'admin' | 'member'
+export type StoreClosureCategory = 'public_holiday' | 'staff_trip' | 'maintenance' | 'emergency' | 'other'
 export type NotificationType =
   | 'booking_received'
   | 'booking_confirmed'
@@ -117,6 +118,23 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['bookings']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['bookings']['Insert']>
       }
+      store_closures: {
+        Row: {
+          id: string
+          store_id: string
+          start_date: string
+          end_date: string
+          category: StoreClosureCategory
+          public_label: string
+          internal_note: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: never
+        Update: never
+      }
       booking_recurrence_series: {
         Row: {
           id: string
@@ -180,6 +198,10 @@ export interface Database {
           expires_on: string | null
           notes: string | null
           status: 'active' | 'voided'
+          source: 'sale' | 'opening_balance'
+          imported_at: string | null
+          imported_by: string | null
+          import_notes: string | null
           created_by: string | null
           voided_by: string | null
           voided_at: string | null
@@ -230,7 +252,7 @@ export interface Database {
           client_voucher_item_id: string
           redemption_id: string | null
           booking_id: string | null
-          action: 'issued' | 'reserved' | 'released' | 'redeemed' | 'restored' | 'adjusted' | 'voided'
+          action: 'issued' | 'opening_usage' | 'reserved' | 'released' | 'redeemed' | 'restored' | 'adjusted' | 'voided'
           quantity: number
           available_after: number
           reserved_after: number
@@ -453,6 +475,29 @@ export interface Database {
         Args: { p_query: string; p_store_id?: string; p_limit?: number }
         Returns: Array<{ id: string; full_name: string; phone: string; email: string | null }>
       }
+      save_store_closure: {
+        Args: {
+          p_closure_id: string | null
+          p_start_date: string
+          p_end_date: string
+          p_category: StoreClosureCategory
+          p_public_label?: string
+          p_internal_note?: string | null
+        }
+        Returns: Json
+      }
+      archive_store_closure: {
+        Args: { p_closure_id: string }
+        Returns: Json
+      }
+      get_public_store_closures: {
+        Args: { p_store_id: string; p_start_date: string; p_end_date: string }
+        Returns: Array<{
+          start_date: string
+          end_date: string
+          public_label: string
+        }>
+      }
       get_client_bookings: {
         Args: { p_client_id: string; p_limit?: number }
         Returns: Array<{
@@ -531,6 +576,18 @@ export interface Database {
         }
         Returns: Json
       }
+      import_client_voucher_opening_balance: {
+        Args: {
+          p_product_id: string
+          p_client_id: string
+          p_purchased_on: string
+          p_expires_on: string | null
+          p_paid_amount: number
+          p_import_notes: string
+          p_items: Json
+        }
+        Returns: Json
+      }
       set_booking_voucher: {
         Args: {
           p_booking_id: string
@@ -595,6 +652,7 @@ export type Client = Database['public']['Tables']['clients']['Row']
 export type StoreChannelConnection = Database['public']['Tables']['store_channel_connections']['Row']
 export type Service = Database['public']['Tables']['services']['Row']
 export type Booking = Database['public']['Tables']['bookings']['Row']
+export type StoreClosure = Database['public']['Tables']['store_closures']['Row']
 export type VoucherProduct = Database['public']['Tables']['voucher_products']['Row']
 export type VoucherProductItem = Database['public']['Tables']['voucher_product_items']['Row']
 export type ClientVoucher = Database['public']['Tables']['client_vouchers']['Row']
