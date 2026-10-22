@@ -61,6 +61,20 @@ export interface SellVoucherInput {
   notes?: string
 }
 
+export interface ImportVoucherOpeningBalanceInput {
+  productId: string
+  clientId: string
+  purchasedOn: string
+  expiresOn: string | null
+  paidAmount: number
+  importNotes: string
+  items: Array<{
+    serviceId: string
+    totalQuantity: number
+    usedQuantity: number
+  }>
+}
+
 interface RpcResult {
   ok: boolean
   error?: string
@@ -137,6 +151,27 @@ export async function sellVoucher(input: SellVoucherInput): Promise<RpcResult> {
     p_paid_amount: input.paidAmount,
     p_payment_method: input.paymentMethod,
     p_notes: input.notes?.trim() || null,
+  })
+
+  if (error) throw error
+  return assertOk(data)
+}
+
+export async function importVoucherOpeningBalance(
+  input: ImportVoucherOpeningBalanceInput,
+): Promise<RpcResult> {
+  const { data, error } = await supabase.rpc('import_client_voucher_opening_balance', {
+    p_product_id: input.productId,
+    p_client_id: input.clientId,
+    p_purchased_on: input.purchasedOn,
+    p_expires_on: input.expiresOn,
+    p_paid_amount: input.paidAmount,
+    p_import_notes: input.importNotes.trim(),
+    p_items: input.items.map(item => ({
+      service_id: item.serviceId,
+      total_quantity: item.totalQuantity,
+      used_quantity: item.usedQuantity,
+    })),
   })
 
   if (error) throw error
