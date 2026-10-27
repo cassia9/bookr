@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
 import { getEligibleClientVoucherItems } from '@/lib/vouchers-api'
 import type { EligibleVoucherItem } from '@/lib/vouchers-api'
+import { getPublicStoreClosures, type PublicStoreClosure } from '@/lib/store-closures-api'
 import { toast } from '@/components/ui/Snackbar'
 import { format, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
@@ -151,6 +152,7 @@ export default function CalendarPage({
   const [isLoading, setIsLoading] = useState(true)
   const [bookingsError, setBookingsError] = useState('')
   const [metaError, setMetaError] = useState('')
+  const [storeClosures, setStoreClosures] = useState<PublicStoreClosure[]>([])
 
   // Modal 狀態
   const [modalBooking, setModalBooking] = useState<Booking | null>(null)
@@ -268,12 +270,35 @@ export default function CalendarPage({
     setIsLoading(false)
   }, [getDateRange, selectedPractitionerId])
 
+  const fetchStoreClosures = useCallback(async () => {
+    const { start, end } = getDateRange()
+    try {
+      setStoreClosures(await getPublicStoreClosures(
+        STORE_ID,
+        format(start, 'yyyy-MM-dd'),
+        format(end, 'yyyy-MM-dd'),
+      ))
+    } catch (error) {
+      console.error('載入店休標記失敗', error)
+      setStoreClosures([])
+    }
+  }, [getDateRange])
+
   useEffect(() => { void Promise.resolve().then(fetchMeta) }, [fetchMeta])
   useEffect(() => { void Promise.resolve().then(fetchBookings) }, [fetchBookings])
+  useEffect(() => { void Promise.resolve().then(fetchStoreClosures) }, [fetchStoreClosures])
 
   function retryLoading() {
     void fetchMeta()
     void fetchBookings()
+    void fetchStoreClosures()
+  }
+
+  function closureOnDate(date: Date) {
+    const dateString = format(date, 'yyyy-MM-dd')
+    return storeClosures.find(closure => (
+      closure.start_date <= dateString && closure.end_date >= dateString
+    )) ?? null
   }
 
   function getDatesForView(): Date[] {
@@ -797,6 +822,7 @@ export default function CalendarPage({
                     const mobileOverflowCount = activeBk.length > 2 ? activeBk.length - 2 : 0
                     const desktopOverflowCount = activeBk.length > 3 ? activeBk.length - 3 : 0
                     const isPopoverOpen  = dayPopover?.date.toDateString() === date.toDateString()
+                    const closure = closureOnDate(date)
                     return (
                       <div
                         key={date.toISOString()}
@@ -811,6 +837,7 @@ export default function CalendarPage({
                             ? 'bg-white border-slate-100 hover:border-slate-200'
                             : 'bg-slate-50/50 border-slate-50',
                           isToday(date) && 'border-indigo-200 bg-indigo-50/30',
+                          closure && 'border-rose-200 bg-rose-50/40',
                           isPopoverOpen && 'border-indigo-300 ring-2 ring-indigo-100',
                         )}
                       >
@@ -840,6 +867,12 @@ export default function CalendarPage({
                             </div>
                           )}
                         </div>
+
+                        {closure && (
+                          <div className="mb-1 truncate rounded-[2px] bg-rose-100 px-1 py-0.5 text-[9px] font-semibold text-rose-700 sm:rounded-md sm:px-1.5 sm:text-[10px]">
+                            店休 · {closure.public_label}
+                          </div>
+                        )}
 
                         {/* FR-A: 手機最多 2 筆、桌機最多 3 筆卡片 */}
                         <div className="space-y-0.5">
@@ -893,20 +926,25 @@ export default function CalendarPage({
                 {/* 日期 header */}
                 <div className="grid border-b border-slate-100" style={{ gridTemplateColumns: '64px repeat(7, 1fr)' }}>
                   <div className="border-r border-slate-100" />
-                  {datesForView.map(date => (
-                    <div key={date.toISOString()} className={cn(
-                      'text-center py-3 border-r border-slate-100',
-                      isToday(date) && 'bg-indigo-50/40',
-                    )}>
-                      <div className="text-xs text-slate-400">{format(date, 'EEE', { locale: zhTW })}</div>
-                      <div className={cn(
-                        'text-sm font-semibold mt-0.5 w-7 h-7 rounded-full flex items-center justify-center mx-auto',
-                        isToday(date) ? 'bg-black text-white' : 'text-slate-700',
+                  {datesForView.map(date => {
+                    const closure = closureOnDate(date)
+                    return (
+                      <div key={date.toISOString()} className={cn(
+                        'text-center py-3 border-r border-slate-100',
+                        isToday(date) && 'bg-indigo-50/40',
+                        closure && 'bg-rose-50/70',
                       )}>
-                        {date.getDate()}
+                        <div className="text-xs text-slate-400">{format(date, 'EEE', { locale: zhTW })}</div>
+                        <div className={cn(
+                          'text-sm font-semibold mt-0.5 w-7 h-7 rounded-full flex items-center justify-center mx-auto',
+                          isToday(date) ? 'bg-black text-white' : 'text-slate-700',
+                        )}>
+                          {date.getDate()}
+                        </div>
+                        {closure && <p className="mt-1 truncate px-1 text-[9px] font-semibold text-rose-600">{closure.public_label}</p>}
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
                 {/* 時間格 */}
                 {Array.from({ length: 24 }, (_, hour) => hour).map(hour => (
@@ -987,6 +1025,11 @@ export default function CalendarPage({
                   )}>
                     {format(currentDate, 'M月 d日 (EEEE)', { locale: zhTW })}
                   </h3>
+                  {closureOnDate(currentDate) && (
+                    <p className="mt-1 inline-flex rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">
+                      店休 · {closureOnDate(currentDate)?.public_label}
+                    </p>
+                  )}
                 </div>
                 {Array.from({ length: 24 }, (_, hour) => hour).map(hour => {
                   const hBk = bookingsOnHour(currentDate, hour)

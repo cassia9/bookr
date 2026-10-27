@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  ArchiveRestore,
   CalendarClock,
   CheckCircle2,
   Edit2,
@@ -26,6 +27,7 @@ import VoucherSaleModal, {
   type VoucherClientOption,
 } from '../../components/vouchers/VoucherSaleModal'
 import VoucherManageModal from '../../components/vouchers/VoucherManageModal'
+import VoucherOpeningBalanceModal from '../../components/vouchers/VoucherOpeningBalanceModal'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import ConfirmModal from '../../components/ui/ConfirmModal'
@@ -402,6 +404,7 @@ export default function VouchersPage() {
   const [productModalOpen, setProductModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<VoucherProductWithItems | null>(null)
   const [saleModalOpen, setSaleModalOpen] = useState(false)
+  const [openingBalanceModalOpen, setOpeningBalanceModalOpen] = useState(false)
   const [saleProduct, setSaleProduct] = useState<VoucherProductWithItems | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<VoucherProductWithItems | null>(null)
   const [archiving, setArchiving] = useState(false)
@@ -451,7 +454,7 @@ export default function VouchersPage() {
     || sale.clients?.phone.includes(search)
   ))
 
-  const soldVouchers = sales.filter(sale => sale.status === 'active').length
+  const soldVouchers = sales.filter(sale => sale.source === 'sale' && sale.status === 'active').length
   const usedSessions = sales.reduce((total, sale) => (
     total + sale.client_voucher_items.reduce(
       (subtotal, item) => subtotal + item.used_quantity,
@@ -497,9 +500,14 @@ export default function VouchersPage() {
           </div>
           <div className="flex gap-2">
             {isAdmin && (
-              <Button variant="secondary" onClick={() => openProduct(null)}>
-                <Plus size={15} /> 新增方案
-              </Button>
+              <>
+                <Button variant="secondary" onClick={() => setOpeningBalanceModalOpen(true)}>
+                  <ArchiveRestore size={15} /> 匯入既有券
+                </Button>
+                <Button variant="secondary" onClick={() => openProduct(null)}>
+                  <Plus size={15} /> 新增方案
+                </Button>
+              </>
             )}
             <Button onClick={() => openSale()} disabled={!products.some(product => product.active)}>
               <TicketCheck size={15} /> 登記購買
@@ -643,7 +651,12 @@ export default function VouchersPage() {
                           <p className="text-sm font-medium text-slate-800">{sale.clients?.full_name ?? '客戶已刪除'}</p>
                           <p className="text-xs text-slate-400">{sale.clients?.phone}</p>
                         </td>
-                        <td className="px-5 py-4 text-sm text-slate-700">{sale.product_name_snapshot}</td>
+                        <td className="px-5 py-4 text-sm text-slate-700">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span>{sale.product_name_snapshot}</span>
+                            {sale.source === 'opening_balance' && <Badge variant="indigo">期初移轉</Badge>}
+                          </div>
+                        </td>
                         <td className="px-5 py-4">
                           <p className="font-mono text-sm font-semibold text-slate-800">已用 {used} / {total}</p>
                           <p className="mt-0.5 text-xs text-slate-400">另有 {reserved} 堂已預約</p>
@@ -706,6 +719,19 @@ export default function VouchersPage() {
           sale={manageSale}
           onClose={() => setManageSale(null)}
           onChanged={() => { setManageSale(null); void load() }}
+        />
+      )}
+      {openingBalanceModalOpen && (
+        <VoucherOpeningBalanceModal
+          open
+          products={products}
+          clients={clients}
+          onClose={() => setOpeningBalanceModalOpen(false)}
+          onSaved={() => {
+            setOpeningBalanceModalOpen(false)
+            setActiveTab('sales')
+            void load()
+          }}
         />
       )}
       <ConfirmModal
