@@ -7,7 +7,6 @@ import {
   type VoucherSaleWithRelations,
 } from '../../lib/vouchers-api'
 import Button from '../ui/Button'
-import ConfirmModal from '../ui/ConfirmModal'
 import FormField from '../ui/FormField'
 import Input from '../ui/Input'
 import Modal from '../ui/Modal'
@@ -45,7 +44,7 @@ export default function VoucherManageModal({
   const [reason, setReason] = useState('')
   const [adjusting, setAdjusting] = useState(false)
   const [voidReason, setVoidReason] = useState('')
-  const [voidConfirmOpen, setVoidConfirmOpen] = useState(false)
+  const [voidModalOpen, setVoidModalOpen] = useState(false)
   const [voiding, setVoiding] = useState(false)
 
   const selectedItem = useMemo(
@@ -77,20 +76,17 @@ export default function VoucherManageModal({
     }
   }
 
-  function requestVoid() {
+  async function handleVoid() {
     if (!voidReason.trim()) {
       toast.error('請填寫作廢原因')
       return
     }
-    setVoidConfirmOpen(true)
-  }
 
-  async function handleVoid() {
     setVoiding(true)
     try {
       await voidClientVoucher(sale.id, voidReason)
       toast.success('商品券已作廢', sale.sale_number)
-      setVoidConfirmOpen(false)
+      setVoidModalOpen(false)
       onChanged()
     } catch (error) {
       toast.error('無法作廢商品券', operationError(error))
@@ -106,7 +102,21 @@ export default function VoucherManageModal({
         onClose={onClose}
         title="管理已售商品券"
         size="lg"
-        footer={<Button variant="secondary" className="w-full" onClick={onClose}>關閉</Button>}
+        footer={!isVoided ? (
+          <div className="space-y-1">
+            <Button className="w-full" loading={adjusting} onClick={handleAdjust}>
+              儲存堂數調整
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full text-red-600 hover:bg-red-50 hover:text-red-700"
+              onClick={() => setVoidModalOpen(true)}
+            >
+              <ShieldAlert size={16} />
+              作廢這張商品券
+            </Button>
+          </div>
+        ) : undefined}
       >
         <div className="space-y-6">
           <section className="rounded-3xl border border-slate-200 bg-[#FAFAF7] p-5">
@@ -181,50 +191,55 @@ export default function VoucherManageModal({
                 />
               </FormField>
 
-              <Button className="w-full" loading={adjusting} onClick={handleAdjust}>
-                儲存堂數調整
-              </Button>
             </section>
           )}
 
-          <section className="border-t border-slate-200 pt-5">
-            <div className="flex items-center gap-2 text-red-600">
-              <ShieldAlert size={16} />
-              <h3 className="text-sm font-semibold">作廢商品券</h3>
-            </div>
-            {isVoided ? (
+          {isVoided && (
+            <section className="border-t border-slate-200 pt-5">
+              <div className="flex items-center gap-2 text-red-600">
+                <ShieldAlert size={16} />
+                <h3 className="text-sm font-semibold">商品券已作廢</h3>
+              </div>
               <div className="mt-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
                 已於 {sale.voided_at ? new Date(sale.voided_at).toLocaleString('zh-TW') : '先前'}作廢
                 {sale.void_reason ? `：${sale.void_reason}` : ''}
               </div>
-            ) : (
-              <div className="mt-3 space-y-3">
-                <p className="text-xs leading-5 text-slate-500">只有完全未使用、也沒有預約保留的商品券可整張作廢。</p>
-                <FormField label="作廢原因" required>
-                  <Textarea
-                    value={voidReason}
-                    onChange={event => setVoidReason(event.target.value)}
-                    maxLength={1000}
-                    placeholder="例：重複登記、全額退款"
-                  />
-                </FormField>
-                <Button variant="danger" className="w-full" onClick={requestVoid}>作廢整張商品券</Button>
-              </div>
-            )}
-          </section>
+            </section>
+          )}
         </div>
       </Modal>
 
-      <ConfirmModal
-        open={voidConfirmOpen}
-        onClose={() => setVoidConfirmOpen(false)}
-        onConfirm={handleVoid}
-        loading={voiding}
-        title="確認作廢商品券"
-        description={`作廢「${sale.product_name_snapshot}」後不可恢復，且無法再用於預約。原因：${voidReason}`}
-        confirmLabel="確認作廢"
-        variant="danger"
-      />
+      <Modal
+        open={voidModalOpen}
+        onClose={() => setVoidModalOpen(false)}
+        title="作廢商品券"
+        size="sm"
+        footer={(
+          <Button variant="danger" className="w-full" loading={voiding} onClick={handleVoid}>
+            確認作廢商品券
+          </Button>
+        )}
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
+            <div className="flex items-center gap-2 text-red-700">
+              <ShieldAlert size={16} />
+              <p className="text-sm font-semibold">此操作無法復原</p>
+            </div>
+            <p className="mt-1.5 text-xs leading-5 text-red-700/80">
+              只有完全未使用、也沒有預約保留的商品券可以作廢。作廢後將無法再用於預約。
+            </p>
+          </div>
+          <FormField label="作廢原因" required>
+            <Textarea
+              value={voidReason}
+              onChange={event => setVoidReason(event.target.value)}
+              maxLength={1000}
+              placeholder="例：重複登記、全額退款"
+            />
+          </FormField>
+        </div>
+      </Modal>
     </>
   )
 }
