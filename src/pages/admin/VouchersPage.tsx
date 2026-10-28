@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ArchiveRestore,
+  AlertTriangle,
   CalendarClock,
   CheckCircle2,
   Edit2,
   Gift,
   Plus,
   ReceiptText,
+  RefreshCw,
   Sparkles,
   TicketCheck,
   Trash2,
@@ -400,6 +402,7 @@ export default function VouchersPage() {
   const [services, setServices] = useState<ServiceOption[]>([])
   const [clients, setClients] = useState<VoucherClientOption[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [productModalOpen, setProductModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<VoucherProductWithItems | null>(null)
@@ -411,6 +414,8 @@ export default function VouchersPage() {
   const [manageSale, setManageSale] = useState<VoucherSaleWithRelations | null>(null)
 
   const load = useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
     try {
       const data = await getVoucherPageData()
       setProducts(data.products)
@@ -418,7 +423,9 @@ export default function VouchersPage() {
       setServices(data.services)
       setClients(data.clients)
     } catch (error) {
-      toast.error('無法載入商品券', errorMessage(error))
+      const message = errorMessage(error)
+      setLoadError(message)
+      toast.error('無法載入商品券', message)
     } finally {
       setLoading(false)
     }
@@ -435,7 +442,10 @@ export default function VouchersPage() {
         setClients(data.clients)
       })
       .catch(error => {
-        if (active) toast.error('無法載入商品券', errorMessage(error))
+        if (!active) return
+        const message = errorMessage(error)
+        setLoadError(message)
+        toast.error('無法載入商品券', message)
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -509,7 +519,10 @@ export default function VouchersPage() {
                 </Button>
               </>
             )}
-            <Button onClick={() => openSale()} disabled={!products.some(product => product.active)}>
+            <Button
+              onClick={() => openSale()}
+              disabled={Boolean(loadError) || !products.some(product => product.active)}
+            >
               <TicketCheck size={15} /> 登記購買
             </Button>
           </div>
@@ -519,9 +532,9 @@ export default function VouchersPage() {
       <main className="space-y-5 p-5 lg:p-8">
         <section className="grid gap-3 md:grid-cols-3">
           {[
-            { label: '上架方案', value: `${products.filter(product => product.active && !product.deleted_at).length} 種`, icon: Gift },
-            { label: '累計售出', value: `${soldVouchers} 張`, icon: ReceiptText },
-            { label: '累計已使用', value: `${usedSessions} 堂`, icon: CheckCircle2 },
+            { label: '上架方案', value: loadError ? '—' : `${products.filter(product => product.active && !product.deleted_at).length} 種`, icon: Gift },
+            { label: '累計售出', value: loadError ? '—' : `${soldVouchers} 張`, icon: ReceiptText },
+            { label: '累計已使用', value: loadError ? '—' : `${usedSessions} 堂`, icon: CheckCircle2 },
           ].map(stat => (
             <div key={stat.label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
@@ -561,7 +574,18 @@ export default function VouchersPage() {
             />
           </div>
 
-          {loading ? (
+          {loadError ? (
+            <div className="flex min-h-80 flex-col items-center justify-center px-6 text-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                <AlertTriangle size={22} />
+              </div>
+              <p className="mt-4 text-sm font-semibold text-slate-800">商品券資料載入失敗</p>
+              <p className="mt-1 max-w-md text-xs leading-5 text-slate-500">{loadError}</p>
+              <Button className="mt-4" size="sm" onClick={() => void load()}>
+                <RefreshCw size={14} /> 重新載入
+              </Button>
+            </div>
+          ) : loading ? (
             <div className="flex min-h-80 items-center justify-center"><Spinner size="lg" /></div>
           ) : activeTab === 'products' ? (
             filteredProducts.length ? (
