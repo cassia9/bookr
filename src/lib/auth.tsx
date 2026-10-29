@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js'
-import { supabase } from './supabase'
+import { createSessionSupabaseClient, supabase } from './supabase'
 import type { User, UserRole } from '../types/database'
 
 interface AuthContextValue {
@@ -27,11 +27,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const profileRequestId = useRef(0)
 
-  async function fetchProfile(userId: string, refreshOnError = true) {
+  async function fetchProfile(activeSession: Session, refreshOnError = true) {
     const requestId = ++profileRequestId.current
+    const userId = activeSession.user.id
     setProfileError(null)
 
-    let result = await supabase
+    let result = await createSessionSupabaseClient(activeSession.access_token)
       .from('users')
       .select('*')
       .eq('id', userId)
@@ -44,8 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (requestId !== profileRequestId.current) return
 
-      if (!refreshError && refreshed.user?.id === userId) {
-        result = await supabase
+      if (!refreshError && refreshed.session?.user.id === userId) {
+        result = await createSessionSupabaseClient(refreshed.session.access_token)
           .from('users')
           .select('*')
           .eq('id', userId)
@@ -69,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setSupabaseUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
+      if (session) fetchProfile(session)
       else {
         profileRequestId.current += 1
         setProfile(null)
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
       setSupabaseUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id, event !== 'TOKEN_REFRESHED')
+      if (session) fetchProfile(session, event !== 'TOKEN_REFRESHED')
       else {
         profileRequestId.current += 1
         setProfile(null)
@@ -113,16 +114,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfileError(null)
 
     const { data, error } = await supabase.auth.refreshSession()
-    const user = data.user ?? session?.user ?? null
+    const activeSession = data.session ?? session
 
-    if (error || !user) {
+    if (error || !activeSession) {
       setProfile(null)
       setProfileError(new Error('登入狀態已失效，請登出後重新登入。'))
       setLoading(false)
       return
     }
 
-    await fetchProfile(user.id, false)
+    await fetchProfile(activeSession, false)
   }
 
   return (

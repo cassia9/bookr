@@ -5,3 +5,18 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+
+export function createSessionSupabaseClient(accessToken: string) {
+  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  })
+}
