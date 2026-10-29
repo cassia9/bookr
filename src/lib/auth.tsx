@@ -19,6 +19,17 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+const FUTURE_JWT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000]
+
+function isFutureJwtError(error: { code?: string; message?: string } | null) {
+  return error?.code === 'PGRST303'
+    && error.message?.toLowerCase().includes('jwt issued at future') === true
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
@@ -32,25 +43,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userId = activeSession.user.id
     setProfileError(null)
 
-    let result = await createSessionSupabaseClient(activeSession.access_token)
+    const queryProfile = (accessToken: string) => createSessionSupabaseClient(accessToken)
       .from('users')
       .select('*')
       .eq('id', userId)
       .maybeSingle()
 
+    let result = await queryProfile(activeSession.access_token)
+
+    // 正式環境的 Auth 與 PostgREST 可能短暫存在時鐘差。沿用同一張 Token
+    // 等待生效，避免不斷刷新出新 Token 而形成 401 無限循環。
+    for (const delay of FUTURE_JWT_RETRY_DELAYS_MS) {
+      if (!isFutureJwtError(result.error)) break
+
+      await wait(delay)
+      if (requestId !== profileRequestId.current) return
+
+      result = await queryProfile(activeSession.access_token)
+    }
+
     if (requestId !== profileRequestId.current) return
 
-    if (result.error && refreshOnError) {
+    if (result.error && refreshOnError && !isFutureJwtError(result.error)) {
       const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
 
       if (requestId !== profileRequestId.current) return
 
       if (!refreshError && refreshed.session?.user.id === userId) {
-        result = await createSessionSupabaseClient(refreshed.session.access_token)
-          .from('users')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle()
+        result = await queryProfile(refreshed.session.access_token)
       }
     }
 
@@ -113,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     setProfileError(null)
 
-    const { data, error } = await supabase.auth.refreshSession()
+    const { data, error } = await supabase.auth.getSession()
     const activeSession = data.session ?? session
 
     if (error || !activeSession) {
@@ -123,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    await fetchProfile(activeSession, false)
+    await fetchProfile(activeSession)
   }
 
   return (
