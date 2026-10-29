@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
@@ -22,13 +22,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
   const [profile, setProfile] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const profileRequestId = useRef(0)
+
+  async function fetchProfile(userId: string) {
+    const requestId = ++profileRequestId.current
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (requestId !== profileRequestId.current) return
+    setProfile(error ? null : data)
+    setLoading(false)
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setSupabaseUser(session?.user ?? null)
       if (session?.user) fetchProfile(session.user.id)
-      else setLoading(false)
+      else {
+        profileRequestId.current += 1
+        setProfile(null)
+        setLoading(false)
+      }
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -36,23 +54,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSupabaseUser(session?.user ?? null)
       if (session?.user) fetchProfile(session.user.id)
       else {
+        profileRequestId.current += 1
         setProfile(null)
         setLoading(false)
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      profileRequestId.current += 1
+      subscription.unsubscribe()
+    }
   }, [])
-
-  async function fetchProfile(userId: string) {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    setProfile(data)
-    setLoading(false)
-  }
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
