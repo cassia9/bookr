@@ -8,15 +8,6 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
 
 export function createSessionSupabaseClient(accessToken: string) {
   return createClient<Database>(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-      persistSession: false,
-    },
-    global: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
+    accessToken: async () => accessToken,
   })
 }
