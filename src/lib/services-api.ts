@@ -158,6 +158,28 @@ export async function updateServiceCategory(
   return data as ServiceCategory
 }
 
+export async function saveServiceCategories(
+  storeId: string,
+  categories: Array<Pick<ServiceCategory, 'id' | 'name' | 'sort_order' | 'active'>>,
+) {
+  const { data, error } = await supabase
+    .from('service_categories')
+    .upsert(
+      categories.map(category => ({
+        id: category.id,
+        store_id: storeId,
+        name: category.name.trim(),
+        sort_order: category.sort_order,
+        active: category.active,
+      })),
+      { onConflict: 'id' },
+    )
+    .select('*')
+
+  if (error) throw error
+  return data as ServiceCategory[]
+}
+
 /**
  * 按 ID 獲取課程
  */
