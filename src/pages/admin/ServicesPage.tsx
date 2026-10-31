@@ -1,8 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Plus, Edit2, Trash2 } from 'lucide-react'
+import { Plus, Edit2, Trash2, Tags } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { createService, updateService, deleteService, getServices, type Service } from '@/lib/services-api'
+import {
+  deleteService,
+  getServiceCategories,
+  getServices,
+  type Service,
+  type ServiceCategory,
+} from '@/lib/services-api'
 import ServiceForm from '@/components/services/ServiceForm'
+import ServiceCategoriesModal from '@/components/services/ServiceCategoriesModal'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import type { BadgeVariant } from '@/components/ui/Badge'
@@ -13,6 +20,7 @@ import Pagination from '@/components/ui/Pagination'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { toast } from '@/components/ui/Snackbar'
 import { cn } from '@/lib/cn'
+import { useAuth } from '@/lib/auth'
 
 function statusBadge(service: Service): { label: string; variant: BadgeVariant } {
   if (service.deleted_at) return { label: '已刪除', variant: 'slate' }
@@ -23,7 +31,10 @@ function statusBadge(service: Service): { label: string; variant: BadgeVariant }
 const ITEMS_PER_PAGE = 20
 
 export default function ServicesPage() {
+  const { isAdmin, profile } = useAuth()
+  const storeId = profile?.store_id ?? ''
   const [services, setServices] = useState<Service[]>([])
+  const [categories, setCategories] = useState<ServiceCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingService, setEditingService] = useState<Service | null>(null)
@@ -32,12 +43,14 @@ export default function ServicesPage() {
   const [page, setPage] = useState(1)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [showCategories, setShowCategories] = useState(false)
 
   useEffect(() => { load() }, [])
 
   useEffect(() => {
     const sub = supabase.channel('services')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_categories' }, load)
       .subscribe()
     return () => { sub.unsubscribe() }
   }, [])
@@ -45,7 +58,12 @@ export default function ServicesPage() {
   async function load() {
     try {
       setLoading(true)
-      setServices(await getServices())
+      const [nextServices, nextCategories] = await Promise.all([
+        getServices(),
+        getServiceCategories(),
+      ])
+      setServices(nextServices)
+      setCategories(nextCategories)
     } catch {
       toast.error('載入失敗', '無法載入課程列表')
     } finally {
@@ -64,6 +82,7 @@ export default function ServicesPage() {
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE)
   const paged = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
+  const categoryNames = new Map(categories.map(category => [category.id, category.name]))
 
   async function handleDelete(id: string) {
     setDeleting(true)
@@ -96,9 +115,16 @@ export default function ServicesPage() {
             <h1 className="text-3xl font-bold text-slate-900">課程管理</h1>
             <p className="text-sm text-slate-500 mt-1">管理所有課程、定價和上架狀態</p>
           </div>
-          <Button onClick={() => { setEditingService(null); setShowForm(true) }}>
-            <Plus size={15} /> 新增課程
-          </Button>
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => setShowCategories(true)}>
+                <Tags size={15} /> 管理類別
+              </Button>
+              <Button onClick={() => { setEditingService(null); setShowForm(true) }}>
+                <Plus size={15} /> 新增課程
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -149,7 +175,7 @@ export default function ServicesPage() {
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 bg-white border-b border-slate-200">
                   <tr>
-                    {['課程名稱', '時長', '定價', '狀態', '建立日期', ''].map(h => (
+                    {['課程名稱', '類別', '時長', '定價', '狀態', '建立日期', ''].map(h => (
                       <th key={h} className={cn(
                         'px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide',
                         h === '' ? 'text-right' : 'text-left',
@@ -168,6 +194,11 @@ export default function ServicesPage() {
                             <p className="text-xs text-slate-400 mt-0.5 truncate max-w-64">{s.description}</p>
                           )}
                         </td>
+                        <td className="px-6 py-4 text-sm text-slate-500">
+                          {s.category_id && categoryNames.has(s.category_id)
+                            ? categoryNames.get(s.category_id)
+                            : '其他服務'}
+                        </td>
                         <td className="px-6 py-4 text-sm text-slate-600">{s.duration_minutes} 分鐘</td>
                         <td className="px-6 py-4 text-sm font-medium text-slate-800">
                           NT$ {s.price.toLocaleString()}
@@ -180,7 +211,7 @@ export default function ServicesPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-1">
-                            {!s.deleted_at && (
+                            {!s.deleted_at && isAdmin && (
                               <>
                                 <button
                                   onClick={() => { setEditingService(s); setShowForm(true) }}
@@ -218,10 +249,19 @@ export default function ServicesPage() {
       {showForm && (
         <ServiceForm
           service={editingService}
+          categories={categories}
           onSuccess={handleFormSuccess}
           onCancel={() => { setShowForm(false); setEditingService(null) }}
         />
       )}
+
+      <ServiceCategoriesModal
+        open={showCategories}
+        storeId={storeId}
+        categories={categories}
+        onClose={() => setShowCategories(false)}
+        onSaved={load}
+      />
 
       {/* 刪除確認 */}
       <ConfirmModal
