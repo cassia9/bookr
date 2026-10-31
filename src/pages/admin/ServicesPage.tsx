@@ -255,13 +255,15 @@ export default function ServicesPage() {
         />
       )}
 
-      <ServiceCategoriesModal
-        open={showCategories}
-        storeId={storeId}
-        categories={categories}
-        onClose={() => setShowCategories(false)}
-        onSaved={load}
-      />
+      {showCategories && (
+        <ServiceCategoriesModal
+          open
+          storeId={storeId}
+          categories={categories}
+          onClose={() => setShowCategories(false)}
+          onSaved={load}
+        />
+      )}
 
       {/* 刪除確認 */}
       <ConfirmModal

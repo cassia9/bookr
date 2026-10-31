@@ -486,7 +486,7 @@ const SERVICE_SORT_OPTIONS = [
 
 function sortServices(services: PublicService[], sort: ServiceSort) {
   return [...services].sort((left, right) => {
-    let comparison = 0
+    let comparison: number
 
     if (sort === 'duration_asc' || sort === 'duration_desc') {
       comparison = left.duration_minutes - right.duration_minutes

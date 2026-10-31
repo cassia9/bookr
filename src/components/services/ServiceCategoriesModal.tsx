@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ArrowDown, ArrowUp, Plus, Tags } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -30,21 +30,14 @@ export default function ServiceCategoriesModal({
   onClose,
   onSaved,
 }: Props) {
-  const [drafts, setDrafts] = useState<CategoryDraft[]>([])
+  const [drafts, setDrafts] = useState<CategoryDraft[]>(() => categories.map(category => ({
+    id: category.id,
+    name: category.name,
+    active: category.active,
+  })))
   const [newName, setNewName] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!open) return
-    setDrafts(categories.map(category => ({
-      id: category.id,
-      name: category.name,
-      active: category.active,
-    })))
-    setNewName('')
-    setError('')
-  }, [categories, open])
 
   function hasDuplicateName(items: CategoryDraft[]) {
     const names = items.map(item => item.name.trim().toLocaleLowerCase('zh-TW'))

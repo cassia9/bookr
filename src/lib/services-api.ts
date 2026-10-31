@@ -50,7 +50,7 @@ export interface ServiceCategory {
  */
 export async function callServicesAPI(
   action: 'create' | 'update' | 'delete',
-  body: any
+  body: CreateServiceRequest | UpdateServiceRequest | { service_id: string },
 ) {
   const { data: sessionData } = await supabase.auth.getSession()
   const token = sessionData?.session?.access_token
