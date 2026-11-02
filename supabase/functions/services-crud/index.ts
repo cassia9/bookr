@@ -29,6 +29,7 @@ interface CreateServiceRequest {
   duration_minutes: number
   price: number
   active?: boolean
+  category_id?: string | null
 }
 
 interface UpdateServiceRequest {
@@ -37,7 +38,10 @@ interface UpdateServiceRequest {
   duration_minutes?: number
   price?: number
   active?: boolean
+  category_id?: string | null
 }
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 // 驗證請求資料
 function validateCreateRequest(data: any): CreateServiceRequest {
@@ -60,12 +64,21 @@ function validateCreateRequest(data: any): CreateServiceRequest {
     throw new Error("Price must be a number between 0 and 999,999")
   }
 
+  if (
+    data.category_id !== undefined
+    && data.category_id !== null
+    && (typeof data.category_id !== "string" || !uuidPattern.test(data.category_id))
+  ) {
+    throw new Error("Category ID must be a valid UUID or null")
+  }
+
   return {
     name: data.name.trim(),
     description: data.description?.trim() || null,
     duration_minutes: data.duration_minutes,
     price: Math.floor(data.price),
     active: data.active !== false,
+    category_id: data.category_id || null,
   }
 }
 
@@ -110,12 +123,34 @@ serve(async (req: Request) => {
       return jsonResponse({ error: "Forbidden: Admin access required" }, 403)
     }
 
+    const memberStoreId = memberData.store_id
+
+    async function categoryBelongsToStore(categoryId: string) {
+      const { data: category, error } = await supabase
+        .from("service_categories")
+        .select("id")
+        .eq("id", categoryId)
+        .eq("store_id", memberStoreId)
+        .eq("active", true)
+        .is("deleted_at", null)
+        .maybeSingle()
+
+      return !error && Boolean(category)
+    }
+
     // ============================================================
     // 新增課程
     // ============================================================
     if (req.method === "POST" && action === "create") {
       const body = await req.json()
       const validatedData = validateCreateRequest(body)
+
+      if (
+        validatedData.category_id
+        && !(await categoryBelongsToStore(validatedData.category_id))
+      ) {
+        return jsonResponse({ error: "Service category not found" }, 400)
+      }
 
       // 檢查課程名稱是否已存在
       const { data: existing } = await supabase
@@ -139,6 +174,7 @@ serve(async (req: Request) => {
           duration_minutes: validatedData.duration_minutes,
           price: validatedData.price,
           active: validatedData.active,
+          category_id: validatedData.category_id,
         })
         .select()
         .single()
@@ -223,6 +259,20 @@ serve(async (req: Request) => {
 
       if (updateData.active !== undefined) {
         updatePayload.active = Boolean(updateData.active)
+      }
+
+      if (updateData.category_id !== undefined) {
+        if (updateData.category_id === null || updateData.category_id === "") {
+          updatePayload.category_id = null
+        } else if (
+          typeof updateData.category_id !== "string"
+          || !uuidPattern.test(updateData.category_id)
+          || !(await categoryBelongsToStore(updateData.category_id))
+        ) {
+          return jsonResponse({ error: "Service category not found" }, 400)
+        } else {
+          updatePayload.category_id = updateData.category_id
+        }
       }
 
       // 執行更新

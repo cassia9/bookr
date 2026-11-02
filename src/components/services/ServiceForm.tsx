@@ -1,5 +1,10 @@
 import { useState } from 'react'
-import { createService, updateService, type Service } from '@/lib/services-api'
+import {
+  createService,
+  updateService,
+  type Service,
+  type ServiceCategory,
+} from '@/lib/services-api'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -7,10 +12,12 @@ import Textarea from '@/components/ui/Textarea'
 import FormField from '@/components/ui/FormField'
 import Alert from '@/components/ui/Alert'
 import Toggle from '@/components/ui/Toggle'
+import Select from '@/components/ui/Select'
 import { parseIntegerInput } from '@/lib/numeric-input'
 
 interface ServiceFormProps {
   service?: Service | null
+  categories: ServiceCategory[]
   onSuccess: () => void
   onCancel: () => void
 }
@@ -22,10 +29,11 @@ function formFromService(service?: Service | null) {
     duration_minutes: String(service?.duration_minutes ?? 60),
     price: String(service?.price ?? 0),
     active: service?.active ?? true,
+    category_id: service?.category_id ?? '',
   }
 }
 
-export default function ServiceForm({ service, onSuccess, onCancel }: ServiceFormProps) {
+export default function ServiceForm({ service, categories, onSuccess, onCancel }: ServiceFormProps) {
   const [form, setForm] = useState(() => formFromService(service))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,6 +69,7 @@ export default function ServiceForm({ service, onSuccess, onCancel }: ServiceFor
           duration_minutes: values.durationMinutes,
           price: values.price,
           active: form.active,
+          category_id: form.category_id || null,
         })
       } else {
         await createService({
@@ -69,6 +78,7 @@ export default function ServiceForm({ service, onSuccess, onCancel }: ServiceFor
           duration_minutes: values.durationMinutes,
           price: values.price,
           active: form.active,
+          category_id: form.category_id || null,
         })
       }
       onSuccess()
@@ -120,6 +130,23 @@ export default function ServiceForm({ service, onSuccess, onCancel }: ServiceFor
             onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
             placeholder="簡短描述課程內容和效果…"
             rows={3}
+            disabled={loading}
+          />
+        </FormField>
+
+        <FormField label="課程類別" hint="未選擇時歸入其他服務">
+          <Select
+            value={form.category_id}
+            onChange={categoryId => setForm(current => ({ ...current, category_id: categoryId }))}
+            options={[
+              { value: '', label: '其他服務（未分類）' },
+              ...categories
+                .filter(category => category.active || category.id === form.category_id)
+                .map(category => ({
+                  value: category.id,
+                  label: category.active ? category.name : `${category.name}（已停用）`,
+                })),
+            ]}
             disabled={loading}
           />
         </FormField>

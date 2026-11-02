@@ -30,6 +30,7 @@ export interface Database {
           line_login_channel_id: string | null
           booking_confirmation_mode: 'manual' | 'auto'
           booking_enabled: boolean
+          same_day_booking_lead_minutes: 15 | 30 | 60 | 120
           store_code: string | null
           booking_slug: string | null
           timezone: string
@@ -93,11 +94,27 @@ export interface Database {
           duration_minutes: number
           price: number
           active: boolean
+          category_id: string | null
           store_id: string
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['services']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['services']['Insert']>
+      }
+      service_categories: {
+        Row: {
+          id: string
+          store_id: string
+          name: string
+          sort_order: number
+          active: boolean
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['service_categories']['Row'], 'id' | 'created_at' | 'updated_at' | 'deleted_at'>
+          & { id?: string; deleted_at?: string | null }
+        Update: Partial<Database['public']['Tables']['service_categories']['Insert']>
       }
       bookings: {
         Row: {

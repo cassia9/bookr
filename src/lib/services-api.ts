@@ -7,6 +7,7 @@ export interface Service {
   duration_minutes: number
   price: number
   active: boolean
+  category_id: string | null
   store_id: string
   created_at: string
   deleted_at?: string
@@ -18,6 +19,7 @@ export interface CreateServiceRequest {
   duration_minutes: number
   price: number
   active?: boolean
+  category_id?: string | null
 }
 
 export interface UpdateServiceRequest {
@@ -27,6 +29,18 @@ export interface UpdateServiceRequest {
   duration_minutes?: number
   price?: number
   active?: boolean
+  category_id?: string | null
+}
+
+export interface ServiceCategory {
+  id: string
+  store_id: string
+  name: string
+  sort_order: number
+  active: boolean
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
 }
 
 /**
@@ -36,7 +50,7 @@ export interface UpdateServiceRequest {
  */
 export async function callServicesAPI(
   action: 'create' | 'update' | 'delete',
-  body: any
+  body: CreateServiceRequest | UpdateServiceRequest | { service_id: string },
 ) {
   const { data: sessionData } = await supabase.auth.getSession()
   const token = sessionData?.session?.access_token
@@ -92,6 +106,80 @@ export async function getActiveServices() {
 
   if (error) throw error
   return data as Service[]
+}
+
+export async function getServiceCategories() {
+  const { data, error } = await supabase
+    .from('service_categories')
+    .select('*')
+    .is('deleted_at', null)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
+
+  if (error) throw error
+  return data as ServiceCategory[]
+}
+
+export async function createServiceCategory(
+  storeId: string,
+  input: Pick<ServiceCategory, 'name' | 'sort_order' | 'active'>,
+) {
+  const { data, error } = await supabase
+    .from('service_categories')
+    .insert({
+      store_id: storeId,
+      name: input.name.trim(),
+      sort_order: input.sort_order,
+      active: input.active,
+    })
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data as ServiceCategory
+}
+
+export async function updateServiceCategory(
+  categoryId: string,
+  input: Partial<Pick<ServiceCategory, 'name' | 'sort_order' | 'active'>>,
+) {
+  const payload = {
+    ...input,
+    ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+  }
+  const { data, error } = await supabase
+    .from('service_categories')
+    .update(payload)
+    .eq('id', categoryId)
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data as ServiceCategory
+}
+
+export async function saveServiceCategories(
+  storeId: string,
+  categories: Array<Pick<ServiceCategory, 'id' | 'name' | 'sort_order' | 'active'>>,
+) {
+  if (categories.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('service_categories')
+    .upsert(
+      categories.map(category => ({
+        id: category.id,
+        store_id: storeId,
+        name: category.name.trim(),
+        sort_order: category.sort_order,
+        active: category.active,
+      })),
+      { onConflict: 'id' },
+    )
+    .select('*')
+
+  if (error) throw error
+  return data as ServiceCategory[]
 }
 
 /**

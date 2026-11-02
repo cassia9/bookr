@@ -307,6 +307,7 @@ function ChannelsSettings() {
   const [storeCode, setStoreCode] = useState('')
   const [confirmMode, setConfirmMode] = useState<'manual' | 'auto'>('manual')
   const [bookingEnabled, setBookingEnabled] = useState(true)
+  const [sameDayBookingLeadMinutes, setSameDayBookingLeadMinutes] = useState<15 | 30 | 60 | 120>(120)
 
   const activeConnection = connectionHistory.find(connection => connection.status === 'active') ?? null
   const bookingUrl = storeCode
@@ -316,7 +317,7 @@ function ChannelsSettings() {
   const loadSettings = useCallback(async () => {
     const { data: store, error: storeError } = await supabase
       .from('stores')
-      .select('liff_id, line_login_channel_id, booking_confirmation_mode, booking_enabled, store_code')
+      .select('liff_id, line_login_channel_id, booking_confirmation_mode, booking_enabled, store_code, same_day_booking_lead_minutes')
       .eq('id', storeId)
       .single()
 
@@ -329,6 +330,9 @@ function ChannelsSettings() {
     setStoreCode(store.store_code ?? '')
     setConfirmMode((store.booking_confirmation_mode ?? 'manual') as 'manual' | 'auto')
     setBookingEnabled(store.booking_enabled ?? true)
+    setSameDayBookingLeadMinutes(
+      (store.same_day_booking_lead_minutes ?? 120) as 15 | 30 | 60 | 120,
+    )
 
     if (!isAdmin) {
       setConnectionHistory([])
@@ -696,6 +700,7 @@ function ChannelsSettings() {
       .update({
         booking_confirmation_mode: confirmMode,
         booking_enabled: bookingEnabled,
+        same_day_booking_lead_minutes: sameDayBookingLeadMinutes,
       })
       .eq('id', storeId)
     setSaving(false)
@@ -776,7 +781,28 @@ function ChannelsSettings() {
               { value: 'manual', label: '待確認 — 店家手動確認每筆預約' },
               { value: 'auto',   label: '自動確認 — 客戶預約後立即確認' },
             ]}
+            disabled={!isAdmin}
           />
+        </FormField>
+
+        <FormField
+          label="當日最早可預約時間"
+          hint="只影響客戶端今日時段；後台仍可替熟客安排特殊時段。"
+        >
+          <Select
+            value={String(sameDayBookingLeadMinutes)}
+            onChange={value => setSameDayBookingLeadMinutes(Number(value) as 15 | 30 | 60 | 120)}
+            options={[
+              { value: '15', label: '當下 15 分鐘後' },
+              { value: '30', label: '當下 30 分鐘後' },
+              { value: '60', label: '當下 1 小時後' },
+              { value: '120', label: '當下 2 小時後' },
+            ]}
+            disabled={!isAdmin}
+          />
+          <p className="mt-2 text-xs leading-5 text-slate-400">
+            系統會配合 15 分鐘時段往後取整；例如現在 10:07，選擇 30 分鐘後，最早顯示 10:45。
+          </p>
         </FormField>
 
         <div className="flex items-center justify-between py-1">
@@ -790,11 +816,12 @@ function ChannelsSettings() {
             checked={bookingEnabled}
             onChange={setBookingEnabled}
             ariaLabel="切換線上預約"
+            disabled={!isAdmin}
           />
         </div>
 
         <div className="flex justify-end border-t border-slate-100 pt-5">
-          <Button variant="primary" loading={saving} onClick={handleSave}>
+          <Button variant="primary" loading={saving} onClick={handleSave} disabled={!isAdmin}>
             <Save size={15} />
             儲存此區設定
           </Button>
