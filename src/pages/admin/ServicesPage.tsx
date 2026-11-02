@@ -163,7 +163,7 @@ export default function ServicesPage() {
         ) : paged.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400">
             <p className="text-sm">{filtered.length === 0 ? '暫無課程' : '沒有符合條件的課程'}</p>
-            {services.length === 0 && (
+            {services.length === 0 && isAdmin && (
               <Button variant="secondary" size="sm" onClick={() => setShowForm(true)}>
                 新增第一個課程
               </Button>

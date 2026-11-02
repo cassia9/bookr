@@ -162,6 +162,8 @@ export async function saveServiceCategories(
   storeId: string,
   categories: Array<Pick<ServiceCategory, 'id' | 'name' | 'sort_order' | 'active'>>,
 ) {
+  if (categories.length === 0) return []
+
   const { data, error } = await supabase
     .from('service_categories')
     .upsert(
