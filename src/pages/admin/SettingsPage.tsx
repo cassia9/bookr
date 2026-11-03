@@ -98,18 +98,21 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 // ── 基本設定 Tab ─────────────────────────────────────────────────────────────
 
 function BasicSettings() {
+  const { isAdmin, profile } = useAuth()
+  const storeId = profile?.store_id ?? STORE_ID
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [openHour, setOpenHour] = useState(9)
   const [closeHour, setCloseHour] = useState(21)
   const [bufferMinutes, setBufferMinutes] = useState(30)
   const [storeName, setStoreName] = useState('')
+  const [sameDayBookingLeadMinutes, setSameDayBookingLeadMinutes] = useState<15 | 30 | 60 | 120>(120)
 
   useEffect(() => {
     supabase
       .from('stores')
-      .select('name, open_time, close_time, default_buffer_minutes')
-      .eq('id', STORE_ID)
+      .select('name, open_time, close_time, default_buffer_minutes, same_day_booking_lead_minutes')
+      .eq('id', storeId)
       .single()
       .then(({ data }) => {
         if (data) {
@@ -117,10 +120,13 @@ function BasicSettings() {
           setOpenHour(parseInt(data.open_time ?? '09:00', 10))
           setCloseHour(parseInt(data.close_time ?? '21:00', 10))
           setBufferMinutes(data.default_buffer_minutes ?? 30)
+          setSameDayBookingLeadMinutes(
+            (data.same_day_booking_lead_minutes ?? 120) as 15 | 30 | 60 | 120,
+          )
         }
         setLoading(false)
       })
-  }, [])
+  }, [storeId])
 
   async function handleSave() {
     if (openHour >= closeHour) {
@@ -135,11 +141,12 @@ function BasicSettings() {
         open_time: `${String(openHour).padStart(2, '0')}:00:00`,
         close_time: `${String(closeHour).padStart(2, '0')}:00:00`,
         default_buffer_minutes: bufferMinutes,
+        same_day_booking_lead_minutes: sameDayBookingLeadMinutes,
       })
-      .eq('id', STORE_ID)
+      .eq('id', storeId)
     setSaving(false)
     if (error) toast.error('儲存失敗', error.message)
-    else toast.success('設定已儲存', '行事曆和甘特圖將在下次開啟時套用')
+    else toast.success('設定已儲存', '行事曆、甘特圖與客戶預約頁將套用最新設定')
   }
 
   if (loading) return (
@@ -202,6 +209,28 @@ function BasicSettings() {
           <CheckCircle size={14} className="text-emerald-500 shrink-0" />
           可預約時段：{String(openHour).padStart(2, '0')}:00 – {String(closeHour).padStart(2, '0')}:00
           <span className="text-slate-400 ml-1">（共 {closeHour - openHour} 小時）</span>
+        </div>
+
+        <div className="border-t border-slate-100 pt-5">
+          <FormField
+            label="當日最早可預約時間"
+            hint="客戶最早能選擇距離現在多久後的今日時段；後台新增預約不受限制。"
+          >
+            <Select
+              value={String(sameDayBookingLeadMinutes)}
+              onChange={value => setSameDayBookingLeadMinutes(Number(value) as 15 | 30 | 60 | 120)}
+              options={[
+                { value: '15', label: '當下 15 分鐘後' },
+                { value: '30', label: '當下 30 分鐘後' },
+                { value: '60', label: '當下 1 小時後' },
+                { value: '120', label: '當下 2 小時後' },
+              ]}
+              disabled={!isAdmin}
+            />
+            <p className="mt-2 text-xs leading-5 text-slate-400">
+              系統會配合 15 分鐘時段往後取整；例如現在 10:07，選擇 30 分鐘後，最早顯示 10:45。
+            </p>
+          </FormField>
         </div>
       </section>
 
@@ -307,7 +336,6 @@ function ChannelsSettings() {
   const [storeCode, setStoreCode] = useState('')
   const [confirmMode, setConfirmMode] = useState<'manual' | 'auto'>('manual')
   const [bookingEnabled, setBookingEnabled] = useState(true)
-  const [sameDayBookingLeadMinutes, setSameDayBookingLeadMinutes] = useState<15 | 30 | 60 | 120>(120)
 
   const activeConnection = connectionHistory.find(connection => connection.status === 'active') ?? null
   const bookingUrl = storeCode
@@ -317,7 +345,7 @@ function ChannelsSettings() {
   const loadSettings = useCallback(async () => {
     const { data: store, error: storeError } = await supabase
       .from('stores')
-      .select('liff_id, line_login_channel_id, booking_confirmation_mode, booking_enabled, store_code, same_day_booking_lead_minutes')
+      .select('liff_id, line_login_channel_id, booking_confirmation_mode, booking_enabled, store_code')
       .eq('id', storeId)
       .single()
 
@@ -330,9 +358,6 @@ function ChannelsSettings() {
     setStoreCode(store.store_code ?? '')
     setConfirmMode((store.booking_confirmation_mode ?? 'manual') as 'manual' | 'auto')
     setBookingEnabled(store.booking_enabled ?? true)
-    setSameDayBookingLeadMinutes(
-      (store.same_day_booking_lead_minutes ?? 120) as 15 | 30 | 60 | 120,
-    )
 
     if (!isAdmin) {
       setConnectionHistory([])
@@ -700,7 +725,6 @@ function ChannelsSettings() {
       .update({
         booking_confirmation_mode: confirmMode,
         booking_enabled: bookingEnabled,
-        same_day_booking_lead_minutes: sameDayBookingLeadMinutes,
       })
       .eq('id', storeId)
     setSaving(false)
@@ -783,26 +807,6 @@ function ChannelsSettings() {
             ]}
             disabled={!isAdmin}
           />
-        </FormField>
-
-        <FormField
-          label="當日最早可預約時間"
-          hint="只影響客戶端今日時段；後台仍可替熟客安排特殊時段。"
-        >
-          <Select
-            value={String(sameDayBookingLeadMinutes)}
-            onChange={value => setSameDayBookingLeadMinutes(Number(value) as 15 | 30 | 60 | 120)}
-            options={[
-              { value: '15', label: '當下 15 分鐘後' },
-              { value: '30', label: '當下 30 分鐘後' },
-              { value: '60', label: '當下 1 小時後' },
-              { value: '120', label: '當下 2 小時後' },
-            ]}
-            disabled={!isAdmin}
-          />
-          <p className="mt-2 text-xs leading-5 text-slate-400">
-            系統會配合 15 分鐘時段往後取整；例如現在 10:07，選擇 30 分鐘後，最早顯示 10:45。
-          </p>
         </FormField>
 
         <div className="flex items-center justify-between py-1">
