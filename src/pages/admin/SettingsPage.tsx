@@ -134,7 +134,7 @@ function BasicSettings() {
       return
     }
     setSaving(true)
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('stores')
       .update({
         name: storeName.trim() || undefined,
@@ -144,9 +144,22 @@ function BasicSettings() {
         same_day_booking_lead_minutes: sameDayBookingLeadMinutes,
       })
       .eq('id', storeId)
+      .select('same_day_booking_lead_minutes')
+      .single()
     setSaving(false)
-    if (error) toast.error('儲存失敗', error.message)
-    else toast.success('設定已儲存', '行事曆、甘特圖與客戶預約頁將套用最新設定')
+    if (error || !data) {
+      toast.error('儲存失敗', error?.message ?? '找不到可更新的店家資料，請重新整理後再試')
+      return
+    }
+
+    const savedLeadMinutes = data.same_day_booking_lead_minutes as 15 | 30 | 60 | 120
+    if (savedLeadMinutes !== sameDayBookingLeadMinutes) {
+      toast.error('儲存未完成', '店家設定尚未更新，請重新整理後再試')
+      return
+    }
+
+    setSameDayBookingLeadMinutes(savedLeadMinutes)
+    toast.success('設定已儲存', '行事曆、甘特圖與客戶預約頁將套用最新設定')
   }
 
   if (loading) return (
@@ -261,7 +274,7 @@ function BasicSettings() {
       <StoreClosuresSection />
 
       <div className="flex justify-end">
-        <Button variant="primary" loading={saving} onClick={handleSave}>
+        <Button variant="primary" loading={saving} onClick={handleSave} disabled={!isAdmin}>
           <Save size={15} />
           儲存設定
         </Button>
