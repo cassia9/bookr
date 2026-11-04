@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { format, addMonths, isSameDay, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
@@ -861,34 +861,50 @@ function Step4Time({ storeId, date, serviceId, practitionerId, selected, notice,
   const [slots, setSlots]     = useState<SlotItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+  const requestIdRef = useRef(0)
+
+  const loadSlots = useCallback(async (showLoading = true) => {
+    const requestId = ++requestIdRef.current
+    if (showLoading) {
+      setLoading(true)
+    }
+    setLoadError('')
+    const { data, error } = await supabase.rpc('get_available_slots', {
+      p_date:            date,
+      p_service_id:      serviceId,
+      p_practitioner_id: practitionerId,
+      p_store_id:        storeId,
+    })
+
+    if (requestId !== requestIdRef.current) return
+    if (error) {
+      setSlots([])
+      setLoadError('可預約時段暫時無法載入，請稍後再試')
+      setLoading(false)
+      return
+    }
+    setSlots((data ?? []) as SlotItem[])
+    setLoading(false)
+  }, [storeId, date, serviceId, practitionerId])
 
   useEffect(() => {
-    let active = true
+    const initialLoadTimer = window.setTimeout(() => void loadSlots(), 0)
+    return () => {
+      window.clearTimeout(initialLoadTimer)
+      requestIdRef.current += 1
+    }
+  }, [loadSlots])
 
-    async function loadSlots() {
-      setLoading(true)
-      setLoadError('')
-      const { data, error } = await supabase.rpc('get_available_slots', {
-        p_date:            date,
-        p_service_id:      serviceId,
-        p_practitioner_id: practitionerId,
-        p_store_id:        storeId,
-      })
-
-      if (!active) return
-      if (error) {
-        setSlots([])
-        setLoadError('可預約時段暫時無法載入，請稍後再試')
-        setLoading(false)
-        return
+  useEffect(() => {
+    const refreshVisibleSlots = () => {
+      if (document.visibilityState === 'visible') {
+        void loadSlots(false)
       }
-      setSlots((data ?? []) as SlotItem[])
-      setLoading(false)
     }
 
-    void loadSlots()
-    return () => { active = false }
-  }, [storeId, date, serviceId, practitionerId])
+    document.addEventListener('visibilitychange', refreshVisibleSlots)
+    return () => document.removeEventListener('visibilitychange', refreshVisibleSlots)
+  }, [loadSlots])
 
   const dateLabel = format(parseISO(date), 'M月d日（EEE）', { locale: zhTW })
 
