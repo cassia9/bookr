@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { format, addMonths, isSameDay, parseISO, addHours } from 'date-fns'
+import { format, addMonths, isSameDay, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale/zh-TW'
 import { ChevronLeft, ChevronRight, CheckCircle, User, Clock,
          CalendarDays, Phone, MessageSquare, MapPin, AlertCircle, UserPlus } from 'lucide-react'
@@ -18,6 +18,7 @@ import Input from '@/components/ui/Input'
 import FormField from '@/components/ui/FormField'
 import Button from '@/components/ui/Button'
 import Textarea from '@/components/ui/Textarea'
+import Select from '@/components/ui/Select'
 import type { Service, Practitioner } from '@/types/database'
 
 const STEP_LABELS = ['服務', '人員', '日期', '時段', '資料']
@@ -45,16 +46,25 @@ interface StoreInfo {
 
 type PublicService = Pick<
   Service,
-  'id' | 'name' | 'description' | 'duration_minutes' | 'price'
+  'id' | 'name' | 'description' | 'duration_minutes' | 'price' | 'category_id'
 >
+
+interface PublicServiceCategory {
+  id: string
+  name: string
+  sort_order: number
+}
 
 type PublicPractitioner = Pick<Practitioner, 'id' | 'full_name' | 'title' | 'color'>
 
 interface PublicBookingCatalog {
   store: StoreInfo
+  categories: PublicServiceCategory[]
   services: PublicService[]
   practitioners: PublicPractitioner[]
 }
+
+type ServiceSort = 'recommended' | 'duration_asc' | 'duration_desc' | 'price_asc' | 'price_desc'
 
 interface BookingDraft {
   service:            PublicService | null
@@ -88,6 +98,7 @@ async function getFunctionErrorResult(error: unknown): Promise<BookingResult | n
 function bookingErrorMessage(code?: string) {
   if (code === 'CONFLICT') return '此時段剛被預約，請返回重新選擇時段'
   if (code === 'STORE_CLOSED') return '店家當日休息，請返回選擇其他日期'
+  if (code === 'BOOKING_TOO_SOON') return '店家已更新最早可預約時間，請重新選擇時段'
   if (code === 'PHONE_LINK_CONFLICT') return '此電話已連結其他 LINE 帳號，請聯絡店家協助確認'
   if (code === 'PHONE_ALREADY_REGISTERED') return '新電話已由其他客戶使用，請聯絡店家協助修改'
   if (code === 'LINE_TOKEN_REJECTED' || code === 'INVALID_LINE_TOKEN') {
@@ -114,8 +125,11 @@ export default function BookingPage() {
   const [store, setStore] = useState<StoreInfo | null>(null)
   const [storeError, setStoreError] = useState(storeParam ? '' : '無效的預約連結')
   const [services, setServices] = useState<PublicService[]>([])
+  const [categories, setCategories] = useState<PublicServiceCategory[]>([])
   const [practitioners, setPractitioners] = useState<PublicPractitioner[]>([])
   const [storeClosures, setStoreClosures] = useState<PublicStoreClosure[]>([])
+  const [serviceCategoryFilter, setServiceCategoryFilter] = useState('all')
+  const [serviceSort, setServiceSort] = useState<ServiceSort>('recommended')
 
   // LINE LIFF state
   const [lineAvatar, setLineAvatar] = useState<string | null>(null)
@@ -134,6 +148,7 @@ export default function BookingPage() {
   const [confirmedStatus, setConfirmedStatus] = useState<'pending' | 'confirmed'>('pending')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [slotNotice, setSlotNotice] = useState('')
 
   // ── 解析 storeParam（UUID 或 slug）──────────────────────────────────
   useEffect(() => {
@@ -195,6 +210,7 @@ export default function BookingPage() {
       if (!catalog?.store) { setStoreError('找不到此預約頁面'); return }
       if (!catalog.store.booking_enabled) { setStoreError('此店家目前暫停線上預約'); return }
       setStore(catalog.store)
+      setCategories(catalog.categories ?? [])
       setServices(catalog.services ?? [])
       setPractitioners(catalog.practitioners ?? [])
 
@@ -268,7 +284,14 @@ export default function BookingPage() {
     if (!result) { setSubmitError('系統錯誤，請稍後再試'); return }
 
     if (!result.ok) {
-      setSubmitError(bookingErrorMessage(result.code || result.error))
+      const errorCode = result.code || result.error
+      if (errorCode === 'BOOKING_TOO_SOON') {
+        setDraft(current => ({ ...current, slot: null }))
+        setSlotNotice(bookingErrorMessage(errorCode))
+        setStep(4)
+        return
+      }
+      setSubmitError(bookingErrorMessage(errorCode))
       return
     }
 
@@ -365,6 +388,11 @@ export default function BookingPage() {
         {step === 1 && (
           <Step1Service
             services={services}
+            categories={categories}
+            categoryFilter={serviceCategoryFilter}
+            sort={serviceSort}
+            onCategoryFilterChange={setServiceCategoryFilter}
+            onSortChange={setServiceSort}
             onSelect={svc => { setDraft(d => ({ ...d, service: svc })); setStep(2) }}
           />
         )}
@@ -379,7 +407,11 @@ export default function BookingPage() {
         {step === 3 && (
           <Step3Date
             closures={storeClosures}
-            onSelect={date => { setDraft(d => ({ ...d, date, slot: null })); setStep(4) }}
+            onSelect={date => {
+              setDraft(d => ({ ...d, date, slot: null }))
+              setSlotNotice('')
+              setStep(4)
+            }}
             onBack={() => setStep(2)}
           />
         )}
@@ -390,8 +422,14 @@ export default function BookingPage() {
             serviceId={draft.service.id}
             practitionerId={draft.practitionerChoice?.id ?? null}
             selected={draft.slot}
-            onSelect={slot => { setDraft(d => ({ ...d, slot })); setStep(5) }}
-            onBack={() => setStep(3)}
+            notice={slotNotice}
+            onSelect={slot => {
+              setDraft(d => ({ ...d, slot }))
+              setSlotNotice('')
+              setSubmitError('')
+              setStep(5)
+            }}
+            onBack={() => { setSlotNotice(''); setStep(3) }}
           />
         )}
         {step === 5 && (
@@ -438,46 +476,185 @@ export default function BookingPage() {
 
 // ── Step 1: 選擇服務 ───────────────────────────────────────────────────
 
-function Step1Service({ services, onSelect }: {
+const SERVICE_SORT_OPTIONS = [
+  { value: 'recommended', label: '推薦排序' },
+  { value: 'duration_asc', label: '時間：短到長' },
+  { value: 'duration_desc', label: '時間：長到短' },
+  { value: 'price_asc', label: '價格：低到高' },
+  { value: 'price_desc', label: '價格：高到低' },
+]
+
+function sortServices(services: PublicService[], sort: ServiceSort) {
+  return [...services].sort((left, right) => {
+    let comparison: number
+
+    if (sort === 'duration_asc' || sort === 'duration_desc') {
+      comparison = left.duration_minutes - right.duration_minutes
+      if (sort === 'duration_desc') comparison *= -1
+      if (comparison === 0) comparison = left.price - right.price
+    } else if (sort === 'price_asc' || sort === 'price_desc') {
+      comparison = left.price - right.price
+      if (sort === 'price_desc') comparison *= -1
+      if (comparison === 0) comparison = left.duration_minutes - right.duration_minutes
+    } else {
+      comparison = left.duration_minutes - right.duration_minutes
+      if (comparison === 0) comparison = left.price - right.price
+    }
+
+    if (comparison !== 0) return comparison
+    comparison = left.name.localeCompare(right.name, 'zh-TW', { numeric: true, sensitivity: 'base' })
+    return comparison !== 0 ? comparison : left.id.localeCompare(right.id)
+  })
+}
+
+function Step1Service({
+  services,
+  categories,
+  categoryFilter,
+  sort,
+  onCategoryFilterChange,
+  onSortChange,
+  onSelect,
+}: {
   services: PublicService[]
+  categories: PublicServiceCategory[]
+  categoryFilter: string
+  sort: ServiceSort
+  onCategoryFilterChange: (categoryId: string) => void
+  onSortChange: (sort: ServiceSort) => void
   onSelect: (s: PublicService) => void
 }) {
+  const visibleCategories = categories
+    .filter(category => services.some(service => service.category_id === category.id))
+    .sort((left, right) => (
+      left.sort_order - right.sort_order
+      || left.name.localeCompare(right.name, 'zh-TW')
+      || left.id.localeCompare(right.id)
+    ))
+  const hasOtherServices = services.some(service => (
+    !service.category_id || !categories.some(category => category.id === service.category_id)
+  ))
+  const groups = [
+    ...visibleCategories.map(category => ({
+      id: category.id,
+      name: category.name,
+      services: services.filter(service => service.category_id === category.id),
+    })),
+    ...(hasOtherServices ? [{
+      id: 'other',
+      name: '其他服務',
+      services: services.filter(service => (
+        !service.category_id || !categories.some(category => category.id === service.category_id)
+      )),
+    }] : []),
+  ]
+  const displayedGroups = (categoryFilter === 'all'
+    ? groups
+    : groups.filter(group => group.id === categoryFilter))
+    .map(group => ({ ...group, services: sortServices(group.services, sort) }))
+
   return (
     <div>
       <h2 className="text-lg font-semibold text-slate-900 mb-1">選擇服務</h2>
-      <p className="text-sm text-slate-400 mb-5">請選擇您想要預約的服務項目</p>
+      <p className="text-sm text-slate-400 mb-4">請依類別瀏覽，或調整時間與價格排序</p>
       {services.length === 0 ? (
         <div className="text-center py-12 text-slate-400">目前尚無可預約服務</div>
       ) : (
-        <div className="space-y-3">
-          {services.map(svc => (
-            <button
-              key={svc.id}
-              onClick={() => onSelect(svc)}
-              className="w-full text-left bg-white rounded-2xl border border-slate-100 shadow-sm p-4 hover:border-indigo-300 hover:shadow-md active:scale-[0.98] transition-all"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-900">{svc.name}</p>
-                  {svc.description && (
-                    <p className="text-sm text-slate-400 mt-0.5 line-clamp-2">{svc.description}</p>
-                  )}
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="text-xs text-slate-500 flex items-center gap-1">
-                      <Clock size={12} strokeWidth={1.5} /> {svc.duration_minutes} 分鐘
-                    </span>
-                    {svc.price > 0 && (
-                      <span className="text-xs font-semibold text-indigo-600">
-                        NT$ {svc.price.toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ChevronRight size={18} strokeWidth={1.5} className="text-slate-300 shrink-0" />
+        <>
+          <div className="-mx-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex w-max gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={categoryFilter === 'all' ? 'primary' : 'secondary'}
+                className="rounded-full"
+                onClick={() => onCategoryFilterChange('all')}
+              >
+                全部
+              </Button>
+              {groups.map(group => (
+                <Button
+                  key={group.id}
+                  type="button"
+                  size="sm"
+                  variant={categoryFilter === group.id ? 'primary' : 'secondary'}
+                  className="rounded-full"
+                  onClick={() => onCategoryFilterChange(group.id)}
+                >
+                  {group.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-5 mt-2 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-slate-700">排序方式</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">同類課程依您的需求排列</p>
               </div>
-            </button>
-          ))}
-        </div>
+              <div className="w-40 shrink-0">
+                <Select
+                  value={sort}
+                  onChange={value => {
+                    if (value) onSortChange(value as ServiceSort)
+                  }}
+                  options={SERVICE_SORT_OPTIONS}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {displayedGroups.map(group => (
+              <section key={group.id}>
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-700">{group.name}</h3>
+                  <span className="text-xs text-slate-400">{group.services.length} 項</span>
+                </div>
+                <div className="space-y-3">
+                  {group.services.map(svc => (
+                    <Button
+                      key={svc.id}
+                      type="button"
+                      variant="ghost"
+                      onClick={() => onSelect(svc)}
+                      className="h-auto w-full justify-start rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm hover:border-indigo-300 hover:bg-white hover:shadow-md"
+                    >
+                      <div className="flex w-full items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-slate-900">{svc.name}</p>
+                          {svc.description && (
+                            <p className="mt-0.5 line-clamp-2 text-sm font-normal text-slate-400">
+                              {svc.description}
+                            </p>
+                          )}
+                          <div className="mt-2 flex items-center gap-3">
+                            <span className="flex items-center gap-1 text-xs font-normal text-slate-500">
+                              <Clock size={12} strokeWidth={1.5} /> {svc.duration_minutes} 分鐘
+                            </span>
+                            {svc.price > 0 && (
+                              <span className="text-xs font-semibold text-indigo-600">
+                                NT$ {svc.price.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <ChevronRight size={18} strokeWidth={1.5} className="shrink-0 text-slate-300" />
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+              </section>
+            ))}
+
+            {displayedGroups.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-10 text-center text-sm text-slate-400">
+                此類別目前沒有可預約服務
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   )
@@ -551,7 +728,7 @@ function Step3Date({ closures, onSelect, onBack }: {
   onBack: () => void
 }) {
   const today   = new Date()
-  const minDate = addHours(today, 2)
+  const minDate = today
   const maxDate = addMonths(today, 2)
   const [view, setView] = useState({ y: today.getFullYear(), m: today.getMonth() })
 
@@ -566,7 +743,7 @@ function Step3Date({ closures, onSelect, onBack }: {
     <div>
       <BackButton onClick={onBack} />
       <h2 className="text-lg font-semibold text-slate-900 mb-1">選擇日期</h2>
-      <p className="text-sm text-slate-400 mb-5">可預約範圍：2 小時後 ～ 2 個月內</p>
+      <p className="text-sm text-slate-400 mb-5">可預約範圍：今天 ～ 2 個月內</p>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <div className="flex items-center justify-between mb-4">
@@ -671,37 +848,63 @@ function SlotGroup({ label, items, selected, onSelect }: {
   )
 }
 
-function Step4Time({ storeId, date, serviceId, practitionerId, selected, onSelect, onBack }: {
+function Step4Time({ storeId, date, serviceId, practitionerId, selected, notice, onSelect, onBack }: {
   storeId:          string
   date:             string
   serviceId:        string
   practitionerId:   string | null
   selected:         SlotItem | null
+  notice:           string
   onSelect:         (slot: SlotItem) => void
   onBack:           () => void
 }) {
   const [slots, setSlots]     = useState<SlotItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const requestIdRef = useRef(0)
+
+  const loadSlots = useCallback(async (showLoading = true) => {
+    const requestId = ++requestIdRef.current
+    if (showLoading) {
+      setLoading(true)
+    }
+    setLoadError('')
+    const { data, error } = await supabase.rpc('get_available_slots', {
+      p_date:            date,
+      p_service_id:      serviceId,
+      p_practitioner_id: practitionerId,
+      p_store_id:        storeId,
+    })
+
+    if (requestId !== requestIdRef.current) return
+    if (error) {
+      setSlots([])
+      setLoadError('可預約時段暫時無法載入，請稍後再試')
+      setLoading(false)
+      return
+    }
+    setSlots((data ?? []) as SlotItem[])
+    setLoading(false)
+  }, [storeId, date, serviceId, practitionerId])
 
   useEffect(() => {
-    let active = true
+    const initialLoadTimer = window.setTimeout(() => void loadSlots(), 0)
+    return () => {
+      window.clearTimeout(initialLoadTimer)
+      requestIdRef.current += 1
+    }
+  }, [loadSlots])
 
-    async function loadSlots() {
-      const { data } = await supabase.rpc('get_available_slots', {
-        p_date:            date,
-        p_service_id:      serviceId,
-        p_practitioner_id: practitionerId,
-        p_store_id:        storeId,
-      })
-
-      if (!active) return
-      setSlots((data ?? []) as SlotItem[])
-      setLoading(false)
+  useEffect(() => {
+    const refreshVisibleSlots = () => {
+      if (document.visibilityState === 'visible') {
+        void loadSlots(false)
+      }
     }
 
-    void loadSlots()
-    return () => { active = false }
-  }, [storeId, date, serviceId, practitionerId])
+    document.addEventListener('visibilitychange', refreshVisibleSlots)
+    return () => document.removeEventListener('visibilitychange', refreshVisibleSlots)
+  }, [loadSlots])
 
   const dateLabel = format(parseISO(date), 'M月d日（EEE）', { locale: zhTW })
 
@@ -715,9 +918,20 @@ function Step4Time({ storeId, date, serviceId, practitionerId, selected, onSelec
       <h2 className="text-lg font-semibold text-slate-900 mb-1">選擇時段</h2>
       <p className="text-sm text-slate-400 mb-5">{dateLabel}</p>
 
+      {notice && (
+        <div className="mb-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <span>{notice}</span>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-16">
           <div className="w-7 h-7 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : loadError ? (
+        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-8 text-center text-sm text-red-600">
+          {loadError}
         </div>
       ) : slots.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-2xl border border-slate-100">

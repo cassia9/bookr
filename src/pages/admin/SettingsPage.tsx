@@ -98,18 +98,21 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 // ── 基本設定 Tab ─────────────────────────────────────────────────────────────
 
 function BasicSettings() {
+  const { isAdmin, profile } = useAuth()
+  const storeId = profile?.store_id ?? STORE_ID
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [openHour, setOpenHour] = useState(9)
   const [closeHour, setCloseHour] = useState(21)
   const [bufferMinutes, setBufferMinutes] = useState(30)
   const [storeName, setStoreName] = useState('')
+  const [sameDayBookingLeadMinutes, setSameDayBookingLeadMinutes] = useState<15 | 30 | 60 | 120>(120)
 
   useEffect(() => {
     supabase
       .from('stores')
-      .select('name, open_time, close_time, default_buffer_minutes')
-      .eq('id', STORE_ID)
+      .select('name, open_time, close_time, default_buffer_minutes, same_day_booking_lead_minutes')
+      .eq('id', storeId)
       .single()
       .then(({ data }) => {
         if (data) {
@@ -117,10 +120,13 @@ function BasicSettings() {
           setOpenHour(parseInt(data.open_time ?? '09:00', 10))
           setCloseHour(parseInt(data.close_time ?? '21:00', 10))
           setBufferMinutes(data.default_buffer_minutes ?? 30)
+          setSameDayBookingLeadMinutes(
+            (data.same_day_booking_lead_minutes ?? 120) as 15 | 30 | 60 | 120,
+          )
         }
         setLoading(false)
       })
-  }, [])
+  }, [storeId])
 
   async function handleSave() {
     if (openHour >= closeHour) {
@@ -128,18 +134,32 @@ function BasicSettings() {
       return
     }
     setSaving(true)
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('stores')
       .update({
         name: storeName.trim() || undefined,
         open_time: `${String(openHour).padStart(2, '0')}:00:00`,
         close_time: `${String(closeHour).padStart(2, '0')}:00:00`,
         default_buffer_minutes: bufferMinutes,
+        same_day_booking_lead_minutes: sameDayBookingLeadMinutes,
       })
-      .eq('id', STORE_ID)
+      .eq('id', storeId)
+      .select('same_day_booking_lead_minutes')
+      .single()
     setSaving(false)
-    if (error) toast.error('儲存失敗', error.message)
-    else toast.success('設定已儲存', '行事曆和甘特圖將在下次開啟時套用')
+    if (error || !data) {
+      toast.error('儲存失敗', error?.message ?? '找不到可更新的店家資料，請重新整理後再試')
+      return
+    }
+
+    const savedLeadMinutes = data.same_day_booking_lead_minutes as 15 | 30 | 60 | 120
+    if (savedLeadMinutes !== sameDayBookingLeadMinutes) {
+      toast.error('儲存未完成', '店家設定尚未更新，請重新整理後再試')
+      return
+    }
+
+    setSameDayBookingLeadMinutes(savedLeadMinutes)
+    toast.success('設定已儲存', '行事曆、甘特圖與客戶預約頁將套用最新設定')
   }
 
   if (loading) return (
@@ -203,6 +223,28 @@ function BasicSettings() {
           可預約時段：{String(openHour).padStart(2, '0')}:00 – {String(closeHour).padStart(2, '0')}:00
           <span className="text-slate-400 ml-1">（共 {closeHour - openHour} 小時）</span>
         </div>
+
+        <div className="border-t border-slate-100 pt-5">
+          <FormField
+            label="當日最早可預約時間"
+            hint="客戶最早能選擇距離現在多久後的今日時段；後台新增預約不受限制。"
+          >
+            <Select
+              value={String(sameDayBookingLeadMinutes)}
+              onChange={value => setSameDayBookingLeadMinutes(Number(value) as 15 | 30 | 60 | 120)}
+              options={[
+                { value: '15', label: '當下 15 分鐘後' },
+                { value: '30', label: '當下 30 分鐘後' },
+                { value: '60', label: '當下 1 小時後' },
+                { value: '120', label: '當下 2 小時後' },
+              ]}
+              disabled={!isAdmin}
+            />
+            <p className="mt-2 text-xs leading-5 text-slate-400">
+              系統會配合 15 分鐘時段往後取整；例如現在 10:07，選擇 30 分鐘後，最早顯示 10:45。
+            </p>
+          </FormField>
+        </div>
       </section>
 
       {/* 緩衝時間 */}
@@ -232,7 +274,7 @@ function BasicSettings() {
       <StoreClosuresSection />
 
       <div className="flex justify-end">
-        <Button variant="primary" loading={saving} onClick={handleSave}>
+        <Button variant="primary" loading={saving} onClick={handleSave} disabled={!isAdmin}>
           <Save size={15} />
           儲存設定
         </Button>
@@ -776,6 +818,7 @@ function ChannelsSettings() {
               { value: 'manual', label: '待確認 — 店家手動確認每筆預約' },
               { value: 'auto',   label: '自動確認 — 客戶預約後立即確認' },
             ]}
+            disabled={!isAdmin}
           />
         </FormField>
 
@@ -790,11 +833,12 @@ function ChannelsSettings() {
             checked={bookingEnabled}
             onChange={setBookingEnabled}
             ariaLabel="切換線上預約"
+            disabled={!isAdmin}
           />
         </div>
 
         <div className="flex justify-end border-t border-slate-100 pt-5">
-          <Button variant="primary" loading={saving} onClick={handleSave}>
+          <Button variant="primary" loading={saving} onClick={handleSave} disabled={!isAdmin}>
             <Save size={15} />
             儲存此區設定
           </Button>
