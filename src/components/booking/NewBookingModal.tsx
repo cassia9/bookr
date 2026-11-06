@@ -27,8 +27,6 @@ import {
 } from '../../lib/vouchers-api'
 import { getPublicStoreClosures, type PublicStoreClosure } from '../../lib/store-closures-api'
 
-const STORE_ID = '00000000-0000-0000-0000-000000000001'
-
 /** 取得當下最近的下一個 15 分鐘時段，上限 23:45 */
 // eslint-disable-next-line react-refresh/only-export-components
 export function nearestSlot(): string {
@@ -56,6 +54,7 @@ export interface InitialBooking {
 }
 
 interface Props {
+  storeId: string
   open: boolean
   onClose: () => void
   onSaved: () => void
@@ -114,6 +113,7 @@ function recurrenceCount(
 }
 
 export default function NewBookingModal({
+  storeId,
   open, onClose, onSaved,
   practitioners, clients, services, onRefreshClients,
   mode = 'create', initialBooking,
@@ -234,7 +234,7 @@ export default function NewBookingModal({
   useEffect(() => {
     let active = true
     if (!open || !form.date) return () => { active = false }
-    void getPublicStoreClosures(STORE_ID, form.date, closureRangeEnd || form.date)
+    void getPublicStoreClosures(storeId, form.date, closureRangeEnd || form.date)
       .then(closures => {
         if (active) setStoreClosures(closures)
       })
@@ -242,7 +242,7 @@ export default function NewBookingModal({
         if (active) setStoreClosures([])
       })
     return () => { active = false }
-  }, [closureRangeEnd, form.date, open])
+  }, [closureRangeEnd, form.date, open, storeId])
 
   function resetVoucherChoice() {
     setVoucherChoice('auto')
@@ -266,11 +266,15 @@ export default function NewBookingModal({
 
   /** Combobox 呼叫：建立新客戶，回傳新 client_id */
   async function handleCreateClient(name: string, phone: string, gender: 'male' | 'female' | 'unknown'): Promise<string | null> {
+    if (!storeId) {
+      toast.error('無法確認店家資料', '請重新整理後再試')
+      return null
+    }
     const { data, error } = await supabase.from('clients').insert({
       full_name: name,
       phone:     phone || null,
       gender,
-      store_id:  STORE_ID,
+      store_id:  storeId,
     }).select().single()
     if (error) { toast.error('新增客戶失敗', error.message); return null }
     onRefreshClients()
@@ -325,6 +329,10 @@ export default function NewBookingModal({
   }
 
   async function persistBooking() {
+    if (!storeId) {
+      toast.error('無法確認店家資料', '請重新整理後再試')
+      return
+    }
     setSaving(true)
 
     const price = form.price === '' ? null : parseIntegerInput(form.price)
@@ -347,7 +355,7 @@ export default function NewBookingModal({
         p_idempotency_key: recurrenceIdempotencyKey.current,
         p_buffer_minutes:  form.buffer_minutes,
         p_notes:           form.notes.trim() || null,
-        p_store_id:        STORE_ID,
+        p_store_id:        storeId,
         p_price:           price,
         p_voucher_mode:    voucherMode,
         p_client_voucher_item_id: voucherMode === 'specific' ? voucherChoice : null,
@@ -361,7 +369,7 @@ export default function NewBookingModal({
         p_end_time:        end.toISOString(),
         p_buffer_minutes:  form.buffer_minutes,
         p_notes:           form.notes.trim() || null,
-        p_store_id:        STORE_ID,
+        p_store_id:        storeId,
         p_price:           price,
         p_voucher_mode:    voucherMode,
         p_client_voucher_item_id: voucherMode === 'specific' ? voucherChoice : null,

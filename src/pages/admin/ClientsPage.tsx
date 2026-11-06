@@ -48,7 +48,6 @@ import {
 } from '@/lib/vouchers-api'
 import type { ClientStat } from '@/types/database'
 
-const STORE_ID = '00000000-0000-0000-0000-000000000001'
 const PAGE_SIZE = 20
 
 type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
@@ -114,13 +113,14 @@ function StatCard({ label, value, sub, icon: Icon, color }: {
 // ── 客戶表單（新增 / 編輯）────────────────────────────────────────────────────
 
 interface ClientFormProps {
+  storeId: string
   open: boolean
   onClose: () => void
   onSaved: () => void
   editing?: ClientStat | null
 }
 
-function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
+function ClientFormModal({ storeId, open, onClose, onSaved, editing }: ClientFormProps) {
   const isEdit = !!editing
   const [form, setForm] = useState({
     full_name: editing?.full_name ?? '',
@@ -143,6 +143,10 @@ function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
 
   async function handleSave() {
     if (!validate()) return
+    if (!storeId) {
+      toast.error('無法確認店家資料', '請重新整理後再試')
+      return
+    }
     setSaving(true)
 
     const payload = {
@@ -150,7 +154,7 @@ function ClientFormModal({ open, onClose, onSaved, editing }: ClientFormProps) {
       phone:     form.phone.trim(),
       gender:    form.gender,
       notes:     form.notes.trim() || null,
-      store_id:  STORE_ID,
+      store_id:  storeId,
     }
 
     let error: PostgrestError | null
@@ -790,6 +794,8 @@ function ClientDrawer({ client, open, onClose, onEdit, onDelete, onStatsRefresh 
 // ── 主頁面 ───────────────────────────────────────────────────────────────────
 
 export default function ClientsPage() {
+  const { profile } = useAuth()
+  const storeId = profile?.store_id ?? ''
   const [clients,  setClients]  = useState<ClientStat[]>([])
   const [lineProfiles, setLineProfiles] = useState<Record<string, { displayName: string | null; avatarUrl: string | null }>>({})
   const [loading,  setLoading]  = useState(true)
@@ -804,11 +810,12 @@ export default function ClientsPage() {
   const [deleteTarget,  setDeleteTarget]  = useState<ClientStat | null>(null)
 
   const loadClients = useCallback(async () => {
+    if (!storeId) return
     const [clientsResult, identitiesResult] = await Promise.all([
       supabase
         .from('client_stats')
         .select('*')
-        .eq('store_id', STORE_ID)
+        .eq('store_id', storeId)
         .order('created_at', { ascending: false }),
       supabase
         .from('customer_channel_identities')
@@ -836,7 +843,7 @@ export default function ClientsPage() {
       setLineProfiles(profiles)
     }
     setLoading(false)
-  }, [])
+  }, [storeId])
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => { void loadClients() })
@@ -1141,6 +1148,7 @@ export default function ClientsPage() {
       {/* 新增客戶 Modal */}
       {addOpen && (
         <ClientFormModal
+          storeId={storeId}
           open
           onClose={() => setAddOpen(false)}
           onSaved={handleSaved}
@@ -1150,6 +1158,7 @@ export default function ClientsPage() {
       {/* 編輯客戶 Modal */}
       {editingClient && (
         <ClientFormModal
+          storeId={storeId}
           open
           onClose={() => setEditingClient(null)}
           onSaved={handleSaved}
