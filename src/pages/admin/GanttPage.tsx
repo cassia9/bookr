@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ChevronLeft, ChevronRight, Phone, Clock } from 'lucide-react'
 import { toast } from '@/components/ui/Snackbar'
@@ -52,7 +52,6 @@ interface TooltipState {
 
 // ── 常數 ─────────────────────────────────────────────────────────────────────
 
-const STORE_ID       = '00000000-0000-0000-0000-000000000001'
 const CELL_WIDTH     = 80   // px per hour
 const ROW_HEIGHT     = 64   // px per practitioner row
 const LABEL_WIDTH    = 168  // px for name column
@@ -87,6 +86,7 @@ function getVoucherUsage(booking: Booking) {
 // ── Props ────────────────────────────────────────────────────────────────────
 
 interface GanttPageProps {
+  storeId: string
   selectedPractitionerId?: string | null
   defaultDate?: Date
   startHour?: number
@@ -96,6 +96,7 @@ interface GanttPageProps {
 // ── 主元件 ───────────────────────────────────────────────────────────────────
 
 export default function GanttPage({
+  storeId,
   selectedPractitionerId,
   defaultDate,
   startHour = 9,
@@ -112,7 +113,56 @@ export default function GanttPage({
 
   const gridRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { loadData() }, [selectedDate, selectedPractitionerId])
+  const loadData = useCallback(async () => {
+    if (!storeId) return
+    setIsLoading(true)
+    try {
+      let practQ = supabase.from('practitioners').select('id, full_name, color')
+        .eq('store_id', storeId)
+        .eq('active', true)
+        .order('full_name')
+      if (selectedPractitionerId) practQ = practQ.eq('id', selectedPractitionerId)
+      const { data: pData } = await practQ
+      setPractitioners(pData || [])
+
+      const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay   = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999)
+
+      let bookQ = supabase.from('bookings').select(`
+        id, start_time, end_time, status, client_id, practitioner_id, service_id,
+        notes, price, buffer_minutes,
+        client:clients(full_name, phone),
+        practitioner:practitioners(id, full_name, color),
+        service:services(name, duration_minutes),
+        voucher_redemptions(
+          status,
+          client_voucher_item:client_voucher_items(
+            service_name_snapshot,
+            client_voucher:client_vouchers(product_name_snapshot)
+          )
+        )
+      `)
+        .eq('store_id', storeId)
+        .gte('start_time', startOfDay.toISOString())
+        .lt('start_time',  endOfDay.toISOString())
+        .in('status', ['pending', 'confirmed', 'completed', 'no_show'])
+      if (selectedPractitionerId) bookQ = bookQ.eq('practitioner_id', selectedPractitionerId)
+
+      const { data: bData } = await bookQ
+        .order('start_time')
+        .order('created_at', { referencedTable: 'voucher_redemptions', ascending: false })
+        .limit(1, { referencedTable: 'voucher_redemptions' })
+      setBookings((bData || []) as unknown as Booking[])
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedDate, selectedPractitionerId, storeId])
+
+  // 資料載入本身由 effect 觸發，並在非同步請求前先顯示 loading 狀態。
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void loadData() }, [loadData])
 
   // ── 拖曳：document-level mouse events ──────────────────────────────────────
 
@@ -179,7 +229,7 @@ export default function GanttPage({
         p_end_time:        newEnd.toISOString(),
         p_buffer_minutes:  booking.buffer_minutes ?? 0,
         p_notes:           booking.notes,
-        p_store_id:        STORE_ID,
+        p_store_id:        storeId,
         p_price:           booking.price ?? 0,
       })
 
@@ -207,51 +257,7 @@ export default function GanttPage({
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup',   onUp)
     }
-  }, [dragState, practitioners, selectedDate, startHour, endHour])
-
-  // ── 資料載入 ────────────────────────────────────────────────────────────────
-
-  async function loadData() {
-    setIsLoading(true)
-    try {
-      let practQ = supabase.from('practitioners').select('id, full_name, color').eq('active', true).order('full_name')
-      if (selectedPractitionerId) practQ = practQ.eq('id', selectedPractitionerId)
-      const { data: pData } = await practQ
-      setPractitioners(pData || [])
-
-      const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0)
-      const endOfDay   = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999)
-
-      let bookQ = supabase.from('bookings').select(`
-        id, start_time, end_time, status, client_id, practitioner_id, service_id,
-        notes, price, buffer_minutes,
-        client:clients(full_name, phone),
-        practitioner:practitioners(id, full_name, color),
-        service:services(name, duration_minutes),
-        voucher_redemptions(
-          status,
-          client_voucher_item:client_voucher_items(
-            service_name_snapshot,
-            client_voucher:client_vouchers(product_name_snapshot)
-          )
-        )
-      `)
-        .gte('start_time', startOfDay.toISOString())
-        .lt('start_time',  endOfDay.toISOString())
-        .in('status', ['pending', 'confirmed', 'completed', 'no_show'])
-      if (selectedPractitionerId) bookQ = bookQ.eq('practitioner_id', selectedPractitionerId)
-
-      const { data: bData } = await bookQ
-        .order('start_time')
-        .order('created_at', { referencedTable: 'voucher_redemptions', ascending: false })
-        .limit(1, { referencedTable: 'voucher_redemptions' })
-      setBookings((bData || []) as unknown as Booking[])
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  }, [dragState, practitioners, selectedDate, startHour, endHour, storeId, loadData])
 
   // ── 位置計算 ────────────────────────────────────────────────────────────────
 

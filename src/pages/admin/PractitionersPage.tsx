@@ -10,8 +10,7 @@ import Toggle from '../../components/ui/Toggle'
 import DatePicker from '../../components/ui/DatePicker'
 import TimePicker from '../../components/ui/TimePicker'
 import PractitionerDrawer from '../../components/PractitionerDrawer'
-
-const STORE_ID = '00000000-0000-0000-0000-000000000001'
+import { useAuth } from '../../lib/auth'
 
 const COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
@@ -31,6 +30,8 @@ const emptyBlock = {
 }
 
 export default function PractitionersPage() {
+  const { profile } = useAuth()
+  const storeId = profile?.store_id ?? ''
   const [practitioners, setPractitioners] = useState<Practitioner[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -52,14 +53,15 @@ export default function PractitionersPage() {
   const [selectedPractitioner, setSelectedPractitioner] = useState<Practitioner | null>(null)
   const [showDrawer, setShowDrawer] = useState(false)
 
-  useEffect(() => { fetchPractitioners() }, [])
+  useEffect(() => { if (storeId) fetchPractitioners() }, [storeId])
 
   async function fetchPractitioners() {
+    if (!storeId) return
     setLoading(true)
     const { data } = await supabase
       .from('practitioners')
       .select('*')
-      .eq('store_id', STORE_ID)
+      .eq('store_id', storeId)
       .order('created_at', { ascending: true })
     setPractitioners(data ?? [])
     setLoading(false)
@@ -85,7 +87,7 @@ export default function PractitionersPage() {
     if (editing) {
       await supabase.from('practitioners').update(form).eq('id', editing.id)
     } else {
-      await supabase.from('practitioners').insert({ ...form, store_id: STORE_ID })
+      await supabase.from('practitioners').insert({ ...form, store_id: storeId })
     }
     setSaving(false)
     setModalOpen(false)
@@ -119,6 +121,7 @@ export default function PractitionersPage() {
       .from('practitioner_blocks')
       .select('*')
       .eq('practitioner_id', practitionerId)
+      .eq('store_id', storeId)
       .order('start_time', { ascending: true })
     setBlocks(data ?? [])
     setBlocksLoading(false)
@@ -146,7 +149,7 @@ export default function PractitionersPage() {
     const end   = new Date(`${blockForm.endDate}T${blockForm.endTime}`)
     await supabase.from('practitioner_blocks').insert({
       practitioner_id: blocksPractitioner.id,
-      store_id:        STORE_ID,
+      store_id:        storeId,
       start_time:      start.toISOString(),
       end_time:        end.toISOString(),
       reason:          blockForm.reason.trim() || null,

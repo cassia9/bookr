@@ -26,6 +26,7 @@ import {
   ChevronLeft, ChevronRight, GripVertical,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/auth'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import NewBookingModal, { nearestSlot } from '../../components/booking/NewBookingModal'
@@ -34,7 +35,6 @@ import { cn } from '../../lib/cn'
 import { toast } from '../../components/ui/Snackbar'
 import type { Practitioner, Client, Service, PractitionerBlock } from '../../types/database'
 
-const STORE_ID = '00000000-0000-0000-0000-000000000001'
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 8) // 08:00–21:00
 const HOUR_WIDTH = 80 // px per hour
 
@@ -130,6 +130,8 @@ function roundToSlot(d: Date): string {
 }
 
 export default function BookingsPage() {
+  const { profile } = useAuth()
+  const storeId = profile?.store_id ?? ''
   const [searchParams, setSearchParams] = useSearchParams()
   const linkedBookingId = searchParams.get('booking')
 
@@ -171,8 +173,12 @@ export default function BookingsPage() {
   const [storeCloseTime,      setStoreCloseTime]      = useState('21:00')
   const [practitionerBlocks,  setPractitionerBlocks]  = useState<PractitionerBlock[]>([])
 
-  useEffect(() => { fetchMeta() }, [])
-  useEffect(() => { fetchBookings(); fetchBlocks() }, [date, pageMode, calView, ganttMode])
+  useEffect(() => { if (storeId) fetchMeta() }, [storeId])
+  useEffect(() => {
+    if (!storeId) return
+    fetchBookings()
+    fetchBlocks()
+  }, [date, pageMode, calView, ganttMode, storeId])
   useEffect(() => {
     if (!linkedBookingId) return
 
@@ -208,13 +214,14 @@ export default function BookingsPage() {
   }, [linkedBookingId, searchParams, setSearchParams])
 
   async function fetchMeta() {
+    if (!storeId) return
     const [{ data: p }, { data: c }, { data: s }, { data: store }] = await Promise.all([
-      supabase.from('practitioners').select('*').eq('store_id', STORE_ID).eq('active', true),
-      supabase.from('clients').select('*').eq('store_id', STORE_ID).order('full_name'),
-      supabase.from('services').select('*').eq('store_id', STORE_ID).eq('active', true),
+      supabase.from('practitioners').select('*').eq('store_id', storeId).eq('active', true),
+      supabase.from('clients').select('*').eq('store_id', storeId).order('full_name'),
+      supabase.from('services').select('*').eq('store_id', storeId).eq('active', true),
       supabase.from('stores')
         .select('default_buffer_minutes, open_time, close_time')
-        .eq('id', STORE_ID).single(),
+        .eq('id', storeId).single(),
     ])
     setPractitioners(p ?? [])
     setClients(c ?? [])
@@ -231,6 +238,7 @@ export default function BookingsPage() {
   }
 
   async function fetchBookings() {
+    if (!storeId) return
     setLoading(true)
     let start: Date, end: Date
 
@@ -256,7 +264,7 @@ export default function BookingsPage() {
     const { data, error } = await supabase
       .from('bookings')
       .select('*, client:clients(*), practitioner:practitioners(*), service:services(name,duration_minutes,price)')
-      .eq('store_id', STORE_ID)
+      .eq('store_id', storeId)
       .gte('start_time', start.toISOString())
       .lte('start_time', end.toISOString())
       .neq('status', 'cancelled')
@@ -268,6 +276,7 @@ export default function BookingsPage() {
   }
 
   async function fetchBlocks() {
+    if (!storeId) return
     let start: Date, end: Date
     if (pageMode === 'calendar') {
       if (calView === 'month') {
@@ -290,7 +299,7 @@ export default function BookingsPage() {
     const { data } = await supabase
       .from('practitioner_blocks')
       .select('*')
-      .eq('store_id', STORE_ID)
+      .eq('store_id', storeId)
       .lt('start_time', end.toISOString())
       .gt('end_time', start.toISOString())
       .order('start_time')
@@ -504,7 +513,7 @@ export default function BookingsPage() {
       p_end_time:        newEnd.toISOString(),
       p_buffer_minutes:  event.resource.buffer_minutes,
       p_notes:           event.resource.notes,
-      p_store_id:        STORE_ID,
+      p_store_id:        storeId,
     })
 
     setDragSaving(false)
@@ -1302,6 +1311,7 @@ export default function BookingsPage() {
 
       {/* ── New Booking ── */}
       <NewBookingModal
+        storeId={storeId}
         open={newBookingOpen}
         onClose={() => setNewBookingOpen(false)}
         onSaved={() => { setNewBookingOpen(false); fetchBookings() }}
@@ -1318,6 +1328,7 @@ export default function BookingsPage() {
       {/* ── Edit Booking ── */}
       {editTarget && (
         <NewBookingModal
+          storeId={storeId}
           mode="edit"
           initialBooking={{
             id:               editTarget.id,
