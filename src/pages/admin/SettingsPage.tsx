@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2, Share2 } from 'lucide-react'
+import { Settings, Clock, Save, CheckCircle, Users, UserPlus, Mail, Send, RefreshCw, Trash2, Share2, Link2, BellRing, LayoutGrid } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 import { useAuth } from '@/lib/auth'
@@ -15,6 +15,7 @@ import Toggle from '@/components/ui/Toggle'
 import { toast } from '@/components/ui/Snackbar'
 import LineChannelCard from '@/components/settings/LineChannelCard'
 import LineMessagingCard from '@/components/settings/LineMessagingCard'
+import LineRichMenuCard from '@/components/settings/LineRichMenuCard'
 import StoreClosuresSection from '@/components/settings/StoreClosuresSection'
 import type {
   LineMessagingStatus,
@@ -28,6 +29,7 @@ import type { StoreChannelConnection } from '@/types/database'
 // ── 型別 ────────────────────────────────────────────────────────────────────
 
 type Tab = 'basic' | 'members' | 'channels'
+type ChannelSection = 'connection' | 'notifications' | 'rich-menu'
 
 interface Member {
   id: string
@@ -352,6 +354,7 @@ function ChannelsSettings() {
   const [storeCode, setStoreCode] = useState('')
   const [confirmMode, setConfirmMode] = useState<'manual' | 'auto'>('manual')
   const [bookingEnabled, setBookingEnabled] = useState(true)
+  const [channelSection, setChannelSection] = useState<ChannelSection>('connection')
 
   const activeConnection = connectionHistory.find(connection => connection.status === 'active') ?? null
   const bookingUrl = storeCode
@@ -763,58 +766,133 @@ function ChannelsSettings() {
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold text-slate-900">渠道設定</h2>
-        <p className="text-sm text-slate-500 mt-0.5">設定客戶端預約頁面的整合選項與行為</p>
+        <p className="text-sm text-slate-500 mt-0.5">分開管理 LINE 串接、預約通知與圖文選單</p>
       </div>
 
-      <LineChannelCard
-        providerId={providerId}
-        providerName={providerName}
-        officialAccountName={officialAccountName}
-        officialAccountBasicId={officialAccountBasicId}
-        liffId={liffId}
-        channelId={lineChannelId}
-        bookingUrl={bookingUrl}
-        activeConnection={activeConnection}
-        connectionHistory={connectionHistory}
-        isAdmin={isAdmin}
-        saving={lineSaving}
-        onProviderIdChange={setProviderId}
-        onProviderNameChange={setProviderName}
-        onOfficialAccountNameChange={setOfficialAccountName}
-        onOfficialAccountBasicIdChange={setOfficialAccountBasicId}
-        onLiffIdChange={setLiffId}
-        onChannelIdChange={setLineChannelId}
-        onSave={handleLineSave}
-        onDisconnect={() => setDisconnectOpen(true)}
-      />
+      <div className="rounded-2xl border border-slate-200 bg-slate-100/80 p-1.5">
+        <div className="grid gap-1 sm:grid-cols-3">
+          {([
+            { id: 'connection', label: 'LINE 串接', description: '登入、官方帳號與 API', icon: Link2 },
+            { id: 'notifications', label: '通知設定', description: '預約卡片與文字範本', icon: BellRing },
+            { id: 'rich-menu', label: '圖文選單', description: '版型、分頁與點擊成效', icon: LayoutGrid },
+          ] as const).map(item => {
+            const Icon = item.icon
+            const active = channelSection === item.id
+            return (
+              <Button
+                key={item.id}
+                type="button"
+                variant={active ? 'primary' : 'ghost'}
+                onClick={() => setChannelSection(item.id)}
+                className={`min-h-14 justify-start px-4 text-left ${
+                  active ? '' : 'bg-transparent text-slate-600 hover:bg-white'
+                }`}
+              >
+                <Icon size={17} className="shrink-0" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">{item.label}</span>
+                  <span className={`mt-0.5 block truncate text-[11px] font-normal ${
+                    active ? 'text-white/70' : 'text-slate-400'
+                  }`}>{item.description}</span>
+                </span>
+              </Button>
+            )
+          })}
+        </div>
+      </div>
 
-      <LineMessagingCard
-        activeConnection={activeConnection}
-        messagingStatus={messagingStatus}
-        webhookUrl={messagingStatus
-          ? `${import.meta.env.VITE_SUPABASE_URL}${messagingStatus.webhook_path}`
-          : ''}
-        isAdmin={isAdmin}
-        connecting={messagingConnecting}
-        savingNotifications={notificationsSaving}
-        sendingTest={testSending}
-        testRecipients={testRecipients}
-        settings={notificationSettings}
-        templates={notificationTemplates}
-        onConnect={handleMessagingConnect}
-        onSettingChange={(key, value) => setNotificationSettings(current => ({
-          ...current,
-          [key]: value,
-        }))}
-        onTemplateChange={(type, value) => setNotificationTemplates(current => ({
-          ...current,
-          [type]: value,
-        }))}
-        onSaveNotifications={handleNotificationsSave}
-        onSendTest={handleTestNotification}
-      />
+      {channelSection === 'connection' && (
+        <>
+          <LineChannelCard
+            providerId={providerId}
+            providerName={providerName}
+            officialAccountName={officialAccountName}
+            officialAccountBasicId={officialAccountBasicId}
+            liffId={liffId}
+            channelId={lineChannelId}
+            bookingUrl={bookingUrl}
+            activeConnection={activeConnection}
+            connectionHistory={connectionHistory}
+            isAdmin={isAdmin}
+            saving={lineSaving}
+            onProviderIdChange={setProviderId}
+            onProviderNameChange={setProviderName}
+            onOfficialAccountNameChange={setOfficialAccountName}
+            onOfficialAccountBasicIdChange={setOfficialAccountBasicId}
+            onLiffIdChange={setLiffId}
+            onChannelIdChange={setLineChannelId}
+            onSave={handleLineSave}
+            onDisconnect={() => setDisconnectOpen(true)}
+          />
+
+          <LineMessagingCard
+            section="connection"
+            activeConnection={activeConnection}
+            messagingStatus={messagingStatus}
+            webhookUrl={messagingStatus
+              ? `${import.meta.env.VITE_SUPABASE_URL}${messagingStatus.webhook_path}`
+              : ''}
+            isAdmin={isAdmin}
+            connecting={messagingConnecting}
+            savingNotifications={notificationsSaving}
+            sendingTest={testSending}
+            testRecipients={testRecipients}
+            settings={notificationSettings}
+            templates={notificationTemplates}
+            onConnect={handleMessagingConnect}
+            onSettingChange={(key, value) => setNotificationSettings(current => ({
+              ...current,
+              [key]: value,
+            }))}
+            onTemplateChange={(type, value) => setNotificationTemplates(current => ({
+              ...current,
+              [type]: value,
+            }))}
+            onSaveNotifications={handleNotificationsSave}
+            onSendTest={handleTestNotification}
+          />
+        </>
+      )}
+
+      {channelSection === 'notifications' && (
+        <LineMessagingCard
+          section="notifications"
+          activeConnection={activeConnection}
+          messagingStatus={messagingStatus}
+          webhookUrl={messagingStatus
+            ? `${import.meta.env.VITE_SUPABASE_URL}${messagingStatus.webhook_path}`
+            : ''}
+          isAdmin={isAdmin}
+          connecting={messagingConnecting}
+          savingNotifications={notificationsSaving}
+          sendingTest={testSending}
+          testRecipients={testRecipients}
+          settings={notificationSettings}
+          templates={notificationTemplates}
+          onConnect={handleMessagingConnect}
+          onSettingChange={(key, value) => setNotificationSettings(current => ({
+            ...current,
+            [key]: value,
+          }))}
+          onTemplateChange={(type, value) => setNotificationTemplates(current => ({
+            ...current,
+            [type]: value,
+          }))}
+          onSaveNotifications={handleNotificationsSave}
+          onSendTest={handleTestNotification}
+        />
+      )}
+
+      {channelSection === 'rich-menu' && (
+        <LineRichMenuCard
+          storeId={storeId}
+          isAdmin={isAdmin}
+          messagingReady={messagingStatus?.status === 'active'}
+        />
+      )}
 
       {/* 預約設定 */}
+      {channelSection === 'connection' && (
       <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
         <h3 className="text-sm font-semibold text-slate-700">預約設定</h3>
 
@@ -852,6 +930,7 @@ function ChannelsSettings() {
           </Button>
         </div>
       </section>
+      )}
 
       <ConfirmModal
         open={disconnectOpen}
