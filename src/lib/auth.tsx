@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js'
-import { createSessionSupabaseClient, supabase } from './supabase'
+import { supabase } from './supabase'
 import type { User, UserRole } from '../types/database'
 
 interface AuthContextValue {
@@ -43,23 +43,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userId = activeSession.user.id
     setProfileError(null)
 
-    const queryProfile = (accessToken: string) => createSessionSupabaseClient(accessToken)
+    const queryProfile = () => supabase
       .from('users')
       .select('*')
       .eq('id', userId)
       .maybeSingle()
 
-    let result = await queryProfile(activeSession.access_token)
+    let result = await queryProfile()
 
-    // 正式環境的 Auth 與 PostgREST 可能短暫存在時鐘差。沿用同一張 Token
-    // 等待生效，避免不斷刷新出新 Token 而形成 401 無限循環。
+    // 正式環境的 Auth 與 PostgREST 可能短暫存在時鐘差。重試期間不主動刷新 Token，
+    // 等待它生效，避免不斷換發新 Token 而形成 401 無限循環。
     for (const delay of FUTURE_JWT_RETRY_DELAYS_MS) {
       if (!isFutureJwtError(result.error)) break
 
       await wait(delay)
       if (requestId !== profileRequestId.current) return
 
-      result = await queryProfile(activeSession.access_token)
+      result = await queryProfile()
     }
 
     if (requestId !== profileRequestId.current) return
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (requestId !== profileRequestId.current) return
 
       if (!refreshError && refreshed.session?.user.id === userId) {
-        result = await queryProfile(refreshed.session.access_token)
+        result = await queryProfile()
       }
     }
 
