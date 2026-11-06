@@ -80,6 +80,7 @@ interface Booking {
 type ViewMode = 'month' | 'week' | 'day'
 
 interface CalendarPageProps {
+  storeId: string
   selectedPractitionerId?: string | null
   defaultView?: ViewMode
   defaultDate?: Date
@@ -96,8 +97,6 @@ interface DayPopover {
 }
 
 // ── 常數 ──────────────────────────────────────────────────────────────────────
-
-const STORE_ID = '00000000-0000-0000-0000-000000000001'
 
 const STATUS_LABEL: Record<string, string> = {
   pending:   '待確認',
@@ -134,6 +133,7 @@ function getDisplayVoucherUsage(booking: Booking): VoucherRedemption | null {
 // ── 主元件 ────────────────────────────────────────────────────────────────────
 
 export default function CalendarPage({
+  storeId,
   selectedPractitionerId,
   defaultView = 'week',
   defaultDate,
@@ -210,9 +210,9 @@ export default function CalendarPage({
   const fetchMeta = useCallback(async () => {
     const [{ data: p, error: practitionerError }, { data: s, error: serviceError }] = await Promise.all([
       supabase.from('practitioners').select('id, full_name, color')
-        .eq('store_id', STORE_ID).eq('active', true).is('deleted_at', null),
+        .eq('store_id', storeId).eq('active', true).is('deleted_at', null),
       supabase.from('services').select('id, name, duration_minutes, price')
-        .eq('store_id', STORE_ID).eq('active', true),
+        .eq('store_id', storeId).eq('active', true),
     ])
 
     if (practitionerError || serviceError) {
@@ -224,7 +224,7 @@ export default function CalendarPage({
     setMetaError('')
     setPractitioners(p ?? [])
     setServices(s ?? [])
-  }, [])
+  }, [storeId])
 
   const fetchBookings = useCallback(async () => {
     setIsLoading(true)
@@ -248,7 +248,7 @@ export default function CalendarPage({
           )
         )
       `)
-      .eq('store_id', STORE_ID)
+      .eq('store_id', storeId)
       .gte('start_time', start.toISOString())
       .lte('start_time', end.toISOString())
       .order('start_time')
@@ -268,13 +268,13 @@ export default function CalendarPage({
       setBookings((data ?? []) as unknown as Booking[])
     }
     setIsLoading(false)
-  }, [getDateRange, selectedPractitionerId])
+  }, [getDateRange, selectedPractitionerId, storeId])
 
   const fetchStoreClosures = useCallback(async () => {
     const { start, end } = getDateRange()
     try {
       setStoreClosures(await getPublicStoreClosures(
-        STORE_ID,
+        storeId,
         format(start, 'yyyy-MM-dd'),
         format(end, 'yyyy-MM-dd'),
       ))
@@ -282,7 +282,7 @@ export default function CalendarPage({
       console.error('載入店休標記失敗', error)
       setStoreClosures([])
     }
-  }, [getDateRange])
+  }, [getDateRange, storeId])
 
   useEffect(() => { void Promise.resolve().then(fetchMeta) }, [fetchMeta])
   useEffect(() => { void Promise.resolve().then(fetchBookings) }, [fetchBookings])
@@ -457,7 +457,7 @@ export default function CalendarPage({
       p_end_time:        end.toISOString(),
       p_buffer_minutes:  modalBooking.buffer_minutes,
       p_notes:           notes.trim() || null,
-      p_store_id:        STORE_ID,
+      p_store_id:        storeId,
       p_price:           price,
     })
     setSaving(false)
@@ -758,7 +758,7 @@ export default function CalendarPage({
       p_end_time:        newEnd.toISOString(),
       p_buffer_minutes:  booking.buffer_minutes,
       p_notes:           booking.notes,
-      p_store_id:        STORE_ID,
+      p_store_id:        storeId,
       p_price:           booking.price,
     })
 

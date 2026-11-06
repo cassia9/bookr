@@ -3,17 +3,18 @@ import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, Plus } from 'lucide-re
 import { format } from 'date-fns'
 import { cn } from '@/lib/cn'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/lib/auth'
 import CalendarPage from './CalendarPage'
 import GanttPage from './GanttPage'
 import NewBookingModal, { nearestSlot } from '@/components/booking/NewBookingModal'
 import type { Practitioner, Client, Service } from '@/types/database'
 
-const STORE_ID = '00000000-0000-0000-0000-000000000001'
-
 type ViewMode = 'calendar' | 'gantt'
 type CalendarView = 'month' | 'week' | 'day'
 
 export default function BookingManagement() {
+  const { profile } = useAuth()
+  const storeId = profile?.store_id ?? ''
   const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [calendarView, setCalendarView] = useState<CalendarView>(() => (
     typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches
@@ -34,12 +35,14 @@ export default function BookingManagement() {
   const [endHour, setEndHour] = useState(21)
 
   useEffect(() => {
+    if (!storeId) return
+
     async function fetchMeta() {
       const [{ data: p }, { data: c }, { data: s }, { data: store }] = await Promise.all([
-        supabase.from('practitioners').select('*').eq('store_id', STORE_ID).eq('active', true).is('deleted_at', null),
-        supabase.from('clients').select('*').eq('store_id', STORE_ID).order('full_name'),
-        supabase.from('services').select('*').eq('store_id', STORE_ID).eq('active', true),
-        supabase.from('stores').select('open_time, close_time, default_buffer_minutes').eq('id', STORE_ID).single(),
+        supabase.from('practitioners').select('*').eq('store_id', storeId).eq('active', true).is('deleted_at', null),
+        supabase.from('clients').select('*').eq('store_id', storeId).order('full_name'),
+        supabase.from('services').select('*').eq('store_id', storeId).eq('active', true),
+        supabase.from('stores').select('open_time, close_time, default_buffer_minutes').eq('id', storeId).single(),
       ])
       setPractitioners(p ?? [])
       setClients(c ?? [])
@@ -54,7 +57,7 @@ export default function BookingManagement() {
       setEndHour(parseInt(storeData?.close_time ?? '21:00', 10))
     }
     fetchMeta()
-  }, [])
+  }, [storeId])
 
   const handlePrevDate = () => {
     const newDate = new Date(currentDate)
@@ -208,6 +211,7 @@ export default function BookingManagement() {
         {viewMode === 'calendar' ? (
           <CalendarPage
             key={refreshKey}
+            storeId={storeId}
             defaultView={calendarView}
             defaultDate={currentDate}
             startHour={startHour}
@@ -219,6 +223,7 @@ export default function BookingManagement() {
         ) : (
           <GanttPage
             key={refreshKey}
+            storeId={storeId}
             defaultDate={currentDate}
             startHour={startHour}
             endHour={endHour}
@@ -227,6 +232,7 @@ export default function BookingManagement() {
       </div>
 
       <NewBookingModal
+        storeId={storeId}
         open={showNewBooking}
         onClose={() => setShowNewBooking(false)}
         onSaved={() => { setShowNewBooking(false); setRefreshKey(k => k + 1) }}
@@ -234,7 +240,7 @@ export default function BookingManagement() {
         clients={clients}
         services={services}
         onRefreshClients={async () => {
-          const { data } = await supabase.from('clients').select('*').eq('store_id', STORE_ID).order('full_name')
+          const { data } = await supabase.from('clients').select('*').eq('store_id', storeId).order('full_name')
           setClients(data ?? [])
         }}
         defaultBufferMinutes={defaultBufferMinutes}
