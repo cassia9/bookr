@@ -49,3 +49,7 @@ verify_jwt = false
 # 圖文選單發布會在函式內驗證 Supabase 使用者、同店管理員身分與發布版本歸屬。
 [functions.line-rich-menu]
 verify_jwt = false
+
+# 圖文選單成效同步會在函式內驗證同店管理員，Token 僅由 service-only RPC 短暫取得。
+[functions.line-rich-menu-insights]
+verify_jwt = false

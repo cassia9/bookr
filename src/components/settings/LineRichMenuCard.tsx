@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3,
   Check,
@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   MessageSquareText,
   Plus,
+  RefreshCw,
   Save,
   Send,
   Smartphone,
@@ -66,6 +67,9 @@ interface FunctionResponse {
   ok?: boolean
   error?: string
   code?: string
+  syncedRows?: number
+  pendingPages?: number
+  privacyLimitedPages?: number
 }
 
 interface Props {
@@ -240,6 +244,7 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [syncingMetrics, setSyncingMetrics] = useState(false)
   const [uploadingPageKey, setUploadingPageKey] = useState<string | null>(null)
   const [menuSet, setMenuSet] = useState<LineRichMenuSet | null>(null)
   const [menuName, setMenuName] = useState('LINE 圖文選單')
@@ -248,6 +253,7 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
   const [activeAreaKey, setActiveAreaKey] = useState(DEFAULT_CONFIG.pages[0].areas[0].areaKey)
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
   const [metrics, setMetrics] = useState<LineRichMenuDailyMetric[]>([])
+  const localPreviewUrls = useRef(new Map<string, string>())
 
   const activePage = config.pages.find(page => page.pageKey === activePageKey) ?? config.pages[0]
   const activeArea = activePage?.areas.find(area => area.areaKey === activeAreaKey)
@@ -256,6 +262,38 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
     impressions: summary.impressions + row.impressions,
     clicks: summary.clicks + row.clicks,
   }), { impressions: 0, clicks: 0 }), [metrics])
+
+  const latestMetricSync = useMemo(() => (
+    metrics.reduce<string | null>((latest, row) => (
+      !latest || row.synced_at > latest ? row.synced_at : latest
+    ), null)
+  ), [metrics])
+
+  const releaseLocalPreview = useCallback((pageKey?: string) => {
+    if (pageKey) {
+      const url = localPreviewUrls.current.get(pageKey)
+      if (url) URL.revokeObjectURL(url)
+      localPreviewUrls.current.delete(pageKey)
+      return
+    }
+    localPreviewUrls.current.forEach(url => URL.revokeObjectURL(url))
+    localPreviewUrls.current.clear()
+  }, [])
+
+  const loadMetrics = useCallback(async (publicationId: string) => {
+    const { data, error } = await supabase
+      .from('line_rich_menu_daily_metrics')
+      .select('*')
+      .eq('publication_id', publicationId)
+      .order('metric_date', { ascending: false })
+      .limit(90)
+
+    if (error) {
+      toast.error('載入圖文選單成效失敗', error.message)
+      return
+    }
+    setMetrics((data ?? []) as LineRichMenuDailyMetric[])
+  }, [])
 
   const loadMenu = useCallback(async () => {
     if (!storeId) return
@@ -279,6 +317,7 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
       setConfig(initial)
       setActivePageKey(initial.pages[0].pageKey)
       setActiveAreaKey(initial.pages[0].areas[0].areaKey)
+      releaseLocalPreview()
       setPreviewUrls({})
       setMetrics([])
       setLoading(false)
@@ -304,27 +343,24 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
         .createSignedUrl(page.imagePath, 3600)
       return [page.pageKey, signed?.signedUrl ?? ''] as const
     }))
+    releaseLocalPreview()
     setPreviewUrls(Object.fromEntries(signedEntries))
 
     if (loadedSet.active_publication_id) {
-      const { data: metricRows } = await supabase
-        .from('line_rich_menu_daily_metrics')
-        .select('*')
-        .eq('publication_id', loadedSet.active_publication_id)
-        .order('metric_date', { ascending: false })
-        .limit(90)
-      setMetrics((metricRows ?? []) as LineRichMenuDailyMetric[])
+      await loadMetrics(loadedSet.active_publication_id)
     } else {
       setMetrics([])
     }
     setLoading(false)
-  }, [storeId])
+  }, [loadMetrics, releaseLocalPreview, storeId])
 
   useEffect(() => {
     // Supabase 是外部資料源；loadMenu 僅在查詢完成後同步編輯器狀態。
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadMenu()
   }, [loadMenu])
+
+  useEffect(() => () => releaseLocalPreview(), [releaseLocalPreview])
 
   function updatePage(pageKey: string, updater: (page: RichMenuPage) => RichMenuPage) {
     setConfig(current => ({
@@ -364,6 +400,7 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
     setConfig(current => ({ ...current, pages: cleaned }))
     setActivePageKey(cleaned[0].pageKey)
     setActiveAreaKey(cleaned[0].areas[0].areaKey)
+    releaseLocalPreview(pageKey)
     setPreviewUrls(current => {
       const next = { ...current }
       delete next[pageKey]
@@ -420,6 +457,8 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
       return
     }
 
+    releaseLocalPreview(activePage.pageKey)
+    localPreviewUrls.current.set(activePage.pageKey, localUrl)
     setPreviewUrls(current => ({ ...current, [activePage.pageKey]: localUrl }))
     updatePage(activePage.pageKey, page => ({ ...page, imagePath: path }))
     toast.success('背景圖片已上傳', '儲存草稿後才會保留此版設定')
@@ -493,6 +532,35 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
 
     toast.success('LINE 圖文選單已發布', '客戶下次開啟聊天時會看到新選單')
     await loadMenu()
+  }
+
+  async function syncMetrics() {
+    const publicationId = menuSet?.active_publication_id
+    if (!publicationId || !isAdmin) return
+
+    setSyncingMetrics(true)
+    const { data, error } = await supabase.functions.invoke<FunctionResponse>(
+      'line-rich-menu-insights',
+      { body: { publicationId } },
+    )
+    setSyncingMetrics(false)
+
+    if (error || !data?.ok) {
+      const description = data?.code === 'LINE_RATE_LIMITED'
+        ? 'LINE 暫時限制查詢頻率，請稍後再試'
+        : data?.error ?? error?.message ?? '請稍後再試'
+      toast.error('同步 LINE 數據失敗', description)
+      return
+    }
+
+    await loadMetrics(publicationId)
+    if ((data.syncedRows ?? 0) > 0) {
+      toast.success('LINE 成效已同步', `已更新 ${data.syncedRows} 筆每日資料`)
+    } else if ((data.privacyLimitedPages ?? 0) > 0) {
+      toast.info('目前沒有可顯示的明細', 'LINE 為保護隱私，點擊人數不足門檻時不提供統計')
+    } else {
+      toast.info('LINE 尚未完成統計', '新選單的數據通常會在隔天完成彙整')
+    }
   }
 
   if (loading) {
@@ -837,14 +905,27 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <BarChart3 size={16} className="text-slate-500" />
                     <p className="text-sm font-semibold text-slate-800">點擊成效</p>
                   </div>
-                  {menuSet?.active_publication_id && (
-                    <Badge variant="teal">已啟用追蹤</Badge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {menuSet?.active_publication_id && <Badge variant="teal">已啟用追蹤</Badge>}
+                    {menuSet?.active_publication_id && isAdmin && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        loading={syncingMetrics}
+                        disabled={publishing}
+                        onClick={() => void syncMetrics()}
+                      >
+                        <RefreshCw size={13} />
+                        同步數據
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2">
                   <Metric label="曝光" value={metricSummary.impressions.toLocaleString('zh-TW')} />
@@ -854,8 +935,8 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
                 <p className="mt-3 text-[11px] leading-5 text-slate-400">
                   {menuSet?.active_publication_id
                     ? metrics.length > 0
-                      ? '顯示目前發布版本最近同步的累計資料。'
-                      : '圖文選單已發布，等待 LINE 數據同步後會顯示成效。'
+                      ? `顯示目前發布版本最近同步的累計資料${latestMetricSync ? `；最後同步 ${statusTime(latestMetricSync)}` : ''}。`
+                      : '圖文選單已發布；可手動同步，LINE 通常會在隔天完成彙整。點擊人數不足隱私門檻時不會提供統計。'
                     : '完成第一次發布後，這裡會顯示曝光與點擊。'}
                 </p>
               </div>
