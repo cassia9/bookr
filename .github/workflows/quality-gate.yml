@@ -17,6 +17,10 @@ jobs:
   frontend-and-functions:
     name: 前端與 Edge Functions
     runs-on: ubuntu-latest
+    env:
+      # CI 僅驗證前端可建置，不連線任何真實 Supabase 專案。
+      VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+      VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
     steps:
       - name: 取得程式碼
         uses: actions/checkout@v5
