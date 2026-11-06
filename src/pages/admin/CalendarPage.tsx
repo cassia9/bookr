@@ -208,6 +208,7 @@ export default function CalendarPage({
   // ── 資料抓取 ────────────────────────────────────────────────────────────────
 
   const fetchMeta = useCallback(async () => {
+    if (!storeId) return
     const [{ data: p, error: practitionerError }, { data: s, error: serviceError }] = await Promise.all([
       supabase.from('practitioners').select('id, full_name, color')
         .eq('store_id', storeId).eq('active', true).is('deleted_at', null),
@@ -227,6 +228,7 @@ export default function CalendarPage({
   }, [storeId])
 
   const fetchBookings = useCallback(async () => {
+    if (!storeId) return
     setIsLoading(true)
     setBookingsError('')
     const { start, end } = getDateRange()
@@ -271,6 +273,7 @@ export default function CalendarPage({
   }, [getDateRange, selectedPractitionerId, storeId])
 
   const fetchStoreClosures = useCallback(async () => {
+    if (!storeId) return
     const { start, end } = getDateRange()
     try {
       setStoreClosures(await getPublicStoreClosures(

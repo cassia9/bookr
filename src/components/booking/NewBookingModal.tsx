@@ -266,6 +266,10 @@ export default function NewBookingModal({
 
   /** Combobox 呼叫：建立新客戶，回傳新 client_id */
   async function handleCreateClient(name: string, phone: string, gender: 'male' | 'female' | 'unknown'): Promise<string | null> {
+    if (!storeId) {
+      toast.error('無法確認店家資料', '請重新整理後再試')
+      return null
+    }
     const { data, error } = await supabase.from('clients').insert({
       full_name: name,
       phone:     phone || null,
@@ -325,6 +329,10 @@ export default function NewBookingModal({
   }
 
   async function persistBooking() {
+    if (!storeId) {
+      toast.error('無法確認店家資料', '請重新整理後再試')
+      return
+    }
     setSaving(true)
 
     const price = form.price === '' ? null : parseIntegerInput(form.price)

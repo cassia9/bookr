@@ -114,6 +114,7 @@ export default function GanttPage({
   const gridRef = useRef<HTMLDivElement>(null)
 
   const loadData = useCallback(async () => {
+    if (!storeId) return
     setIsLoading(true)
     try {
       let practQ = supabase.from('practitioners').select('id, full_name, color')
