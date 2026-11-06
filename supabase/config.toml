@@ -45,3 +45,7 @@ verify_jwt = false
 # Cron 使用獨立的強隨機 Worker secret；函式內以 constant-time digest 比對。
 [functions.line-notification-worker]
 verify_jwt = false
+
+# 圖文選單發布會在函式內驗證 Supabase 使用者、同店管理員身分與發布版本歸屬。
+[functions.line-rich-menu]
+verify_jwt = false
