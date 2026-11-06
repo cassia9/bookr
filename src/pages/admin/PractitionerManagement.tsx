@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PractitionerTable from '@/components/practitioners/PractitionerTable'
@@ -9,6 +9,7 @@ import StatsCard from '@/components/ui/StatsCard'
 import Button from '@/components/ui/Button'
 import SearchInput from '@/components/ui/SearchInput'
 import Select from '@/components/ui/Select'
+import { useAuth } from '@/lib/auth'
 
 interface PractitionerStats {
   total: number
@@ -24,6 +25,8 @@ interface PractitionerDetails {
 }
 
 export default function PractitionerManagement() {
+  const { profile } = useAuth()
+  const storeId = profile?.store_id ?? ''
   const [showForm, setShowForm] = useState(false)
   const [editingPractitionerId, setEditingPractitionerId] = useState<string | null>(null)
   const [showLeaveManager, setShowLeaveManager] = useState(false)
@@ -40,7 +43,8 @@ export default function PractitionerManagement() {
   const [showDrawer, setShowDrawer] = useState(false)
   const [selectedPractitioner, setSelectedPractitioner] = useState<PractitionerDetails>()
 
-  async function loadStats() {
+  const loadStats = useCallback(async () => {
+    if (!storeId) return
     try {
       setIsLoadingStats(true)
 
@@ -48,12 +52,14 @@ export default function PractitionerManagement() {
       const { count: totalCount } = await supabase
         .from('practitioners')
         .select('id', { count: 'exact', head: 0 })
+        .eq('store_id', storeId)
         .is('deleted_at', null)
 
       // 獲取活躍數
       const { count: activeCount } = await supabase
         .from('practitioners')
         .select('id', { count: 'exact', head: 0 })
+        .eq('store_id', storeId)
         .eq('active', true)
         .is('deleted_at', null)
 
@@ -61,6 +67,7 @@ export default function PractitionerManagement() {
       const { count: inactiveCount } = await supabase
         .from('practitioners')
         .select('id', { count: 'exact', head: 0 })
+        .eq('store_id', storeId)
         .eq('active', false)
         .is('deleted_at', null)
 
@@ -87,7 +94,7 @@ export default function PractitionerManagement() {
     } finally {
       setIsLoadingStats(false)
     }
-  }
+  }, [storeId])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -95,7 +102,7 @@ export default function PractitionerManagement() {
     }, 0)
 
     return () => window.clearTimeout(timeoutId)
-  }, [])
+  }, [loadStats])
 
   const handleAddPractitioner = () => {
     setEditingPractitionerId(null)
@@ -251,6 +258,7 @@ export default function PractitionerManagement() {
       {/* 休假管理 */}
       {showLeaveManager && leaveManagerPractitionerId && (
         <PractitionerLeaveManager
+          storeId={storeId}
           practitionerId={leaveManagerPractitionerId}
           practitionerName="" // 由組件內部載入
           onClose={() => {

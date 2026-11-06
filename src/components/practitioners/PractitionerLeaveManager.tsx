@@ -9,8 +9,6 @@ import Alert from '@/components/ui/Alert'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { toast } from '@/components/ui/Snackbar'
 
-const STORE_ID = '00000000-0000-0000-0000-000000000001'
-
 interface Block {
   id: string
   start_time: string
@@ -20,12 +18,13 @@ interface Block {
 }
 
 interface Props {
+  storeId: string
   practitionerId: string
   practitionerName: string
   onClose: () => void
 }
 
-export default function PractitionerLeaveManager({ practitionerId, practitionerName, onClose }: Props) {
+export default function PractitionerLeaveManager({ storeId, practitionerId, practitionerName, onClose }: Props) {
   const [blocks, setBlocks] = useState<Block[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -36,7 +35,7 @@ export default function PractitionerLeaveManager({ practitionerId, practitionerN
   const today = new Date().toISOString().slice(0, 10)
   const [form, setForm] = useState({ start_date: today, end_date: today, reason: '' })
 
-  useEffect(() => { loadBlocks() }, [practitionerId])
+  useEffect(() => { loadBlocks() }, [practitionerId, storeId])
 
   async function loadBlocks() {
     setLoading(true)
@@ -44,7 +43,7 @@ export default function PractitionerLeaveManager({ practitionerId, practitionerN
       .from('practitioner_blocks')
       .select('*')
       .eq('practitioner_id', practitionerId)
-      .eq('store_id', STORE_ID)
+      .eq('store_id', storeId)
       .order('start_time', { ascending: false })
     if (error) toast.error('無法載入封鎖時段')
     else setBlocks(data ?? [])
@@ -59,7 +58,7 @@ export default function PractitionerLeaveManager({ practitionerId, practitionerN
     setSaving(true)
     const { error } = await supabase.from('practitioner_blocks').insert({
       practitioner_id: practitionerId,
-      store_id: STORE_ID,
+      store_id: storeId,
       start_time: `${form.start_date}T00:00:00+08:00`,
       end_time: `${form.end_date}T23:59:59+08:00`,
       reason: form.reason.trim() || null,

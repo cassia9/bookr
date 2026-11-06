@@ -25,8 +25,6 @@ import type {
 } from '@/components/settings/LineMessagingCard'
 import type { StoreChannelConnection } from '@/types/database'
 
-const STORE_ID = '00000000-0000-0000-0000-000000000001'
-
 // ── 型別 ────────────────────────────────────────────────────────────────────
 
 type Tab = 'basic' | 'members' | 'channels'
@@ -99,7 +97,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 
 function BasicSettings() {
   const { isAdmin, profile } = useAuth()
-  const storeId = profile?.store_id ?? STORE_ID
+  const storeId = profile?.store_id ?? ''
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [openHour, setOpenHour] = useState(9)
@@ -109,6 +107,7 @@ function BasicSettings() {
   const [sameDayBookingLeadMinutes, setSameDayBookingLeadMinutes] = useState<15 | 30 | 60 | 120>(120)
 
   useEffect(() => {
+    if (!storeId) return
     supabase
       .from('stores')
       .select('name, open_time, close_time, default_buffer_minutes, same_day_booking_lead_minutes')
@@ -129,6 +128,10 @@ function BasicSettings() {
   }, [storeId])
 
   async function handleSave() {
+    if (!storeId) {
+      toast.error('無法確認店家資料', '請重新整理後再試')
+      return
+    }
     if (openHour >= closeHour) {
       toast.error('設定錯誤', '開始時間必須早於結束時間')
       return
@@ -322,7 +325,7 @@ interface MessagingFunctionResponse {
 
 function ChannelsSettings() {
   const { isAdmin, profile } = useAuth()
-  const storeId = profile?.store_id ?? STORE_ID
+  const storeId = profile?.store_id ?? ''
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [lineSaving, setLineSaving] = useState(false)
@@ -356,6 +359,7 @@ function ChannelsSettings() {
     : `${BOOKING_URL_BASE}/${storeId}`
 
   const loadSettings = useCallback(async () => {
+    if (!storeId) return
     const { data: store, error: storeError } = await supabase
       .from('stores')
       .select('liff_id, line_login_channel_id, booking_confirmation_mode, booking_enabled, store_code')
@@ -732,6 +736,10 @@ function ChannelsSettings() {
   }
 
   async function handleSave() {
+    if (!storeId) {
+      toast.error('無法確認店家資料', '請重新整理後再試')
+      return
+    }
     setSaving(true)
     const { error } = await supabase
       .from('stores')
