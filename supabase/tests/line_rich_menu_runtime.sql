@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT extensions.plan(15);
+SELECT extensions.plan(18);
 
 INSERT INTO public.stores (
   id, name, booking_enabled, timezone, store_code, liff_id
@@ -116,6 +116,24 @@ SELECT extensions.ok(
   '僅 service_role 可領取發布工作'
 );
 
+SELECT extensions.ok(
+  NOT has_function_privilege(
+    'authenticated',
+    'public.get_line_rich_menu_insight_job(uuid)',
+    'EXECUTE'
+  ),
+  '登入前端不能取得含 Token 的統計同步工作'
+);
+
+SELECT extensions.ok(
+  has_function_privilege(
+    'service_role',
+    'public.get_line_rich_menu_insight_job(uuid)',
+    'EXECUTE'
+  ),
+  '僅 service_role 可取得統計同步工作'
+);
+
 SELECT SET_CONFIG(
   'request.jwt.claims',
   '{"role":"authenticated","sub":"d1000000-0000-0000-0000-000000000001"}',
@@ -183,6 +201,17 @@ SELECT extensions.is(
   (SELECT status FROM public.line_rich_menu_sets WHERE store_id = 'd0000000-0000-0000-0000-000000000001'),
   'published',
   '完成後主設定狀態為已發布'
+);
+
+SELECT extensions.is(
+  (
+    SELECT channel_access_token
+    FROM public.get_line_rich_menu_insight_job(
+      (SELECT id FROM public.line_rich_menu_publications WHERE store_id = 'd0000000-0000-0000-0000-000000000001')
+    )
+  ),
+  'runtime-test-channel-access-token-1234567890',
+  '統計同步服務可取得已發布圖文選單的 Token'
 );
 
 SELECT extensions.ok(

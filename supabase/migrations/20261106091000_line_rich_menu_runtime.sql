@@ -133,6 +133,49 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.get_line_rich_menu_insight_job(
+  p_publication_id UUID
+)
+RETURNS TABLE (
+  publication_id UUID,
+  store_id UUID,
+  config_snapshot JSONB,
+  line_resource_map JSONB,
+  channel_access_token TEXT,
+  published_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT
+    publication.id,
+    publication.store_id,
+    publication.config_snapshot,
+    publication.line_resource_map,
+    access_secret.decrypted_secret,
+    publication.published_at,
+    publication.finished_at
+  FROM public.line_rich_menu_publications AS publication
+  JOIN public.store_channel_connections AS connection
+    ON connection.store_id = publication.store_id
+   AND connection.channel = 'line'
+   AND connection.status = 'active'
+   AND connection.disconnected_at IS NULL
+  JOIN private.store_line_messaging_credentials AS credential
+    ON credential.store_id = publication.store_id
+   AND credential.connection_id = connection.id
+   AND credential.status = 'active'
+   AND credential.disconnected_at IS NULL
+  JOIN vault.decrypted_secrets AS access_secret
+    ON access_secret.id = credential.access_token_secret_id
+  WHERE publication.id = p_publication_id
+    AND publication.status IN ('published', 'superseded')
+    AND publication.line_resource_map <> '{}'::JSONB
+  LIMIT 1;
+$$;
+
 CREATE OR REPLACE FUNCTION public.complete_line_rich_menu_publication(
   p_publication_id UUID,
   p_line_resource_map JSONB
@@ -368,6 +411,8 @@ $$;
 
 REVOKE ALL ON FUNCTION public.claim_line_rich_menu_publication(UUID)
   FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_line_rich_menu_insight_job(UUID)
+  FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.complete_line_rich_menu_publication(UUID, JSONB)
   FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.fail_line_rich_menu_publication(UUID, TEXT, TEXT)
@@ -377,6 +422,8 @@ REVOKE ALL ON FUNCTION public.upsert_line_rich_menu_daily_metric(
 ) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.claim_line_rich_menu_publication(UUID)
+  TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_line_rich_menu_insight_job(UUID)
   TO service_role;
 GRANT EXECUTE ON FUNCTION public.complete_line_rich_menu_publication(UUID, JSONB)
   TO service_role;
@@ -388,5 +435,8 @@ GRANT EXECUTE ON FUNCTION public.upsert_line_rich_menu_daily_metric(
 
 COMMENT ON FUNCTION public.claim_line_rich_menu_publication(UUID) IS
   'service_role 專用：原子領取圖文選單發布工作，並從 Vault 取得短暫使用的 LINE Token。';
+
+COMMENT ON FUNCTION public.get_line_rich_menu_insight_job(UUID) IS
+  'service_role 專用：取得已發布圖文選單的匿名統計同步資料；LINE Token 不開放給前端角色。';
 
 COMMIT;
