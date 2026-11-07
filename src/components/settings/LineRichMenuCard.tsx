@@ -281,12 +281,16 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
   }, [])
 
   const loadMetrics = useCallback(async (publicationId: string) => {
+    const metricFrom = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000))
+      .toISOString()
+      .slice(0, 10)
     const { data, error } = await supabase
       .from('line_rich_menu_daily_metrics')
       .select('*')
       .eq('publication_id', publicationId)
+      .gte('metric_date', metricFrom)
       .order('metric_date', { ascending: false })
-      .limit(90)
+      .limit(1000)
 
     if (error) {
       toast.error('載入圖文選單成效失敗', error.message)
@@ -568,9 +572,10 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
   }
 
   const statusMeta = menuSet ? STATUS_META[menuSet.status] : STATUS_META.draft
-  const ctr = metricSummary.impressions > 0
+  const hasMetrics = metrics.length > 0
+  const ctr = hasMetrics && metricSummary.impressions > 0
     ? ((metricSummary.clicks / metricSummary.impressions) * 100).toFixed(1)
-    : '0.0'
+    : null
 
   return (
     <div className="space-y-5">
@@ -928,14 +933,20 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
                   </div>
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2">
-                  <Metric label="曝光" value={metricSummary.impressions.toLocaleString('zh-TW')} />
-                  <Metric label="點擊" value={metricSummary.clicks.toLocaleString('zh-TW')} />
-                  <Metric label="點擊率" value={`${ctr}%`} />
+                  <Metric
+                    label="曝光"
+                    value={hasMetrics ? metricSummary.impressions.toLocaleString('zh-TW') : '—'}
+                  />
+                  <Metric
+                    label="點擊"
+                    value={hasMetrics ? metricSummary.clicks.toLocaleString('zh-TW') : '—'}
+                  />
+                  <Metric label="點擊率" value={ctr ? `${ctr}%` : '—'} />
                 </div>
                 <p className="mt-3 text-[11px] leading-5 text-slate-400">
                   {menuSet?.active_publication_id
                     ? metrics.length > 0
-                      ? `顯示目前發布版本最近同步的累計資料${latestMetricSync ? `；最後同步 ${statusTime(latestMetricSync)}` : ''}。`
+                      ? `顯示目前發布版本最近 30 天資料${latestMetricSync ? `；最後同步 ${statusTime(latestMetricSync)}` : ''}。`
                       : '圖文選單已發布；可手動同步，LINE 通常會在隔天完成彙整。點擊人數不足隱私門檻時不會提供統計。'
                     : '完成第一次發布後，這裡會顯示曝光與點擊。'}
                 </p>
