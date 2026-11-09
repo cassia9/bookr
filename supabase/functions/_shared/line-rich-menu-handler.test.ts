@@ -1,4 +1,5 @@
 import {
+  createLineRichMenuApi,
   createLineRichMenuHandler,
   LineRichMenuPublishError,
 } from "./line-rich-menu-handler.ts"
@@ -236,4 +237,60 @@ Deno.test("未知來源網域被拒絕", async () => {
     ),
   )
   if (response.status !== 403) throw new Error("unknown origin should be rejected")
+})
+
+Deno.test("已存在的圖文選單 alias 會改用更新 API", async () => {
+  const requests: Array<{ method: string; url: string; body: string }> = []
+  const lineApi = createLineRichMenuApi(async (input, init) => {
+    requests.push({
+      method: init?.method ?? "GET",
+      url: String(input),
+      body: typeof init?.body === "string" ? init.body : "",
+    })
+    return Response.json({})
+  })
+
+  await lineApi.upsertAlias("token", "bookr-store-home", "rich-menu-2")
+
+  if (
+    requests.length !== 1
+    || requests[0]?.method !== "POST"
+    || requests[0]?.url !== "https://api.line.me/v2/bot/richmenu/alias/bookr-store-home"
+    || requests[0]?.body !== JSON.stringify({ richMenuId: "rich-menu-2" })
+  ) {
+    throw new Error("existing alias should be updated instead of created again")
+  }
+})
+
+Deno.test("不存在的圖文選單 alias 才呼叫建立 API", async () => {
+  const requests: Array<{ method: string; url: string; body: string }> = []
+  const lineApi = createLineRichMenuApi(async (input, init) => {
+    const request = {
+      method: init?.method ?? "GET",
+      url: String(input),
+      body: typeof init?.body === "string" ? init.body : "",
+    }
+    requests.push(request)
+    if (request.url.endsWith("/bookr-store-home")) {
+      return Response.json({ message: "Alias not found" }, { status: 404 })
+    }
+    return Response.json({})
+  })
+
+  await lineApi.upsertAlias("token", "bookr-store-home", "rich-menu-1")
+
+  if (
+    requests.length !== 2
+    || requests[0]?.method !== "POST"
+    || requests[0]?.url !== "https://api.line.me/v2/bot/richmenu/alias/bookr-store-home"
+    || requests[0]?.body !== JSON.stringify({ richMenuId: "rich-menu-1" })
+    || requests[1]?.method !== "POST"
+    || requests[1]?.url !== "https://api.line.me/v2/bot/richmenu/alias"
+    || requests[1]?.body !== JSON.stringify({
+      richMenuAliasId: "bookr-store-home",
+      richMenuId: "rich-menu-1",
+    })
+  ) {
+    throw new Error("missing alias should be created")
+  }
 })
