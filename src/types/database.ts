@@ -453,6 +453,59 @@ export interface Database {
         Insert: never
         Update: never
       }
+      line_rich_menu_sets: {
+        Row: {
+          id: string
+          store_id: string
+          name: string
+          status: 'draft' | 'publishing' | 'published' | 'failed'
+          draft_config: Json
+          active_publication_id: string | null
+          last_error_code: string | null
+          last_error_message: string | null
+          created_by: string | null
+          updated_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+      }
+      line_rich_menu_publications: {
+        Row: {
+          id: string
+          set_id: string
+          store_id: string
+          version_number: number
+          status: 'queued' | 'publishing' | 'published' | 'failed' | 'superseded'
+          config_snapshot: Json
+          line_resource_map: Json
+          error_code: string | null
+          error_message: string | null
+          requested_by: string | null
+          requested_at: string
+          published_at: string | null
+          finished_at: string | null
+        }
+        Insert: never
+        Update: never
+      }
+      line_rich_menu_daily_metrics: {
+        Row: {
+          id: string
+          store_id: string
+          publication_id: string
+          metric_date: string
+          page_key: string | null
+          area_key: string | null
+          impressions: number
+          clicks: number
+          unique_users: number | null
+          synced_at: string
+        }
+        Insert: never
+        Update: never
+      }
     }
     Views: {
       client_stats: {
@@ -657,6 +710,14 @@ export interface Database {
         Args: { p_booking_id: string; p_scope?: 'single' | 'future' }
         Returns: Json
       }
+      save_line_rich_menu_draft: {
+        Args: { p_name: string; p_config: Json }
+        Returns: Json
+      }
+      queue_line_rich_menu_publication: {
+        Args: { p_set_id: string }
+        Returns: Json
+      }
     }
   }
 }
@@ -667,6 +728,9 @@ export type User = Database['public']['Tables']['users']['Row']
 export type Practitioner = Database['public']['Tables']['practitioners']['Row']
 export type Client = Database['public']['Tables']['clients']['Row']
 export type StoreChannelConnection = Database['public']['Tables']['store_channel_connections']['Row']
+export type LineRichMenuSet = Database['public']['Tables']['line_rich_menu_sets']['Row']
+export type LineRichMenuPublication = Database['public']['Tables']['line_rich_menu_publications']['Row']
+export type LineRichMenuDailyMetric = Database['public']['Tables']['line_rich_menu_daily_metrics']['Row']
 export type Service = Database['public']['Tables']['services']['Row']
 export type Booking = Database['public']['Tables']['bookings']['Row']
 export type StoreClosure = Database['public']['Tables']['store_closures']['Row']

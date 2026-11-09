@@ -61,6 +61,7 @@ interface MessagingConfigurationInput {
 }
 
 interface LineMessagingCardProps {
+  section?: 'connection' | 'notifications' | 'all'
   activeConnection: StoreChannelConnection | null
   messagingStatus: LineMessagingStatus | null
   webhookUrl: string
@@ -216,6 +217,7 @@ function formatDate(value: string | null) {
 }
 
 export default function LineMessagingCard({
+  section = 'all',
   activeConnection,
   messagingStatus,
   webhookUrl,
@@ -240,6 +242,8 @@ export default function LineMessagingCard({
 
   const isActive = messagingStatus?.status === 'active'
   const baseConnectionReady = Boolean(activeConnection?.provider_id)
+  const showConnection = section === 'connection' || section === 'all'
+  const showNotifications = section === 'notifications' || section === 'all'
 
   async function handleConnect() {
     const saved = await onConnect({
@@ -270,13 +274,17 @@ export default function LineMessagingCard({
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold text-slate-900">LINE 預約通知</h3>
+              <h3 className="text-sm font-semibold text-slate-900">
+                {showConnection && !showNotifications ? 'LINE Messaging API' : 'LINE 預約通知'}
+              </h3>
               <Badge variant={isActive ? 'green' : messagingStatus?.status === 'error' ? 'amber' : 'slate'}>
                 {isActive ? '推播已啟用' : messagingStatus?.status === 'error' ? '需檢查' : '尚未啟用'}
               </Badge>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              透過 Messaging API 發送預約申請、確認、取消、異動與提醒
+              {showConnection && !showNotifications
+                ? '驗證官方帳號憑證、設定 Webhook，並確認推播服務狀態'
+                : '設定預約申請、確認、取消、異動與提醒的訊息內容'}
             </p>
           </div>
         </div>
@@ -290,7 +298,7 @@ export default function LineMessagingCard({
       </div>
 
       <div className="space-y-6 p-6">
-        {!activeConnection ? (
+        {showConnection && (!activeConnection ? (
           <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <ShieldCheck size={17} className="mt-0.5 shrink-0 text-amber-600" />
             <div>
@@ -307,9 +315,9 @@ export default function LineMessagingCard({
               這是舊版串接資料，請先在上方補齊 Provider ID，再設定 Messaging API。
             </p>
           </div>
-        ) : null}
+        ) : null)}
 
-        {isActive && messagingStatus && (
+        {showConnection && isActive && messagingStatus && (
           <div className="grid gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatusDetail label="官方帳號" value={messagingStatus.bot_display_name} />
             <StatusDetail label="Basic ID" value={messagingStatus.bot_basic_id || 'LINE 未提供'} mono />
@@ -318,7 +326,7 @@ export default function LineMessagingCard({
           </div>
         )}
 
-        {isAdmin && baseConnectionReady && (
+        {showConnection && isAdmin && baseConnectionReady && (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <KeyRound size={15} className="text-slate-500" />
@@ -390,7 +398,7 @@ export default function LineMessagingCard({
           </div>
         )}
 
-        {isActive && messagingStatus && (
+        {showConnection && isActive && messagingStatus && (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
               <Radio size={13} />
@@ -412,7 +420,7 @@ export default function LineMessagingCard({
           </div>
         )}
 
-        {isActive && messagingStatus && isAdmin && (
+        {showConnection && isActive && messagingStatus && isAdmin && (
           <div className="space-y-3 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
             <div>
               <h4 className="text-sm font-semibold text-slate-700">發送測試推播</h4>
@@ -445,7 +453,8 @@ export default function LineMessagingCard({
           </div>
         )}
 
-        <div className="space-y-4 border-t border-slate-100 pt-6">
+        {showNotifications && (
+        <div className={`space-y-4 ${showConnection ? 'border-t border-slate-100 pt-6' : ''}`}>
           <div className="flex items-start gap-2">
             <BellRing size={16} className="mt-0.5 shrink-0 text-slate-500" />
             <div>
@@ -513,6 +522,7 @@ export default function LineMessagingCard({
             </div>
           )}
         </div>
+        )}
       </div>
     </section>
   )
