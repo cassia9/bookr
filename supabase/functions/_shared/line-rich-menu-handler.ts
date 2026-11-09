@@ -511,7 +511,22 @@ export function createLineRichMenuApi(fetchImpl: typeof fetch = fetch): LineRich
       )
     },
     upsertAlias: async (accessToken, aliasId, richMenuId) => {
+      const aliasUrl = `https://api.line.me/v2/bot/richmenu/alias/${encodeURIComponent(aliasId)}`
       try {
+        await lineRequest(
+          aliasUrl,
+          accessToken,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ richMenuId }),
+          },
+          fetchImpl,
+        )
+      } catch (error) {
+        if (!(error instanceof LineRichMenuPublishError) || error.code !== "LINE_API_404") {
+          throw error
+        }
         await lineRequest(
           "https://api.line.me/v2/bot/richmenu/alias",
           accessToken,
@@ -519,20 +534,6 @@ export function createLineRichMenuApi(fetchImpl: typeof fetch = fetch): LineRich
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ richMenuAliasId: aliasId, richMenuId }),
-          },
-          fetchImpl,
-        )
-      } catch (error) {
-        if (!(error instanceof LineRichMenuPublishError) || error.code !== "LINE_API_409") {
-          throw error
-        }
-        await lineRequest(
-          `https://api.line.me/v2/bot/richmenu/alias/${encodeURIComponent(aliasId)}`,
-          accessToken,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ richMenuId }),
           },
           fetchImpl,
         )
