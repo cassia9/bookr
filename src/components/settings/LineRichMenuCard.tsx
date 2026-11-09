@@ -254,6 +254,7 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
   const [metrics, setMetrics] = useState<LineRichMenuDailyMetric[]>([])
   const localPreviewUrls = useRef(new Map<string, string>())
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   const activePage = config.pages.find(page => page.pageKey === activePageKey) ?? config.pages[0]
   const activeArea = activePage?.areas.find(area => area.areaKey === activeAreaKey)
@@ -747,7 +748,7 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
               required
               hint="PNG／JPG，2500 × 1686 像素，1 MB 內"
             >
-              <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm">
                     <ImagePlus size={18} />
@@ -761,17 +762,30 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
                     </p>
                   </div>
                 </div>
-                <Input
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  disabled={!isAdmin || uploadingPageKey === activePage.pageKey}
-                  className="max-w-64 bg-white file:mr-3 file:border-0 file:bg-transparent file:text-xs file:font-semibold"
-                  onChange={event => {
-                    const file = event.target.files?.[0]
-                    if (file) void uploadImage(file)
-                    event.target.value = ''
-                  }}
-                />
+                <div className="hidden">
+                  <Input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    disabled={!isAdmin || uploadingPageKey === activePage.pageKey}
+                    onChange={event => {
+                      const file = event.target.files?.[0]
+                      if (file) void uploadImage(file)
+                      event.target.value = ''
+                    }}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  loading={uploadingPageKey === activePage.pageKey}
+                  disabled={!isAdmin}
+                  className="w-full shrink-0 bg-white sm:w-auto"
+                  onClick={() => imageInputRef.current?.click()}
+                >
+                  <ImagePlus size={16} />
+                  {activePage.imagePath ? '更換背景圖片' : '上傳背景圖片'}
+                </Button>
               </div>
             </FormField>
 
