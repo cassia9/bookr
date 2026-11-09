@@ -64,8 +64,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  35::BIGINT,
-  'authenticated 只有三十五支必要 RPC／輔助函式'
+  37::BIGINT,
+  'authenticated 只有三十七支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -110,7 +110,9 @@ SELECT extensions.ok(
         'cancel_booking_scope',
         'reopen_completed_booking',
         'mark_in_app_notification_read',
-        'mark_all_in_app_notifications_read'
+        'mark_all_in_app_notifications_read',
+        'save_line_rich_menu_draft',
+        'queue_line_rich_menu_publication'
       ])
   ),
   'authenticated RPC 全部位於白名單'
@@ -124,8 +126,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('service_role', p.oid, 'EXECUTE')
   ),
-  17::BIGINT,
-  'service_role 只有邀請、LINE 預約與 Messaging Worker 必要 RPC'
+  22::BIGINT,
+  'service_role 只有邀請、LINE 預約、Messaging Worker 與圖文選單必要 RPC'
 );
 
 SELECT extensions.ok(
@@ -152,7 +154,12 @@ SELECT extensions.ok(
         'enqueue_line_test_notification',
         'get_line_customer_center',
         'get_line_webhook_config',
-        'record_line_webhook_event'
+        'record_line_webhook_event',
+        'claim_line_rich_menu_publication',
+        'get_line_rich_menu_insight_job',
+        'complete_line_rich_menu_publication',
+        'fail_line_rich_menu_publication',
+        'upsert_line_rich_menu_daily_metric'
       ])
   ),
   'service_role RPC 全部位於後端工作白名單'
@@ -204,12 +211,15 @@ SELECT extensions.is(
         'client_voucher_items',
         'voucher_redemptions',
         'voucher_ledger',
-        'booking_recurrence_series'
+        'booking_recurrence_series',
+        'line_rich_menu_sets',
+        'line_rich_menu_publications',
+        'line_rich_menu_daily_metrics'
       ])
       AND c.relrowsecurity
   ),
-  23::BIGINT,
-  '二十三張核心資料表全部啟用 RLS'
+  26::BIGINT,
+  '二十六張核心資料表全部啟用 RLS'
 );
 
 SELECT extensions.is(
