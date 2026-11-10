@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   areRichMenuAreasValid,
   clampRichMenuBounds,
+  findRichMenuInsertionBounds,
   isRichMenuBoundsAvailable,
   moveRichMenuBounds,
   resizeRichMenuBounds,
@@ -52,6 +53,22 @@ describe('LINE 圖文選單自訂格子幾何規則', () => {
       areas,
       'a',
     )).toBe(false)
+  })
+
+  it('可在畫布空白區建立不重疊格子', () => {
+    expect(findRichMenuInsertionBounds(1_000, 1_200, [
+      { x: 0, y: 0, width: 2500, height: 843 },
+    ])).toEqual({ x: 0, y: 843, width: 2500, height: 843 })
+  })
+
+  it('點在既有格子或過小空隙時不新增', () => {
+    expect(findRichMenuInsertionBounds(500, 500, [
+      { x: 0, y: 0, width: 1250, height: 1686 },
+    ])).toBeNull()
+    expect(findRichMenuInsertionBounds(1_300, 500, [
+      { x: 0, y: 0, width: 1250, height: 1686 },
+      { x: 1400, y: 0, width: 1100, height: 1686 },
+    ])).toBeNull()
   })
 
   it('修正超出畫布的數值', () => {

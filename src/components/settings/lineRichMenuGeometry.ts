@@ -102,6 +102,44 @@ export function isRichMenuBoundsAvailable<T extends RichMenuBounds & { areaKey: 
   ))
 }
 
+export function findRichMenuInsertionBounds<T extends RichMenuBounds>(
+  pointX: number,
+  pointY: number,
+  areas: T[],
+): RichMenuBounds | null {
+  const x = clamp(pointX, 0, RICH_MENU_CANVAS_WIDTH - 1)
+  const y = clamp(pointY, 0, RICH_MENU_CANVAS_HEIGHT - 1)
+
+  if (areas.some(area => (
+    x >= area.x
+    && x < area.x + area.width
+    && y >= area.y
+    && y < area.y + area.height
+  ))) return null
+
+  const xBoundaries = Array.from(new Set([
+    0,
+    RICH_MENU_CANVAS_WIDTH,
+    ...areas.flatMap(area => [area.x, area.x + area.width]),
+  ])).sort((left, right) => left - right)
+  const yBoundaries = Array.from(new Set([
+    0,
+    RICH_MENU_CANVAS_HEIGHT,
+    ...areas.flatMap(area => [area.y, area.y + area.height]),
+  ])).sort((top, bottom) => top - bottom)
+  const left = xBoundaries.filter(boundary => boundary <= x).at(-1) ?? 0
+  const right = xBoundaries.find(boundary => boundary > x) ?? RICH_MENU_CANVAS_WIDTH
+  const top = yBoundaries.filter(boundary => boundary <= y).at(-1) ?? 0
+  const bottom = yBoundaries.find(boundary => boundary > y) ?? RICH_MENU_CANVAS_HEIGHT
+  const candidate = { x: left, y: top, width: right - left, height: bottom - top }
+
+  if (candidate.width < RICH_MENU_MIN_AREA_WIDTH
+    || candidate.height < RICH_MENU_MIN_AREA_HEIGHT
+    || areas.some(area => richMenuBoundsOverlap(candidate, area))) return null
+
+  return candidate
+}
+
 export function areRichMenuAreasValid<T extends RichMenuBounds>(areas: T[]) {
   if (areas.length < 1 || areas.length > RICH_MENU_MAX_CUSTOM_AREAS) return false
 

@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import {
@@ -22,6 +23,7 @@ import {
   Send,
   Smartphone,
   Trash2,
+  X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Alert from '@/components/ui/Alert'
@@ -29,6 +31,7 @@ import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
 import Input from '@/components/ui/Input'
+import IconButton from '@/components/ui/IconButton'
 import Select from '@/components/ui/Select'
 import Spinner from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Snackbar'
@@ -37,6 +40,7 @@ import {
   RICH_MENU_CANVAS_WIDTH,
   RICH_MENU_MAX_CUSTOM_AREAS,
   areRichMenuAreasValid,
+  findRichMenuInsertionBounds,
   isRichMenuBoundsAvailable,
   moveRichMenuBounds,
   resizeRichMenuBounds,
@@ -510,9 +514,36 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
     setActiveAreaKey(newAreaKey)
   }
 
-  function removeCustomArea() {
-    if (!activePage || !activeArea || activePage.areas.length <= 1) return
-    const remaining = activePage.areas.filter(area => area.areaKey !== activeArea.areaKey)
+  function addCustomAreaAtPointer(event: ReactMouseEvent<HTMLDivElement>) {
+    if (!activePage || !isAdmin || !isCustomLayout
+      || activePage.areas.length >= RICH_MENU_MAX_CUSTOM_AREAS) return
+    if ((event.target as HTMLElement).closest('[data-rich-menu-area]')) return
+
+    const canvas = event.currentTarget.getBoundingClientRect()
+    const bounds = findRichMenuInsertionBounds(
+      ((event.clientX - canvas.left) / canvas.width) * RICH_MENU_CANVAS_WIDTH,
+      ((event.clientY - canvas.top) / canvas.height) * RICH_MENU_CANVAS_HEIGHT,
+      activePage.areas,
+    )
+    if (!bounds) {
+      toast.info('這裡的空間不足', '請先縮小或移動附近格子，再點空白處新增')
+      return
+    }
+
+    const newAreaKey = `${activePage.pageKey}-area-${Date.now().toString(36)}`
+    updatePage(activePage.pageKey, page => ({
+      ...page,
+      areas: [
+        ...page.areas,
+        { ...bounds, areaKey: newAreaKey, action: { type: 'none', value: '' } },
+      ],
+    }))
+    setActiveAreaKey(newAreaKey)
+  }
+
+  function removeCustomArea(areaKey = activeArea?.areaKey) {
+    if (!activePage || !areaKey || activePage.areas.length <= 1) return
+    const remaining = activePage.areas.filter(area => area.areaKey !== areaKey)
     updatePage(activePage.pageKey, page => ({ ...page, areas: remaining }))
     setActiveAreaKey(remaining[0].areaKey)
   }
@@ -944,7 +975,7 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
                 <div className="flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-start gap-2 text-xs leading-5 text-indigo-700">
                     <Move size={15} className="mt-0.5 shrink-0" />
-                    <span>在右側預覽拖曳格子，右下角控制點可縮放；移動時會自動吸附且避免重疊。</span>
+                    <span>點預覽空白處新增格子；選取後可拖曳、縮放，或點右上角 × 刪除。</span>
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <Button
@@ -963,7 +994,7 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
                       size="sm"
                       className="text-red-500 hover:bg-red-50 hover:text-red-600"
                       disabled={!isAdmin || activePage.areas.length <= 1}
-                      onClick={removeCustomArea}
+                      onClick={() => removeCustomArea()}
                     >
                       <Trash2 size={14} />
                       刪除此格
@@ -1135,7 +1166,13 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
               <div className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
                 <div
                   ref={previewCanvasRef}
-                  className="relative aspect-[2500/1686] overflow-hidden rounded-[20px] bg-gradient-to-br from-slate-800 via-slate-700 to-indigo-900"
+                  className={`relative aspect-[2500/1686] overflow-hidden rounded-[20px] bg-gradient-to-br from-slate-800 via-slate-700 to-indigo-900 ${
+                    isCustomLayout && isAdmin
+                      && activePage.areas.length < RICH_MENU_MAX_CUSTOM_AREAS
+                      ? 'cursor-copy'
+                      : ''
+                  }`}
+                  onClick={addCustomAreaAtPointer}
                   style={previewUrls[activePage.pageKey] ? {
                     backgroundImage: `url(${previewUrls[activePage.pageKey]})`,
                     backgroundPosition: 'center',
@@ -1143,7 +1180,7 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
                   } : undefined}
                 >
                   {!previewUrls[activePage.pageKey] && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white/80">
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center text-white/80">
                       <ImagePlus size={28} />
                       <p className="mt-2 text-xs font-semibold">上傳圖片後在此預覽</p>
                     </div>
@@ -1161,6 +1198,7 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
                   {activePage.areas.map((area, index) => (
                     <div
                       key={area.areaKey}
+                      data-rich-menu-area
                       className="absolute z-[2]"
                       style={{
                         left: `${(area.x / RICH_MENU_CANVAS_WIDTH) * 100}%`,
@@ -1185,13 +1223,29 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
                         <span className="line-clamp-2">{index + 1}. {actionLabel(area.action)}</span>
                       </Button>
                       {isCustomLayout && isAdmin && activeArea?.areaKey === area.areaKey && (
-                        <div
-                          aria-hidden="true"
-                          className="absolute -bottom-1.5 -right-1.5 z-10 flex h-6 w-6 touch-none cursor-se-resize items-center justify-center rounded-md border-2 border-white bg-indigo-600 text-white shadow-lg"
-                          onPointerDown={event => startAreaDrag(event, area, 'resize')}
-                        >
-                          <Maximize2 size={12} />
-                        </div>
+                        <>
+                          {activePage.areas.length > 1 && (
+                            <IconButton
+                              icon={X}
+                              label={`刪除格子 ${index + 1}`}
+                              variant="danger"
+                              size="sm"
+                              className="absolute -right-2 -top-2 z-20 border-2 border-white bg-white text-red-500 shadow-lg"
+                              onPointerDown={event => event.stopPropagation()}
+                              onClick={event => {
+                                event.stopPropagation()
+                                removeCustomArea(area.areaKey)
+                              }}
+                            />
+                          )}
+                          <div
+                            aria-hidden="true"
+                            className="absolute -bottom-1.5 -right-1.5 z-10 flex h-6 w-6 touch-none cursor-se-resize items-center justify-center rounded-md border-2 border-white bg-indigo-600 text-white shadow-lg"
+                            onPointerDown={event => startAreaDrag(event, area, 'resize')}
+                          >
+                            <Maximize2 size={12} />
+                          </div>
+                        </>
                       )}
                     </div>
                   ))}
