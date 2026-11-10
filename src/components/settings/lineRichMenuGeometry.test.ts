@@ -17,6 +17,14 @@ describe('LINE 圖文選單自訂格子幾何規則', () => {
     )).toEqual({ x: 2000, y: 1336, width: 500, height: 350 })
   })
 
+  it('移動預設三格版型時保留原始尺寸', () => {
+    expect(moveRichMenuBounds(
+      { x: 0, y: 0, width: 834, height: 1686 },
+      100,
+      0,
+    )).toEqual({ x: 100, y: 0, width: 834, height: 1686 })
+  })
+
   it('縮放時會套用最小尺寸與畫布邊界', () => {
     expect(resizeRichMenuBounds(
       { x: 2_000, y: 1_300, width: 500, height: 386 },

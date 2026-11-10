@@ -37,7 +37,6 @@ import {
   RICH_MENU_CANVAS_WIDTH,
   RICH_MENU_MAX_CUSTOM_AREAS,
   areRichMenuAreasValid,
-  clampRichMenuBounds,
   isRichMenuBoundsAvailable,
   moveRichMenuBounds,
   resizeRichMenuBounds,
@@ -437,9 +436,11 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
 
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp, { once: true })
+    window.addEventListener('pointercancel', handlePointerUp, { once: true })
     return () => {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
     }
   }, [areaDrag])
 
@@ -548,13 +549,13 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
       return
     }
 
-    const candidate = clampRichMenuBounds({
-      x: activeArea.x,
-      y: activeArea.y,
-      width: activeArea.width,
-      height: activeArea.height,
-      [field]: parsed,
-    })
+    const candidate = field === 'x'
+      ? moveRichMenuBounds(activeArea, parsed - activeArea.x, 0)
+      : field === 'y'
+        ? moveRichMenuBounds(activeArea, 0, parsed - activeArea.y)
+        : field === 'width'
+          ? resizeRichMenuBounds(activeArea, parsed - activeArea.width, 0)
+          : resizeRichMenuBounds(activeArea, 0, parsed - activeArea.height)
     if (!isRichMenuBoundsAvailable(candidate, activePage.areas, activeArea.areaKey)) {
       toast.error('格子不能重疊', '請調整位置或尺寸後再試')
       return
@@ -625,7 +626,9 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
       image.src = localUrl
     }).catch(() => null)
 
-    if (!dimensions || dimensions.width !== CANVAS_WIDTH || dimensions.height !== CANVAS_HEIGHT) {
+    if (!dimensions
+      || dimensions.width !== RICH_MENU_CANVAS_WIDTH
+      || dimensions.height !== RICH_MENU_CANVAS_HEIGHT) {
       URL.revokeObjectURL(localUrl)
       toast.error('圖片尺寸不符合', 'Phase 1 請使用 2500 × 1686 像素圖片')
       return

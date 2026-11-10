@@ -50,11 +50,19 @@ export function moveRichMenuBounds(
   deltaX: number,
   deltaY: number,
 ) {
-  return clampRichMenuBounds({
+  return {
     ...original,
-    x: original.x + deltaX,
-    y: original.y + deltaY,
-  })
+    x: clamp(
+      snapRichMenuValue(original.x + deltaX),
+      0,
+      RICH_MENU_CANVAS_WIDTH - original.width,
+    ),
+    y: clamp(
+      snapRichMenuValue(original.y + deltaY),
+      0,
+      RICH_MENU_CANVAS_HEIGHT - original.height,
+    ),
+  }
 }
 
 export function resizeRichMenuBounds(
