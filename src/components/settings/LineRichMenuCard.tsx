@@ -686,6 +686,21 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
     toast.success('背景圖片已上傳', '儲存草稿後才會保留此版設定')
   }
 
+  function removeBackgroundImage() {
+    if (!activePage) return
+    const pageKey = activePage.pageKey
+
+    updatePage(pageKey, page => ({ ...page, imagePath: '' }))
+    setPreviewUrls(current => {
+      const next = { ...current }
+      delete next[pageKey]
+      return next
+    })
+    releaseLocalPreview(pageKey)
+    if (imageInputRef.current) imageInputRef.current.value = ''
+    toast.success('底圖已從此分頁移除', '儲存草稿後生效；分頁、格子與動作設定都會保留')
+  }
+
   async function saveDraft(showSuccess = true) {
     const validationError = configError(config, menuName, false)
     if (validationError) {
@@ -1009,8 +1024,8 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
               required
               hint="PNG／JPG，2500 × 1686 像素，1 MB 內"
             >
-              <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm">
                     <ImagePlus size={18} />
                   </div>
@@ -1036,17 +1051,32 @@ export default function LineRichMenuCard({ storeId, isAdmin, messagingReady }: P
                     }}
                   />
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  loading={uploadingPageKey === activePage.pageKey}
-                  disabled={!isAdmin}
-                  className="w-full shrink-0 bg-white sm:w-auto"
-                  onClick={() => imageInputRef.current?.click()}
-                >
-                  <ImagePlus size={16} />
-                  {activePage.imagePath ? '更換背景圖片' : '上傳背景圖片'}
-                </Button>
+                <div className="flex w-full shrink-0 flex-col gap-2 2xl:w-auto 2xl:items-end">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    loading={uploadingPageKey === activePage.pageKey}
+                    disabled={!isAdmin}
+                    className="w-full bg-white 2xl:w-auto"
+                    onClick={() => imageInputRef.current?.click()}
+                  >
+                    <ImagePlus size={16} />
+                    {activePage.imagePath ? '更換背景圖片' : '上傳背景圖片'}
+                  </Button>
+                  {activePage.imagePath && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={!isAdmin || uploadingPageKey === activePage.pageKey}
+                      className="w-full text-red-500 hover:bg-red-50 hover:text-red-600 2xl:w-auto"
+                      onClick={removeBackgroundImage}
+                    >
+                      <Trash2 size={14} />
+                      移除底圖
+                    </Button>
+                  )}
+                </div>
               </div>
             </FormField>
 
