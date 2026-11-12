@@ -13,6 +13,7 @@ import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import FormField from '@/components/ui/FormField'
 import Input from '@/components/ui/Input'
+import { toast } from '@/components/ui/Snackbar'
 import type { StoreChannelConnection } from '@/types/database'
 
 interface LineChannelCardProps {
@@ -80,9 +81,14 @@ export default function LineChannelCard({
   const identifiersLocked = isConnected && !isLegacyConnection
 
   async function copy(value: string, target: Exclude<CopyTarget, null>) {
-    await navigator.clipboard.writeText(value)
-    setCopied(target)
-    window.setTimeout(() => setCopied(null), 2000)
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(target)
+      toast.success('預約網址已複製', '可以直接貼到 LINE 聊天、圖文選單或其他訊息中')
+      window.setTimeout(() => setCopied(null), 2000)
+    } catch {
+      toast.error('無法複製預約網址', '請使用下方完整網址手動選取並複製')
+    }
   }
 
   return (
@@ -105,16 +111,32 @@ export default function LineChannelCard({
           </div>
         </div>
 
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={!lineBookingUrl}
-          onClick={() => window.open(lineBookingUrl, '_blank', 'noopener,noreferrer')}
-        >
-          <ExternalLink size={13} />
-          開啟 LINE 測試
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={!lineBookingUrl}
+            onClick={() => copy(lineBookingUrl, 'liff')}
+            className="w-full sm:w-auto"
+          >
+            {copied === 'liff'
+              ? <CheckCircle size={13} className="text-green-600" />
+              : <Copy size={13} />}
+            {copied === 'liff' ? '預約網址已複製' : '複製預約網址'}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={!lineBookingUrl}
+            onClick={() => window.open(lineBookingUrl, '_blank', 'noopener,noreferrer')}
+            className="w-full sm:w-auto"
+          >
+            <ExternalLink size={13} />
+            開啟 LINE 測試
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-6 p-6">
