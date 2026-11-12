@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT extensions.plan(20);
+SELECT extensions.plan(22);
 
 INSERT INTO public.stores (id, name, booking_enabled, timezone)
 VALUES
@@ -203,6 +203,40 @@ SELECT extensions.is(
   ),
   3::BIGINT,
   '草稿建立、更新與排入發布都有稽核紀錄'
+);
+
+SELECT extensions.is(
+  public.save_line_rich_menu_draft(
+    '自訂版型',
+    '{
+      "pages":[{
+        "pageKey":"home","name":"首頁","layoutKey":"layout_custom","imagePath":"rich-menus/home.png",
+        "areas":[
+          {"areaKey":"booking","x":0,"y":0,"width":1500,"height":1686,"action":{"type":"booking","value":""}},
+          {"areaKey":"account","x":1500,"y":0,"width":1000,"height":1686,"action":{"type":"customer_center","value":""}}
+        ]
+      }]}
+    '::JSONB
+  ) ->> 'ok',
+  'true',
+  '管理員可儲存互不重疊的自訂格子'
+);
+
+SELECT extensions.is(
+  public.save_line_rich_menu_draft(
+    '重疊版型',
+    '{
+      "pages":[{
+        "pageKey":"home","name":"首頁","layoutKey":"layout_custom","imagePath":"rich-menus/home.png",
+        "areas":[
+          {"areaKey":"booking","x":0,"y":0,"width":1500,"height":1686,"action":{"type":"booking","value":""}},
+          {"areaKey":"account","x":1000,"y":0,"width":1500,"height":1686,"action":{"type":"customer_center","value":""}}
+        ]
+      }]}
+    '::JSONB
+  ) ->> 'error',
+  'AREA_OVERLAP',
+  '自訂格子不可彼此重疊'
 );
 
 RESET ROLE;
