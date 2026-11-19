@@ -7,7 +7,7 @@ export type InvitationDeliveryError =
   | "EMAIL_PROVIDER_REJECTED"
   | "EMAIL_PROVIDER_REQUEST_FAILED"
 
-export function classifySendGridFailureStatus(status: number): InvitationDeliveryError {
+export function classifyEmailProviderFailureStatus(status: number): InvitationDeliveryError {
   if (status === 401) return "EMAIL_PROVIDER_UNAUTHORIZED"
   if (status === 403) return "EMAIL_PROVIDER_FORBIDDEN"
   if (status === 429) return "EMAIL_PROVIDER_RATE_LIMITED"
