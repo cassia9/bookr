@@ -51,6 +51,7 @@ interface InviteFunctionResponse {
   ok?: boolean
   warning?: string
   deliveryStatus?: 'sent' | 'failed'
+  deliveryError?: string
 }
 
 // ── 工具函式 ─────────────────────────────────────────────────────────────────
@@ -85,6 +86,24 @@ async function functionErrorMessage(error: unknown, fallback: string) {
   }
 
   return error instanceof Error ? error.message : fallback
+}
+
+function invitationDeliveryMessage(code?: string) {
+  switch (code) {
+    case 'EMAIL_PROVIDER_UNAUTHORIZED':
+      return '寄信服務憑證已失效，請聯絡系統管理者更新設定'
+    case 'EMAIL_PROVIDER_FORBIDDEN':
+      return '寄信服務拒絕此寄件者，請聯絡系統管理者檢查寄件信箱驗證'
+    case 'EMAIL_PROVIDER_RATE_LIMITED':
+      return '寄信服務目前忙碌，請稍後再重新發送'
+    case 'EMAIL_PROVIDER_UNAVAILABLE':
+    case 'EMAIL_PROVIDER_REQUEST_FAILED':
+      return '寄信服務暫時無法連線，請稍後再重新發送'
+    case 'EMAIL_PROVIDER_NOT_CONFIGURED':
+      return '正式站尚未完成寄信服務設定，請聯絡系統管理者'
+    default:
+      return '邀請已建立，但信件未寄出；請稍後從待接受名單重新發送'
+  }
 }
 
 // ── 側欄標籤 ─────────────────────────────────────────────────────────────────
@@ -993,7 +1012,7 @@ function MembersSettings() {
       }
 
       if (data?.deliveryStatus === 'failed' || data?.warning) {
-        toast.warning('邀請已建立', '信件暫時未寄出，可稍後從待接受名單重新發送')
+        toast.warning('邀請已建立', invitationDeliveryMessage(data?.deliveryError))
       } else {
         toast.success('邀請已發送', `邀請信已寄到 ${normalizedEmail}`)
       }
@@ -1048,7 +1067,7 @@ function MembersSettings() {
       }
 
       if (data?.deliveryStatus === 'failed' || data?.warning) {
-        toast.warning('邀請已更新', '信件暫時未寄出，請稍後再試')
+        toast.warning('邀請已更新', invitationDeliveryMessage(data?.deliveryError))
       } else {
         toast.success('邀請已重新發送', `新的邀請信已寄到 ${inv.email}`)
       }

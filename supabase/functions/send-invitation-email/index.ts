@@ -1,5 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.112.3"
+import {
+  classifySendGridFailureStatus,
+  type InvitationDeliveryError,
+} from "../_shared/invitation-email.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,7 +54,7 @@ async function sendEmailViaSendGrid(
 ): Promise<{ success: boolean; error?: string }> {
   const sendGridApiKey = Deno.env.get("SENDGRID_API_KEY")
   if (!sendGridApiKey) {
-    return { success: false, error: "SENDGRID_NOT_CONFIGURED" }
+    return { success: false, error: "EMAIL_PROVIDER_NOT_CONFIGURED" satisfies InvitationDeliveryError }
   }
 
   try {
@@ -75,13 +79,13 @@ async function sendEmailViaSendGrid(
 
     if (!response.ok) {
       console.error("SendGrid rejected invitation email:", response.status)
-      return { success: false, error: `SENDGRID_${response.status}` }
+      return { success: false, error: classifySendGridFailureStatus(response.status) }
     }
 
     return { success: true }
   } catch (error) {
     console.error("SendGrid request failed:", errorMessage(error))
-    return { success: false, error: "SENDGRID_REQUEST_FAILED" }
+    return { success: false, error: "EMAIL_PROVIDER_REQUEST_FAILED" satisfies InvitationDeliveryError }
   }
 }
 
@@ -334,7 +338,11 @@ serve(async (req) => {
     }
 
     if (!result.success) {
-      return jsonResponse({ error: "Failed to send email", code: "EMAIL_DELIVERY_FAILED" }, 502)
+      return jsonResponse({
+        error: "Failed to send email",
+        code: "EMAIL_DELIVERY_FAILED",
+        reason: result.error || "EMAIL_PROVIDER_REJECTED",
+      }, 502)
     }
 
     return jsonResponse({
