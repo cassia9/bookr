@@ -1,5 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.112.3"
+import {
+  classifyEmailProviderFailureStatus,
+  type InvitationDeliveryError,
+} from "../_shared/invitation-email.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,45 +47,47 @@ function sanitizeHeader(value: string): string {
   return value.replaceAll(/[\r\n]/g, " ").trim().slice(0, 120)
 }
 
-async function sendEmailViaSendGrid(
+async function sendEmailViaBrevo(
   to: string,
   subject: string,
   htmlContent: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const sendGridApiKey = Deno.env.get("SENDGRID_API_KEY")
-  if (!sendGridApiKey) {
-    return { success: false, error: "SENDGRID_NOT_CONFIGURED" }
+  const brevoApiKey = Deno.env.get("BREVO_API_KEY")
+  const fromEmail = Deno.env.get("BREVO_FROM_EMAIL")
+  if (!brevoApiKey || !fromEmail) {
+    return { success: false, error: "EMAIL_PROVIDER_NOT_CONFIGURED" satisfies InvitationDeliveryError }
   }
 
   try {
-    const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${sendGridApiKey}`,
+        "api-key": brevoApiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        personalizations: [{ to: [{ email: to }], subject }],
-        from: {
-          email: Deno.env.get("SENDGRID_FROM_EMAIL") || "noreply@booking-system.com",
-          name: Deno.env.get("SENDGRID_FROM_NAME") || "預約管理系統",
+        sender: {
+          email: fromEmail,
+          name: Deno.env.get("BREVO_FROM_NAME") || "預約管理系統",
         },
-        content: [{ type: "text/html", value: htmlContent }],
-        reply_to: {
-          email: Deno.env.get("SENDGRID_REPLY_EMAIL") || "support@booking-system.com",
+        to: [{ email: to }],
+        subject,
+        htmlContent,
+        replyTo: {
+          email: Deno.env.get("BREVO_REPLY_EMAIL") || fromEmail,
         },
       }),
     })
 
     if (!response.ok) {
-      console.error("SendGrid rejected invitation email:", response.status)
-      return { success: false, error: `SENDGRID_${response.status}` }
+      console.error("Brevo rejected invitation email:", response.status)
+      return { success: false, error: classifyEmailProviderFailureStatus(response.status) }
     }
 
     return { success: true }
   } catch (error) {
-    console.error("SendGrid request failed:", errorMessage(error))
-    return { success: false, error: "SENDGRID_REQUEST_FAILED" }
+    console.error("Brevo request failed:", errorMessage(error))
+    return { success: false, error: "EMAIL_PROVIDER_REQUEST_FAILED" satisfies InvitationDeliveryError }
   }
 }
 
@@ -311,7 +317,7 @@ serve(async (req) => {
       invitation.expires_at,
     )
 
-    const result = await sendEmailViaSendGrid(
+    const result = await sendEmailViaBrevo(
       invitation.email,
       `[${sanitizeHeader(store.name)}] 邀請你加入預約管理系統`,
       htmlContent,
@@ -334,7 +340,11 @@ serve(async (req) => {
     }
 
     if (!result.success) {
-      return jsonResponse({ error: "Failed to send email", code: "EMAIL_DELIVERY_FAILED" }, 502)
+      return jsonResponse({
+        error: "Failed to send email",
+        code: "EMAIL_DELIVERY_FAILED",
+        reason: result.error || "EMAIL_PROVIDER_REJECTED",
+      }, 502)
     }
 
     return jsonResponse({
