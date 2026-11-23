@@ -126,7 +126,7 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('service_role', p.oid, 'EXECUTE')
   ),
-  22::BIGINT,
+  23::BIGINT,
   'service_role 只有邀請、LINE 預約、Messaging Worker 與圖文選單必要 RPC'
 );
 
@@ -142,6 +142,7 @@ SELECT extensions.ok(
         'claim_member_invitation',
         'release_member_invitation_claim',
         'complete_member_invitation',
+        'reactivate_member_invitation',
         'claim_invitation_email_send',
         'finish_invitation_email_send',
         'create_line_booking',
