@@ -7,7 +7,23 @@ export type InvitationDeliveryError =
   | "EMAIL_PROVIDER_REJECTED"
   | "EMAIL_PROVIDER_REQUEST_FAILED"
 
-export function classifyEmailProviderFailureStatus(status: number): InvitationDeliveryError {
+export const DEFAULT_INVITATION_SENDER_NAME = "Bookr 預約管理系統"
+
+export function normalizeInvitationSenderName(
+  value: string | null | undefined,
+): string {
+  const normalized = value?.replaceAll(/[\r\n]/g, " ").trim()
+
+  if (!normalized || normalized.includes("\uFFFD")) {
+    return DEFAULT_INVITATION_SENDER_NAME
+  }
+
+  return normalized.slice(0, 70)
+}
+
+export function classifyEmailProviderFailureStatus(
+  status: number,
+): InvitationDeliveryError {
   if (status === 401) return "EMAIL_PROVIDER_UNAUTHORIZED"
   if (status === 403) return "EMAIL_PROVIDER_FORBIDDEN"
   if (status === 429) return "EMAIL_PROVIDER_RATE_LIMITED"
