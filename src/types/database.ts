@@ -69,6 +69,36 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['practitioners']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['practitioners']['Insert']>
       }
+      practitioner_weekly_schedules: {
+        Row: {
+          id: string
+          store_id: string
+          practitioner_id: string
+          weekday: number
+          is_working: boolean
+          start_time: string | null
+          end_time: string | null
+          created_at: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: never
+        Update: never
+      }
+      practitioner_blocks: {
+        Row: {
+          id: string
+          practitioner_id: string
+          store_id: string
+          start_time: string
+          end_time: string
+          reason: string | null
+          created_at: string
+          legacy_leave_id: string | null
+        }
+        Insert: never
+        Update: never
+      }
       clients: {
         Row: {
           id: string
@@ -531,6 +561,31 @@ export interface Database {
       }
     }
     Functions: {
+      preview_practitioner_schedule_conflicts: {
+        Args: { p_practitioner_id: string; p_schedule: Json }
+        Returns: Json
+      }
+      save_practitioner_weekly_schedule: {
+        Args: { p_practitioner_id: string; p_schedule: Json }
+        Returns: Json
+      }
+      preview_practitioner_leave_conflicts: {
+        Args: { p_practitioner_id: string; p_start_date: string; p_end_date: string }
+        Returns: Json
+      }
+      save_practitioner_leave: {
+        Args: {
+          p_practitioner_id: string
+          p_start_date: string
+          p_end_date: string
+          p_reason?: string | null
+        }
+        Returns: Json
+      }
+      delete_practitioner_leave: {
+        Args: { p_block_id: string }
+        Returns: Json
+      }
       validate_invitation_token: {
         Args: { p_token: string }
         Returns: Array<{

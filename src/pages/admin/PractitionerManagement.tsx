@@ -29,8 +29,8 @@ export default function PractitionerManagement() {
   const storeId = profile?.store_id ?? ''
   const [showForm, setShowForm] = useState(false)
   const [editingPractitionerId, setEditingPractitionerId] = useState<string | null>(null)
-  const [showLeaveManager, setShowLeaveManager] = useState(false)
-  const [leaveManagerPractitionerId, setLeaveManagerPractitionerId] = useState<string | null>(null)
+  const [showScheduleManager, setShowScheduleManager] = useState(false)
+  const [scheduleManagerPractitionerId, setScheduleManagerPractitionerId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [stats, setStats] = useState<PractitionerStats>({
@@ -71,17 +71,18 @@ export default function PractitionerManagement() {
         .eq('active', false)
         .is('deleted_at', null)
 
-      // 獲取今日休假數
+      // 獲取今日休假數（統一使用 practitioner_blocks）
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const tomorrow = new Date(today)
       tomorrow.setDate(tomorrow.getDate() + 1)
 
       const { count: onLeaveTodayCount } = await supabase
-        .from('practitioner_leaves')
+        .from('practitioner_blocks')
         .select('id', { count: 'exact', head: 0 })
-        .lte('start_date', today.toISOString().split('T')[0])
-        .gte('end_date', today.toISOString().split('T')[0])
+        .eq('store_id', storeId)
+        .lt('start_time', tomorrow.toISOString())
+        .gt('end_time', today.toISOString())
 
       setStats({
         total: totalCount || 0,
@@ -115,8 +116,8 @@ export default function PractitionerManagement() {
   }
 
   const handleManageLeaves = (id: string) => {
-    setLeaveManagerPractitionerId(id)
-    setShowLeaveManager(true)
+    setScheduleManagerPractitionerId(id)
+    setShowScheduleManager(true)
   }
 
   const handleFormSuccess = () => {
@@ -132,7 +133,7 @@ export default function PractitionerManagement() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-text-primary">老師管理</h1>
-            <p className="text-sm text-text-secondary mt-2">管理老師、課程指派和休假時間</p>
+            <p className="text-sm text-text-secondary mt-2">管理老師、課程指派、固定班表與休假時間</p>
           </div>
 
           {/* 操作按鈕 */}
@@ -255,15 +256,16 @@ export default function PractitionerManagement() {
         />
       )}
 
-      {/* 休假管理 */}
-      {showLeaveManager && leaveManagerPractitionerId && (
+      {/* 固定班表與休假管理 */}
+      {showScheduleManager && scheduleManagerPractitionerId && (
         <PractitionerLeaveManager
           storeId={storeId}
-          practitionerId={leaveManagerPractitionerId}
+          practitionerId={scheduleManagerPractitionerId}
           practitionerName="" // 由組件內部載入
           onClose={() => {
-            setShowLeaveManager(false)
-            setLeaveManagerPractitionerId(null)
+            setShowScheduleManager(false)
+            setScheduleManagerPractitionerId(null)
+            void loadStats()
           }}
         />
       )}
