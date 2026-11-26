@@ -98,6 +98,13 @@ export default function PractitionerManagement() {
     loadStats() // 重新載入統計
   }
 
+  const handleFormClose = () => {
+    setShowForm(false)
+    setEditingPractitionerId(null)
+    setTableRefreshKey((current) => current + 1)
+    void loadStats()
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* 頂部標題欄 */}
@@ -210,10 +217,7 @@ export default function PractitionerManagement() {
           storeId={storeId}
           practitionerId={editingPractitionerId || undefined}
           onSuccess={handleFormSuccess}
-          onCancel={() => {
-            setShowForm(false)
-            setEditingPractitionerId(null)
-          }}
+          onCancel={handleFormClose}
         />
       )}
 
