@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { CalendarDays, CalendarOff, Clock3, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Modal from '@/components/ui/Modal'
@@ -45,6 +46,32 @@ interface Props {
   practitionerId: string
   practitionerName: string
   onClose: () => void
+  embedded?: boolean
+}
+
+interface ManagerShellProps {
+  embedded: boolean
+  onClose: () => void
+  title: string
+  footer?: ReactNode
+  children: ReactNode
+}
+
+function ManagerShell({ embedded, onClose, title, footer, children }: ManagerShellProps) {
+  if (embedded) {
+    return (
+      <div className="space-y-5">
+        {children}
+        {footer && <div className="border-t border-slate-100 pt-4">{footer}</div>}
+      </div>
+    )
+  }
+
+  return (
+    <Modal open onClose={onClose} title={title} size="lg" footer={footer}>
+      {children}
+    </Modal>
+  )
 }
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
@@ -73,6 +100,7 @@ export default function PractitionerLeaveManager({
   practitionerId,
   practitionerName,
   onClose,
+  embedded = false,
 }: Props) {
   const [tab, setTab] = useState<'schedule' | 'leave'>('schedule')
   const [resolvedName, setResolvedName] = useState(practitionerName)
@@ -365,11 +393,10 @@ export default function PractitionerLeaveManager({
 
   return (
     <>
-      <Modal
-        open
+      <ManagerShell
+        embedded={embedded}
         onClose={onClose}
         title={`排班與休假${resolvedName ? ` · ${resolvedName}` : ''}`}
-        size="lg"
         footer={tab === 'schedule' ? (
           <Button className="w-full" loading={scheduleSaving} onClick={requestScheduleSave}>
             儲存固定班表
@@ -552,7 +579,7 @@ export default function PractitionerLeaveManager({
             </div>
           )}
         </div>
-      </Modal>
+      </ManagerShell>
 
       <ConfirmModal
         open={scheduleConflicts.length > 0}
