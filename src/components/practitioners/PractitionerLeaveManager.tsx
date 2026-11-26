@@ -48,7 +48,10 @@ interface Props {
 }
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
-const today = new Date().toISOString().slice(0, 10)
+const now = new Date()
+const today = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+  .toISOString()
+  .slice(0, 10)
 
 function normalizeTime(value: string | null | undefined, fallback: string) {
   return value?.slice(0, 5) || fallback
@@ -95,7 +98,9 @@ export default function PractitionerLeaveManager({
 
   useEffect(() => {
     void Promise.all([loadSchedule(), loadBlocks(), loadPractitionerName()])
-  }, [practitionerId, storeId])
+    // 三個載入函式只依賴下列老師與店家識別；身分切換時重新載入即可。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [practitionerId, practitionerName, storeId])
 
   async function loadPractitionerName() {
     if (practitionerName) return
