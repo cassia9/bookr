@@ -13,8 +13,6 @@ import { useAuth } from '@/lib/auth'
 
 interface PractitionerStats {
   total: number
-  active: number
-  inactive: number
   onLeaveToday: number
 }
 
@@ -33,10 +31,9 @@ export default function PractitionerManagement() {
   const [scheduleManagerPractitionerId, setScheduleManagerPractitionerId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
+  const [tableRefreshKey, setTableRefreshKey] = useState(0)
   const [stats, setStats] = useState<PractitionerStats>({
     total: 0,
-    active: 0,
-    inactive: 0,
     onLeaveToday: 0,
   })
   const [isLoadingStats, setIsLoadingStats] = useState(true)
@@ -55,22 +52,6 @@ export default function PractitionerManagement() {
         .eq('store_id', storeId)
         .is('deleted_at', null)
 
-      // 獲取活躍數
-      const { count: activeCount } = await supabase
-        .from('practitioners')
-        .select('id', { count: 'exact', head: 0 })
-        .eq('store_id', storeId)
-        .eq('active', true)
-        .is('deleted_at', null)
-
-      // 獲取停用數
-      const { count: inactiveCount } = await supabase
-        .from('practitioners')
-        .select('id', { count: 'exact', head: 0 })
-        .eq('store_id', storeId)
-        .eq('active', false)
-        .is('deleted_at', null)
-
       // 獲取今日休假數（統一使用 practitioner_blocks）
       const today = new Date()
       today.setHours(0, 0, 0, 0)
@@ -86,8 +67,6 @@ export default function PractitionerManagement() {
 
       setStats({
         total: totalCount || 0,
-        active: activeCount || 0,
-        inactive: inactiveCount || 0,
         onLeaveToday: onLeaveTodayCount || 0,
       })
     } catch (error) {
@@ -123,6 +102,7 @@ export default function PractitionerManagement() {
   const handleFormSuccess = () => {
     setShowForm(false)
     setEditingPractitionerId(null)
+    setTableRefreshKey((current) => current + 1)
     loadStats() // 重新載入統計
   }
 
@@ -151,8 +131,8 @@ export default function PractitionerManagement() {
         {/* 統計卡片 */}
         <div className="px-6 py-8 bg-white shadow-md border-b border-slate-200/50">
           {isLoadingStats ? (
-            <div className="grid grid-cols-4 gap-6">
-              {[1, 2, 3, 4].map((i) => (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              {[1, 2].map((i) => (
                 <div
                   key={i}
                   className="h-24 bg-slate-50 rounded-xl animate-pulse"
@@ -160,24 +140,12 @@ export default function PractitionerManagement() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <StatsCard
                 label="總數"
                 value={stats.total}
                 subtitle="所有老師"
                 color="blue"
-              />
-              <StatsCard
-                label="活躍"
-                value={stats.active}
-                subtitle="可接受預約"
-                color="green"
-              />
-              <StatsCard
-                label="停用"
-                value={stats.inactive}
-                subtitle="暫停服務"
-                color="gray"
               />
               <StatsCard
                 label="今日休假"
@@ -227,6 +195,7 @@ export default function PractitionerManagement() {
         {/* 表格區域 */}
         <div className="flex-1 overflow-auto bg-slate-50">
           <PractitionerTable
+            key={tableRefreshKey}
             searchTerm={searchTerm}
             filterStatus={filterStatus}
             onEdit={handleEditPractitioner}

@@ -12,6 +12,18 @@ interface Practitioner {
   active: boolean
   bookingCount?: number
   serviceCount?: number
+  workingDays?: number[]
+  hasCustomSchedule?: boolean
+}
+
+const WEEKDAY_LABELS: Record<number, string> = {
+  1: '一',
+  2: '二',
+  3: '三',
+  4: '四',
+  5: '五',
+  6: '六',
+  7: '日',
 }
 
 interface PractitionerTableProps {
@@ -112,6 +124,17 @@ export default function PractitionerTable({
 
       if (error) throw error
 
+      const practitionerIds = (data || []).map((practitioner) => practitioner.id)
+      const { data: schedules, error: schedulesError } = practitionerIds.length > 0
+        ? await supabase
+          .from('practitioner_weekly_schedules')
+          .select('practitioner_id, weekday, is_working')
+          .in('practitioner_id', practitionerIds)
+          .order('weekday', { ascending: true })
+        : { data: [], error: null }
+
+      if (schedulesError) throw schedulesError
+
       // 為每個老師計算預約數和課程數
       const practitionersWithStats = await Promise.all(
         (data || []).map(async (p) => {
@@ -130,6 +153,10 @@ export default function PractitionerTable({
             ...p,
             bookingCount: bookingCount || 0,
             serviceCount: serviceCount || 0,
+            workingDays: (schedules || [])
+              .filter((schedule) => schedule.practitioner_id === p.id && schedule.is_working)
+              .map((schedule) => schedule.weekday),
+            hasCustomSchedule: (schedules || []).some((schedule) => schedule.practitioner_id === p.id),
           }
         })
       )
@@ -218,6 +245,9 @@ export default function PractitionerTable({
               課程
             </th>
             <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
+              排班日
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
               預約數
             </th>
             <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
@@ -261,6 +291,29 @@ export default function PractitionerTable({
                 <span className="inline-block px-2 py-1 bg-info-light border border-info rounded text-xs text-info">
                   {practitioner.serviceCount || 0} 個課程
                 </span>
+              </td>
+
+              {/* 固定排班日 */}
+              <td className="px-6 py-4 text-sm text-text-primary">
+                {practitioner.hasCustomSchedule ? (
+                  practitioner.workingDays && practitioner.workingDays.length > 0 ? (
+                    <div className="flex flex-wrap gap-1" aria-label="固定排班日">
+                      {practitioner.workingDays.map((weekday) => (
+                        <span
+                          key={weekday}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700"
+                          title={`週${WEEKDAY_LABELS[weekday]}`}
+                        >
+                          {WEEKDAY_LABELS[weekday]}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-xs font-medium text-rose-500">未安排固定班</span>
+                  )
+                ) : (
+                  <span className="text-xs text-text-secondary">沿用店家營業日</span>
+                )}
               </td>
 
               {/* 預約數 */}
