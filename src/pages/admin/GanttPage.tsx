@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ChevronLeft, ChevronRight, Phone, Clock } from 'lucide-react'
 import { toast } from '@/components/ui/Snackbar'
+import { getPublicStoreClosures, type PublicStoreClosure } from '@/lib/store-closures-api'
 
 // ── 型別 ─────────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,21 @@ interface Practitioner {
   id: string
   full_name: string
   color: string | null
+}
+
+interface PractitionerBlock {
+  practitioner_id: string
+  start_time: string
+  end_time: string
+  reason: string | null
+}
+
+interface PractitionerSchedule {
+  practitioner_id: string
+  weekday: number
+  is_working: boolean
+  start_time: string | null
+  end_time: string | null
 }
 
 interface DragState {
@@ -110,6 +126,9 @@ export default function GanttPage({
   const [selectedDate,  setSelectedDate]  = useState(defaultDate || new Date())
   const [dragState,     setDragState]     = useState<DragState | null>(null)
   const [tooltip,       setTooltip]       = useState<TooltipState | null>(null)
+  const [practitionerBlocks, setPractitionerBlocks] = useState<PractitionerBlock[]>([])
+  const [practitionerSchedules, setPractitionerSchedules] = useState<PractitionerSchedule[]>([])
+  const [storeClosure, setStoreClosure] = useState<PublicStoreClosure | null>(null)
 
   const gridRef = useRef<HTMLDivElement>(null)
 
@@ -127,6 +146,29 @@ export default function GanttPage({
 
       const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0)
       const endOfDay   = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999)
+
+      const dateString = [
+        selectedDate.getFullYear(),
+        String(selectedDate.getMonth() + 1).padStart(2, '0'),
+        String(selectedDate.getDate()).padStart(2, '0'),
+      ].join('-')
+
+      const [blocksResult, schedulesResult, closures] = await Promise.all([
+        supabase
+          .from('practitioner_blocks')
+          .select('practitioner_id, start_time, end_time, reason')
+          .eq('store_id', storeId)
+          .lt('start_time', endOfDay.toISOString())
+          .gt('end_time', startOfDay.toISOString()),
+        supabase
+          .from('practitioner_weekly_schedules')
+          .select('practitioner_id, weekday, is_working, start_time, end_time')
+          .eq('store_id', storeId),
+        getPublicStoreClosures(storeId, dateString, dateString),
+      ])
+      setPractitionerBlocks(blocksResult.data ?? [])
+      setPractitionerSchedules(schedulesResult.data ?? [])
+      setStoreClosure(closures[0] ?? null)
 
       let bookQ = supabase.from('bookings').select(`
         id, start_time, end_time, status, client_id, practitioner_id, service_id,
@@ -283,6 +325,49 @@ export default function GanttPage({
     return d.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })
   }
 
+  function timeAsHour(value: string | null) {
+    if (!value) return 0
+    const [hours, minutes] = value.split(':').map(Number)
+    return hours + minutes / 60
+  }
+
+  function availabilityFor(practitionerId: string) {
+    if (storeClosure) {
+      return { fullLabel: `店休 · ${storeClosure.public_label}`, schedule: null, isOffDuty: false }
+    }
+    const block = practitionerBlocks.find(item => item.practitioner_id === practitionerId)
+    if (block) {
+      return { fullLabel: `休假${block.reason ? ` · ${block.reason}` : ''}`, schedule: null, isOffDuty: false }
+    }
+    const weekday = selectedDate.getDay() === 0 ? 7 : selectedDate.getDay()
+    const schedule = practitionerSchedules.find(item => (
+      item.practitioner_id === practitionerId && item.weekday === weekday
+    ))
+    return {
+      fullLabel: null,
+      schedule: schedule?.is_working ? schedule : null,
+      isOffDuty: schedule ? !schedule.is_working : false,
+    }
+  }
+
+  function bookingConflictLabel(booking: Booking) {
+    const availability = availabilityFor(booking.practitioner_id)
+    if (availability.fullLabel?.startsWith('店休')) return '店休衝突'
+    if (availability.fullLabel?.startsWith('休假')) return '休假衝突'
+    if (availability.isOffDuty) return '班表衝突'
+    if (availability.schedule) {
+      const start = new Date(booking.start_time)
+      const end = new Date(booking.end_time)
+      const startValue = start.getHours() + start.getMinutes() / 60
+      const endValue = end.getHours() + end.getMinutes() / 60
+      if (
+        startValue < timeAsHour(availability.schedule.start_time)
+        || endValue > timeAsHour(availability.schedule.end_time)
+      ) return '班表衝突'
+    }
+    return null
+  }
+
   const handlePrev = () => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d) }
   const handleNext = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d) }
 
@@ -314,6 +399,11 @@ export default function GanttPage({
           <div>
             <h1 className="text-2xl font-bold text-slate-900">甘特圖視圖</h1>
             <p className="text-sm text-slate-500 mt-1">拖曳卡片可調整時間或更換從業人員</p>
+            {storeClosure && (
+              <p className="mt-2 inline-flex rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">
+                店休 · {storeClosure.public_label}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <button onClick={handlePrev} className="p-2 hover:bg-white rounded-lg transition text-slate-400 hover:text-slate-700 border border-transparent hover:border-slate-200">
@@ -370,6 +460,7 @@ export default function GanttPage({
                 practitioners.map((p, pIdx) => {
                   const pBookings = bookings.filter(b => b.practitioner_id === p.id)
                   const isTargetRow = dragState?.targetPractitionerIndex === pIdx
+                  const availability = availabilityFor(p.id)
 
                   return (
                     <div
@@ -383,7 +474,14 @@ export default function GanttPage({
                         style={{ width: LABEL_WIDTH }}
                       >
                         <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color ?? '#6366f1' }} />
-                        <span className="text-sm font-medium text-slate-700 truncate">{p.full_name}</span>
+                        <div className="min-w-0">
+                          <span className="block text-sm font-medium text-slate-700 truncate">{p.full_name}</span>
+                          {availability.fullLabel && (
+                            <span className="block truncate text-[10px] font-medium text-rose-500">
+                              {availability.fullLabel}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* 時間格 + 卡片 */}
@@ -392,6 +490,12 @@ export default function GanttPage({
                         {Array.from({ length: totalHours }).map((_, i) => (
                           <div key={i} className="border-r border-slate-100 h-full flex-shrink-0" style={{ width: CELL_WIDTH }} />
                         ))}
+
+                        {availability.fullLabel && (
+                          <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center bg-rose-50/80 text-xs font-semibold text-rose-500 [background-image:repeating-linear-gradient(135deg,transparent,transparent_8px,rgba(244,63,94,0.08)_8px,rgba(244,63,94,0.08)_12px)]">
+                            {availability.fullLabel}
+                          </div>
+                        )}
 
                         {/* 現在時間線 */}
                         {(() => {
@@ -422,6 +526,7 @@ export default function GanttPage({
                           if (!pos) return null
                           const isDragging = dragState?.booking.id === b.id
                           const durationMin = Math.round((new Date(b.end_time).getTime() - new Date(b.start_time).getTime()) / 60000)
+                          const conflictLabel = bookingConflictLabel(b)
 
                           return (
                             <div
@@ -454,12 +559,15 @@ export default function GanttPage({
                               <div className="px-2 py-1 h-full flex flex-col justify-center leading-tight">
                                 <div className="font-semibold truncate text-[11px]">{clientLabel(b)}</div>
                                 {pos.width > 70 && (
-                                  <div className="opacity-85 text-[10px] truncate">
-                                    {formatTime(b.start_time)}·{durationMin}分
+                                  <div className="opacity-85 text-[10px] truncate">{p.full_name}</div>
+                                )}
+                                {pos.width > 110 && (
+                                  <div className="opacity-75 text-[10px] truncate">
+                                    {formatTime(b.start_time)}·{durationMin}分{b.service?.name ? ` · ${b.service.name}` : ''}
                                   </div>
                                 )}
-                                {pos.width > 110 && b.service?.name && (
-                                  <div className="opacity-75 text-[10px] truncate">{b.service.name}</div>
+                                {conflictLabel && pos.width > 85 && (
+                                  <div className="truncate text-[9px] font-bold text-amber-100">⚠ {conflictLabel}</div>
                                 )}
                               </div>
                             </div>
@@ -544,6 +652,14 @@ export default function GanttPage({
           <div className="mt-2 pt-2 border-t border-slate-100 space-y-1">
             {tooltip.booking.service?.name && (
               <p className="text-xs text-slate-600">{tooltip.booking.service.name}</p>
+            )}
+            {tooltip.booking.practitioner?.full_name && (
+              <p className="text-xs font-medium text-slate-600">老師 · {tooltip.booking.practitioner.full_name}</p>
+            )}
+            {bookingConflictLabel(tooltip.booking) && (
+              <p className="rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">
+                ⚠ {bookingConflictLabel(tooltip.booking)}
+              </p>
             )}
             <p className="text-xs text-slate-400 flex items-center gap-1">
               <Clock size={10} />

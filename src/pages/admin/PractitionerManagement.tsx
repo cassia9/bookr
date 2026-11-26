@@ -13,8 +13,6 @@ import { useAuth } from '@/lib/auth'
 
 interface PractitionerStats {
   total: number
-  active: number
-  inactive: number
   onLeaveToday: number
 }
 
@@ -29,14 +27,13 @@ export default function PractitionerManagement() {
   const storeId = profile?.store_id ?? ''
   const [showForm, setShowForm] = useState(false)
   const [editingPractitionerId, setEditingPractitionerId] = useState<string | null>(null)
-  const [showLeaveManager, setShowLeaveManager] = useState(false)
-  const [leaveManagerPractitionerId, setLeaveManagerPractitionerId] = useState<string | null>(null)
+  const [showScheduleManager, setShowScheduleManager] = useState(false)
+  const [scheduleManagerPractitionerId, setScheduleManagerPractitionerId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
+  const [tableRefreshKey, setTableRefreshKey] = useState(0)
   const [stats, setStats] = useState<PractitionerStats>({
     total: 0,
-    active: 0,
-    inactive: 0,
     onLeaveToday: 0,
   })
   const [isLoadingStats, setIsLoadingStats] = useState(true)
@@ -55,38 +52,21 @@ export default function PractitionerManagement() {
         .eq('store_id', storeId)
         .is('deleted_at', null)
 
-      // 獲取活躍數
-      const { count: activeCount } = await supabase
-        .from('practitioners')
-        .select('id', { count: 'exact', head: 0 })
-        .eq('store_id', storeId)
-        .eq('active', true)
-        .is('deleted_at', null)
-
-      // 獲取停用數
-      const { count: inactiveCount } = await supabase
-        .from('practitioners')
-        .select('id', { count: 'exact', head: 0 })
-        .eq('store_id', storeId)
-        .eq('active', false)
-        .is('deleted_at', null)
-
-      // 獲取今日休假數
+      // 獲取今日休假數（統一使用 practitioner_blocks）
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const tomorrow = new Date(today)
       tomorrow.setDate(tomorrow.getDate() + 1)
 
       const { count: onLeaveTodayCount } = await supabase
-        .from('practitioner_leaves')
+        .from('practitioner_blocks')
         .select('id', { count: 'exact', head: 0 })
-        .lte('start_date', today.toISOString().split('T')[0])
-        .gte('end_date', today.toISOString().split('T')[0])
+        .eq('store_id', storeId)
+        .lt('start_time', tomorrow.toISOString())
+        .gt('end_time', today.toISOString())
 
       setStats({
         total: totalCount || 0,
-        active: activeCount || 0,
-        inactive: inactiveCount || 0,
         onLeaveToday: onLeaveTodayCount || 0,
       })
     } catch (error) {
@@ -115,13 +95,14 @@ export default function PractitionerManagement() {
   }
 
   const handleManageLeaves = (id: string) => {
-    setLeaveManagerPractitionerId(id)
-    setShowLeaveManager(true)
+    setScheduleManagerPractitionerId(id)
+    setShowScheduleManager(true)
   }
 
   const handleFormSuccess = () => {
     setShowForm(false)
     setEditingPractitionerId(null)
+    setTableRefreshKey((current) => current + 1)
     loadStats() // 重新載入統計
   }
 
@@ -132,12 +113,12 @@ export default function PractitionerManagement() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-text-primary">老師管理</h1>
-            <p className="text-sm text-text-secondary mt-2">管理老師、課程指派和休假時間</p>
+            <p className="text-sm text-text-secondary mt-2">管理老師、課程指派、固定班表與休假時間</p>
           </div>
 
           {/* 操作按鈕 */}
           <div className="flex items-center gap-3">
-            <Button onClick={handleAddPractitioner}>
+            <Button className="shrink-0 whitespace-nowrap" onClick={handleAddPractitioner}>
               <Plus size={16} strokeWidth={2} />
               新增老師
             </Button>
@@ -150,8 +131,8 @@ export default function PractitionerManagement() {
         {/* 統計卡片 */}
         <div className="px-6 py-8 bg-white shadow-md border-b border-slate-200/50">
           {isLoadingStats ? (
-            <div className="grid grid-cols-4 gap-6">
-              {[1, 2, 3, 4].map((i) => (
+            <div className="grid grid-cols-2 gap-3 sm:gap-6">
+              {[1, 2].map((i) => (
                 <div
                   key={i}
                   className="h-24 bg-slate-50 rounded-xl animate-pulse"
@@ -159,24 +140,12 @@ export default function PractitionerManagement() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 gap-3 sm:gap-6">
               <StatsCard
                 label="總數"
                 value={stats.total}
                 subtitle="所有老師"
                 color="blue"
-              />
-              <StatsCard
-                label="活躍"
-                value={stats.active}
-                subtitle="可接受預約"
-                color="green"
-              />
-              <StatsCard
-                label="停用"
-                value={stats.inactive}
-                subtitle="暫停服務"
-                color="gray"
               />
               <StatsCard
                 label="今日休假"
@@ -226,6 +195,7 @@ export default function PractitionerManagement() {
         {/* 表格區域 */}
         <div className="flex-1 overflow-auto bg-slate-50">
           <PractitionerTable
+            key={tableRefreshKey}
             searchTerm={searchTerm}
             filterStatus={filterStatus}
             onEdit={handleEditPractitioner}
@@ -255,15 +225,16 @@ export default function PractitionerManagement() {
         />
       )}
 
-      {/* 休假管理 */}
-      {showLeaveManager && leaveManagerPractitionerId && (
+      {/* 固定班表與休假管理 */}
+      {showScheduleManager && scheduleManagerPractitionerId && (
         <PractitionerLeaveManager
           storeId={storeId}
-          practitionerId={leaveManagerPractitionerId}
+          practitionerId={scheduleManagerPractitionerId}
           practitionerName="" // 由組件內部載入
           onClose={() => {
-            setShowLeaveManager(false)
-            setLeaveManagerPractitionerId(null)
+            setShowScheduleManager(false)
+            setScheduleManagerPractitionerId(null)
+            void loadStats()
           }}
         />
       )}

@@ -1,5 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.112.3"
+import {
+  classifyEmailProviderFailureStatus,
+  type InvitationDeliveryError,
+  normalizeInvitationSenderName,
+} from "../_shared/invitation-email.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,45 +48,56 @@ function sanitizeHeader(value: string): string {
   return value.replaceAll(/[\r\n]/g, " ").trim().slice(0, 120)
 }
 
-async function sendEmailViaSendGrid(
+async function sendEmailViaBrevo(
   to: string,
   subject: string,
   htmlContent: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const sendGridApiKey = Deno.env.get("SENDGRID_API_KEY")
-  if (!sendGridApiKey) {
-    return { success: false, error: "SENDGRID_NOT_CONFIGURED" }
+  const brevoApiKey = Deno.env.get("BREVO_API_KEY")
+  const fromEmail = Deno.env.get("BREVO_FROM_EMAIL")
+  if (!brevoApiKey || !fromEmail) {
+    return {
+      success: false,
+      error: "EMAIL_PROVIDER_NOT_CONFIGURED" satisfies InvitationDeliveryError,
+    }
   }
 
   try {
-    const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${sendGridApiKey}`,
+        "api-key": brevoApiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        personalizations: [{ to: [{ email: to }], subject }],
-        from: {
-          email: Deno.env.get("SENDGRID_FROM_EMAIL") || "noreply@booking-system.com",
-          name: Deno.env.get("SENDGRID_FROM_NAME") || "預約管理系統",
+        sender: {
+          email: fromEmail,
+          name: normalizeInvitationSenderName(Deno.env.get("BREVO_FROM_NAME")),
         },
-        content: [{ type: "text/html", value: htmlContent }],
-        reply_to: {
-          email: Deno.env.get("SENDGRID_REPLY_EMAIL") || "support@booking-system.com",
+        to: [{ email: to }],
+        subject,
+        htmlContent,
+        replyTo: {
+          email: Deno.env.get("BREVO_REPLY_EMAIL") || fromEmail,
         },
       }),
     })
 
     if (!response.ok) {
-      console.error("SendGrid rejected invitation email:", response.status)
-      return { success: false, error: `SENDGRID_${response.status}` }
+      console.error("Brevo rejected invitation email:", response.status)
+      return {
+        success: false,
+        error: classifyEmailProviderFailureStatus(response.status),
+      }
     }
 
     return { success: true }
   } catch (error) {
-    console.error("SendGrid request failed:", errorMessage(error))
-    return { success: false, error: "SENDGRID_REQUEST_FAILED" }
+    console.error("Brevo request failed:", errorMessage(error))
+    return {
+      success: false,
+      error: "EMAIL_PROVIDER_REQUEST_FAILED" satisfies InvitationDeliveryError,
+    }
   }
 }
 
@@ -181,7 +197,10 @@ serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed", code: "METHOD_NOT_ALLOWED" }, 405)
+    return jsonResponse({
+      error: "Method not allowed",
+      code: "METHOD_NOT_ALLOWED",
+    }, 405)
   }
 
   let adminClient: SupabaseClient | null = null
@@ -197,11 +216,20 @@ serve(async (req) => {
     try {
       payload = await req.json()
     } catch {
-      return jsonResponse({ error: "Invalid JSON body", code: "INVALID_JSON" }, 400)
+      return jsonResponse(
+        { error: "Invalid JSON body", code: "INVALID_JSON" },
+        400,
+      )
     }
 
-    if (typeof payload.invitationId !== "string" || !uuidRegex.test(payload.invitationId)) {
-      return jsonResponse({ error: "Valid invitation ID is required", code: "INVALID_INVITATION_ID" }, 400)
+    if (
+      typeof payload.invitationId !== "string" ||
+      !uuidRegex.test(payload.invitationId)
+    ) {
+      return jsonResponse({
+        error: "Valid invitation ID is required",
+        code: "INVALID_INVITATION_ID",
+      }, 400)
     }
 
     const userToken = authHeader.slice(7)
@@ -212,14 +240,22 @@ serve(async (req) => {
 
     if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
       console.error("Invitation email configuration is incomplete")
-      return jsonResponse({ error: "Server configuration missing", code: "SERVER_CONFIG_ERROR" }, 500)
+      return jsonResponse({
+        error: "Server configuration missing",
+        code: "SERVER_CONFIG_ERROR",
+      }, 500)
     }
 
     const authClient = createClient(supabaseUrl, supabaseAnonKey)
-    const { data: authData, error: authError } = await authClient.auth.getUser(userToken)
+    const { data: authData, error: authError } = await authClient.auth.getUser(
+      userToken,
+    )
 
     if (authError || !authData.user) {
-      return jsonResponse({ error: "Invalid or expired token", code: "UNAUTHORIZED" }, 401)
+      return jsonResponse({
+        error: "Invalid or expired token",
+        code: "UNAUTHORIZED",
+      }, 401)
     }
 
     adminClient = createClient(supabaseUrl, supabaseServiceKey)
@@ -231,7 +267,10 @@ serve(async (req) => {
       .single()
 
     if (userError || !currentUser || currentUser.role !== "admin") {
-      return jsonResponse({ error: "Admin access required", code: "ADMIN_REQUIRED" }, 403)
+      return jsonResponse({
+        error: "Admin access required",
+        code: "ADMIN_REQUIRED",
+      }, 403)
     }
 
     const { data: invitationState, error: stateError } = await adminClient
@@ -244,22 +283,34 @@ serve(async (req) => {
 
     if (stateError) {
       console.error("Invitation state lookup failed:", stateError)
-      return jsonResponse({ error: "Unable to load invitation", code: "INVITATION_LOOKUP_FAILED" }, 500)
+      return jsonResponse({
+        error: "Unable to load invitation",
+        code: "INVITATION_LOOKUP_FAILED",
+      }, 500)
     }
 
     if (!invitationState) {
-      return jsonResponse({ error: "Invitation not found", code: "INVITATION_NOT_FOUND" }, 404)
+      return jsonResponse({
+        error: "Invitation not found",
+        code: "INVITATION_NOT_FOUND",
+      }, 404)
     }
 
     if (new Date(invitationState.expires_at).getTime() <= Date.now()) {
-      return jsonResponse({ error: "Invitation expired", code: "INVITATION_EXPIRED" }, 410)
+      return jsonResponse({
+        error: "Invitation expired",
+        code: "INVITATION_EXPIRED",
+      }, 410)
     }
 
     if (invitationState.email_sent_at) {
       const lastSentAt = new Date(invitationState.email_sent_at).getTime()
       if (Number.isFinite(lastSentAt) && Date.now() - lastSentAt < 60_000) {
         return jsonResponse(
-          { error: "Please wait before sending this invitation again", code: "INVITATION_RATE_LIMITED" },
+          {
+            error: "Please wait before sending this invitation again",
+            code: "INVITATION_RATE_LIMITED",
+          },
           429,
         )
       }
@@ -275,7 +326,10 @@ serve(async (req) => {
     if (claimError || !claimedData) {
       console.error("Invitation email claim failed:", claimError)
       return jsonResponse(
-        { error: "Invitation email is already being sent", code: "INVITATION_SEND_IN_PROGRESS" },
+        {
+          error: "Invitation email is already being sent",
+          code: "INVITATION_SEND_IN_PROGRESS",
+        },
         409,
       )
     }
@@ -294,7 +348,7 @@ serve(async (req) => {
     }
 
     const trustedBaseUrl = new URL(appUrl)
-    if (!['https:', 'http:'].includes(trustedBaseUrl.protocol)) {
+    if (!["https:", "http:"].includes(trustedBaseUrl.protocol)) {
       throw new Error("INVALID_APP_URL")
     }
 
@@ -311,7 +365,7 @@ serve(async (req) => {
       invitation.expires_at,
     )
 
-    const result = await sendEmailViaSendGrid(
+    const result = await sendEmailViaBrevo(
       invitation.email,
       `[${sanitizeHeader(store.name)}] 邀請你加入預約管理系統`,
       htmlContent,
@@ -330,11 +384,18 @@ serve(async (req) => {
 
     if (finishError || !stateSaved) {
       console.error("Invitation email state update failed:", finishError)
-      return jsonResponse({ error: "Failed to save email status", code: "EMAIL_STATE_SAVE_FAILED" }, 500)
+      return jsonResponse({
+        error: "Failed to save email status",
+        code: "EMAIL_STATE_SAVE_FAILED",
+      }, 500)
     }
 
     if (!result.success) {
-      return jsonResponse({ error: "Failed to send email", code: "EMAIL_DELIVERY_FAILED" }, 502)
+      return jsonResponse({
+        error: "Failed to send email",
+        code: "EMAIL_DELIVERY_FAILED",
+        reason: result.error || "EMAIL_PROVIDER_REJECTED",
+      }, 502)
     }
 
     return jsonResponse({
@@ -343,19 +404,31 @@ serve(async (req) => {
       invitationId: invitation.invitation_id,
     })
   } catch (error) {
-    console.error("Unexpected send-invitation-email error:", errorMessage(error))
+    console.error(
+      "Unexpected send-invitation-email error:",
+      errorMessage(error),
+    )
 
     if (adminClient && claimedInvitationId) {
-      const { error: releaseError } = await adminClient.rpc("finish_invitation_email_send", {
-        p_invitation_id: claimedInvitationId,
-        p_success: false,
-        p_error: "INTERNAL_ERROR",
-      })
+      const { error: releaseError } = await adminClient.rpc(
+        "finish_invitation_email_send",
+        {
+          p_invitation_id: claimedInvitationId,
+          p_success: false,
+          p_error: "INTERNAL_ERROR",
+        },
+      )
       if (releaseError) {
-        console.error("Failed to release invitation email claim:", releaseError)
+        console.error(
+          "Failed to release invitation email claim:",
+          releaseError,
+        )
       }
     }
 
-    return jsonResponse({ error: "Internal server error", code: "INTERNAL_ERROR" }, 500)
+    return jsonResponse({
+      error: "Internal server error",
+      code: "INTERNAL_ERROR",
+    }, 500)
   }
 })

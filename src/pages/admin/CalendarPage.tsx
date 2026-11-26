@@ -37,6 +37,21 @@ interface Practitioner {
   color: string | null
 }
 
+interface PractitionerBlock {
+  practitioner_id: string
+  start_time: string
+  end_time: string
+  reason: string | null
+}
+
+interface PractitionerSchedule {
+  practitioner_id: string
+  weekday: number
+  is_working: boolean
+  start_time: string | null
+  end_time: string | null
+}
+
 interface Service {
   id: string
   name: string
@@ -153,6 +168,9 @@ export default function CalendarPage({
   const [bookingsError, setBookingsError] = useState('')
   const [metaError, setMetaError] = useState('')
   const [storeClosures, setStoreClosures] = useState<PublicStoreClosure[]>([])
+  const [storeTimezone, setStoreTimezone] = useState('Asia/Taipei')
+  const [practitionerBlocks, setPractitionerBlocks] = useState<PractitionerBlock[]>([])
+  const [practitionerSchedules, setPractitionerSchedules] = useState<PractitionerSchedule[]>([])
 
   // Modal 狀態
   const [modalBooking, setModalBooking] = useState<Booking | null>(null)
@@ -209,15 +227,20 @@ export default function CalendarPage({
 
   const fetchMeta = useCallback(async () => {
     if (!storeId) return
-    const [{ data: p, error: practitionerError }, { data: s, error: serviceError }] = await Promise.all([
+    const [
+      { data: p, error: practitionerError },
+      { data: s, error: serviceError },
+      { data: store, error: storeError },
+    ] = await Promise.all([
       supabase.from('practitioners').select('id, full_name, color')
         .eq('store_id', storeId).eq('active', true).is('deleted_at', null),
       supabase.from('services').select('id, name, duration_minutes, price')
         .eq('store_id', storeId).eq('active', true),
+      supabase.from('stores').select('timezone').eq('id', storeId).maybeSingle(),
     ])
 
-    if (practitionerError || serviceError) {
-      console.error('載入行事曆基本資料失敗', practitionerError ?? serviceError)
+    if (practitionerError || serviceError || storeError) {
+      console.error('載入行事曆基本資料失敗', practitionerError ?? serviceError ?? storeError)
       setMetaError('老師或課程資料暫時無法載入，請重新整理後再試。')
       return
     }
@@ -225,6 +248,7 @@ export default function CalendarPage({
     setMetaError('')
     setPractitioners(p ?? [])
     setServices(s ?? [])
+    setStoreTimezone(store?.timezone || 'Asia/Taipei')
   }, [storeId])
 
   const fetchBookings = useCallback(async () => {
@@ -287,14 +311,42 @@ export default function CalendarPage({
     }
   }, [getDateRange, storeId])
 
+  const fetchPractitionerAvailability = useCallback(async () => {
+    if (!storeId) return
+    const { start, end } = getDateRange()
+    const [{ data: blocks, error: blocksError }, { data: schedules, error: schedulesError }] = await Promise.all([
+      supabase
+        .from('practitioner_blocks')
+        .select('practitioner_id, start_time, end_time, reason')
+        .eq('store_id', storeId)
+        .lt('start_time', end.toISOString())
+        .gt('end_time', start.toISOString()),
+      supabase
+        .from('practitioner_weekly_schedules')
+        .select('practitioner_id, weekday, is_working, start_time, end_time')
+        .eq('store_id', storeId),
+    ])
+
+    if (blocksError || schedulesError) {
+      console.error('載入老師班表與休假失敗', blocksError ?? schedulesError)
+      setPractitionerBlocks([])
+      setPractitionerSchedules([])
+      return
+    }
+    setPractitionerBlocks(blocks ?? [])
+    setPractitionerSchedules(schedules ?? [])
+  }, [getDateRange, storeId])
+
   useEffect(() => { void Promise.resolve().then(fetchMeta) }, [fetchMeta])
   useEffect(() => { void Promise.resolve().then(fetchBookings) }, [fetchBookings])
   useEffect(() => { void Promise.resolve().then(fetchStoreClosures) }, [fetchStoreClosures])
+  useEffect(() => { void Promise.resolve().then(fetchPractitionerAvailability) }, [fetchPractitionerAvailability])
 
   function retryLoading() {
     void fetchMeta()
     void fetchBookings()
     void fetchStoreClosures()
+    void fetchPractitionerAvailability()
   }
 
   function closureOnDate(date: Date) {
@@ -302,6 +354,72 @@ export default function CalendarPage({
     return storeClosures.find(closure => (
       closure.start_date <= dateString && closure.end_date >= dateString
     )) ?? null
+  }
+
+  function teacherNames(ids: string[]) {
+    return ids
+      .map(id => practitioners.find(practitioner => practitioner.id === id)?.full_name)
+      .filter((name): name is string => Boolean(name))
+  }
+
+  function summarizeNames(names: string[]) {
+    if (names.length <= 2) return names.join('、')
+    return `${names.slice(0, 2).join('、')} +${names.length - 2}`
+  }
+
+  function leaveNamesOnDate(date: Date) {
+    const dayStart = new Date(date)
+    dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(dayStart)
+    dayEnd.setDate(dayEnd.getDate() + 1)
+    const ids = practitionerBlocks
+      .filter(block => new Date(block.start_time) < dayEnd && new Date(block.end_time) > dayStart)
+      .map(block => block.practitioner_id)
+    return teacherNames([...new Set(ids)])
+  }
+
+  function zonedBookingParts(date: Date) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: storeTimezone,
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date)
+    const value = (type: Intl.DateTimeFormatPartTypes) => parts.find(part => part.type === type)?.value ?? ''
+    const weekdayMap: Record<string, number> = {
+      Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7,
+    }
+    return {
+      weekday: weekdayMap[value('weekday')],
+      time: `${value('hour')}:${value('minute')}`,
+    }
+  }
+
+  function bookingConflictLabel(booking: Booking) {
+    const start = new Date(booking.start_time)
+    const end = new Date(booking.end_time)
+    if (closureOnDate(start)) return '店休衝突'
+    if (practitionerBlocks.some(block => (
+      block.practitioner_id === booking.practitioner_id
+      && new Date(block.start_time) < end
+      && new Date(block.end_time) > start
+    ))) return '休假衝突'
+
+    const startParts = zonedBookingParts(start)
+    const endParts = zonedBookingParts(end)
+    const schedule = practitionerSchedules.find(item => (
+      item.practitioner_id === booking.practitioner_id
+      && item.weekday === startParts.weekday
+    ))
+    if (!schedule) return null
+    if (!schedule.is_working
+      || startParts.weekday !== endParts.weekday
+      || startParts.time < (schedule.start_time?.slice(0, 5) ?? '')
+      || endParts.time > (schedule.end_time?.slice(0, 5) ?? '')) {
+      return '班表衝突'
+    }
+    return null
   }
 
   function getDatesForView(): Date[] {
@@ -826,6 +944,7 @@ export default function CalendarPage({
                     const desktopOverflowCount = activeBk.length > 3 ? activeBk.length - 3 : 0
                     const isPopoverOpen  = dayPopover?.date.toDateString() === date.toDateString()
                     const closure = closureOnDate(date)
+                    const leaveNames = closure ? [] : leaveNamesOnDate(date)
                     return (
                       <div
                         key={date.toISOString()}
@@ -877,6 +996,11 @@ export default function CalendarPage({
                           </div>
                         )}
 
+                        {leaveNames.length > 0 && (
+                          <div className="mb-1 truncate rounded-[2px] bg-amber-50 px-1 py-0.5 text-[9px] font-semibold text-amber-700 sm:rounded-md sm:px-1.5 sm:text-[10px]">
+                            休假：{summarizeNames(leaveNames)}
+                          </div>
+                        )}
                         {/* FR-A: 手機最多 2 筆、桌機最多 3 筆卡片 */}
                         <div className="space-y-0.5">
                           {activeBk.slice(0, 3).map((b, index) => (
@@ -889,12 +1013,18 @@ export default function CalendarPage({
                               }}
                               onMouseLeave={() => setHoverTooltip(null)}
                               className={cn(
-                                'w-full truncate rounded-[2px] px-1 py-0.5 text-left text-[10px] font-semibold leading-tight text-white transition-all hover:brightness-110 sm:rounded-md sm:px-1.5 sm:text-xs sm:font-medium',
+                                'w-full overflow-hidden rounded-[2px] px-1 py-0.5 text-left text-[10px] font-semibold leading-tight text-white transition-all hover:brightness-110 sm:rounded-md sm:px-1.5 sm:text-xs sm:font-medium',
                                 index === 2 && 'hidden sm:block',
                               )}
                               style={cardStyle(b)}
                             >
-                              {clientLabel(b)}
+                              <div className="truncate">{clientLabel(b)}</div>
+                              <div className="truncate text-[8px] opacity-80 sm:text-[9px]">
+                                {b.practitioner?.full_name}{b.service?.name ? ` · ${b.service.name}` : ''}
+                              </div>
+                              {bookingConflictLabel(b) && (
+                                <div className="truncate text-[8px] font-bold text-amber-100">⚠ {bookingConflictLabel(b)}</div>
+                              )}
                             </button>
                           ))}
                           {/* 手機版溢出徽章 */}
@@ -931,6 +1061,7 @@ export default function CalendarPage({
                   <div className="border-r border-slate-100" />
                   {datesForView.map(date => {
                     const closure = closureOnDate(date)
+                    const leaveNames = closure ? [] : leaveNamesOnDate(date)
                     return (
                       <div key={date.toISOString()} className={cn(
                         'text-center py-3 border-r border-slate-100',
@@ -945,6 +1076,11 @@ export default function CalendarPage({
                           {date.getDate()}
                         </div>
                         {closure && <p className="mt-1 truncate px-1 text-[9px] font-semibold text-rose-600">{closure.public_label}</p>}
+                        {leaveNames.length > 0 && (
+                          <p className="mt-1 truncate px-1 text-[9px] font-semibold text-amber-600">
+                            休假：{summarizeNames(leaveNames)}
+                          </p>
+                        )}
                       </div>
                     )
                   })}
@@ -1007,7 +1143,12 @@ export default function CalendarPage({
                               style={cardStyle(b)}
                             >
                               <div className="truncate">{clientLabel(b)}</div>
-                              <div className="opacity-75 text-[10px]">{b.service?.name}</div>
+                              <div className="truncate opacity-80 text-[10px]">
+                                {b.practitioner?.full_name}{b.service?.name ? ` · ${b.service.name}` : ''}
+                              </div>
+                              {bookingConflictLabel(b) && (
+                                <div className="truncate text-[9px] font-bold text-amber-100">⚠ {bookingConflictLabel(b)}</div>
+                              )}
                             </button>
                           ))}
                         </div>
@@ -1031,6 +1172,11 @@ export default function CalendarPage({
                   {closureOnDate(currentDate) && (
                     <p className="mt-1 inline-flex rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">
                       店休 · {closureOnDate(currentDate)?.public_label}
+                    </p>
+                  )}
+                  {!closureOnDate(currentDate) && leaveNamesOnDate(currentDate).length > 0 && (
+                    <p className="ml-2 mt-1 inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                      休假：{summarizeNames(leaveNamesOnDate(currentDate))}
                     </p>
                   )}
                 </div>
@@ -1081,8 +1227,11 @@ export default function CalendarPage({
                           >
                             <div className="font-semibold">{clientLabel(b)}</div>
                             <div className="text-xs opacity-80">
-                              {format(parseISO(b.start_time), 'HH:mm')}–{format(parseISO(b.end_time), 'HH:mm')} · {b.service?.name}
+                              {format(parseISO(b.start_time), 'HH:mm')}–{format(parseISO(b.end_time), 'HH:mm')} · {b.practitioner?.full_name}{b.service?.name ? ` · ${b.service.name}` : ''}
                             </div>
+                            {bookingConflictLabel(b) && (
+                              <div className="text-[10px] font-bold text-amber-100">⚠ {bookingConflictLabel(b)}</div>
+                            )}
                           </button>
                         ))}
                       </div>

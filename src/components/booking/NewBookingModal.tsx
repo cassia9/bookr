@@ -8,8 +8,8 @@ import { addWeeks, differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { AlertTriangle, CalendarClock, Clock, Timer, DollarSign, Repeat2, TicketCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import Modal from '../ui/Modal'
-import ConfirmModal from '../ui/ConfirmModal'
 import Button from '../ui/Button'
+import Textarea from '../ui/Textarea'
 import Select from '../ui/Select'
 import ClientCombobox from '../ui/ClientCombobox'
 import DatePicker from '../ui/DatePicker'
@@ -17,8 +17,6 @@ import TimePicker from '../ui/TimePicker'
 import Toggle from '../ui/Toggle'
 import Input from '../ui/Input'
 import { toast } from '../ui/Snackbar'
-import { inputCls } from '../../lib/styles'
-import { cn } from '../../lib/cn'
 import { parseIntegerInput } from '../../lib/numeric-input'
 import type { Practitioner, Client, Service } from '../../types/database'
 import {
@@ -97,6 +95,7 @@ interface BookingMutationResult {
 }
 
 type RecurrenceEndMode = 'count' | 'until'
+type OverrideContext = 'store_closure' | 'practitioner_unavailable'
 
 function recurrenceCount(
   startDate: string,
@@ -165,7 +164,9 @@ export default function NewBookingModal({
   const [repeatCount, setRepeatCount] = useState(4)
   const [repeatUntilDate, setRepeatUntilDate] = useState('')
   const [storeClosures, setStoreClosures] = useState<PublicStoreClosure[]>([])
-  const [overrideConfirmOpen, setOverrideConfirmOpen] = useState(false)
+  const [overrideContext, setOverrideContext] = useState<OverrideContext | null>(null)
+  const [overrideReason, setOverrideReason] = useState('')
+  const [overrideReasonError, setOverrideReasonError] = useState('')
   const recurrenceIdempotencyKey = useRef(crypto.randomUUID())
 
   // Reset when opened
@@ -182,6 +183,9 @@ export default function NewBookingModal({
       setRepeatEndMode('count')
       setRepeatCount(4)
       setRepeatUntilDate('')
+      setOverrideContext(null)
+      setOverrideReason('')
+      setOverrideReasonError('')
       recurrenceIdempotencyKey.current = crypto.randomUUID()
     })
     return () => { active = false }
@@ -328,7 +332,7 @@ export default function NewBookingModal({
     return Object.keys(e).length === 0
   }
 
-  async function persistBooking() {
+  async function persistBooking(adminOverrideReason?: string) {
     if (!storeId) {
       toast.error('無法確認店家資料', '請重新整理後再試')
       return
@@ -343,8 +347,9 @@ export default function NewBookingModal({
     const voucherMode = voucherChoice === 'auto' || voucherChoice === 'none'
       ? voucherChoice
       : 'specific'
-    const mutation = repeatEnabled && mode === 'create'
-      ? supabase.rpc('create_recurring_bookings_with_voucher', {
+    let mutation
+    if (repeatEnabled && mode === 'create') {
+      const recurringArgs = {
         p_client_id:       form.client_id,
         p_practitioner_id: form.practitioner_id,
         p_service_id:      form.service_id,
@@ -359,8 +364,15 @@ export default function NewBookingModal({
         p_price:           price,
         p_voucher_mode:    voucherMode,
         p_client_voucher_item_id: voucherMode === 'specific' ? voucherChoice : null,
-      })
-      : supabase.rpc('upsert_booking_with_voucher', {
+      }
+      mutation = adminOverrideReason
+        ? supabase.rpc('create_recurring_bookings_with_voucher_admin_override', {
+          ...recurringArgs,
+          p_override_reason: adminOverrideReason,
+        })
+        : supabase.rpc('create_recurring_bookings_with_voucher', recurringArgs)
+    } else {
+      const bookingArgs = {
         p_booking_id:      mode === 'edit' ? initialBooking!.id : null,
         p_client_id:       form.client_id,
         p_practitioner_id: form.practitioner_id,
@@ -373,12 +385,24 @@ export default function NewBookingModal({
         p_price:           price,
         p_voucher_mode:    voucherMode,
         p_client_voucher_item_id: voucherMode === 'specific' ? voucherChoice : null,
-      })
+      }
+      mutation = adminOverrideReason
+        ? supabase.rpc('upsert_booking_with_voucher_admin_override', {
+          ...bookingArgs,
+          p_override_reason: adminOverrideReason,
+        })
+        : supabase.rpc('upsert_booking_with_voucher', bookingArgs)
+    }
     const { data, error } = await mutation
 
     setSaving(false)
 
     if (error) {
+      if (error.message.includes('STORE_CLOSED')) {
+        setOverrideContext('store_closure')
+        setOverrideReasonError('')
+        return
+      }
       const message = error.message.includes('VOUCHER_NOT_ELIGIBLE_OR_NO_BALANCE')
         ? '商品券已過期、餘額不足或不適用此課程，請重新選擇'
         : error.message
@@ -389,7 +413,10 @@ export default function NewBookingModal({
     const result = data as unknown as BookingMutationResult
 
     if (!result.ok) {
-      if (result.error === 'PRACTITIONER_BLOCKED') {
+      if (result.error === 'PRACTITIONER_UNAVAILABLE_REQUIRES_OVERRIDE') {
+        setOverrideContext('practitioner_unavailable')
+        setOverrideReasonError('')
+      } else if (result.error === 'PRACTITIONER_BLOCKED') {
         const occurrence = result.occurrence_start
           ? `（第 ${result.occurrence_index} 堂，${format(new Date(result.occurrence_start), 'M/d HH:mm')}）`
           : ''
@@ -405,6 +432,10 @@ export default function NewBookingModal({
         toast.error('時間衝突', `${c.client_name} · ${c.service_name} ${cStart}–${cEnd}${bufMsg}${occurrence}`)
       } else if (result.error === 'VOUCHER_NOT_ELIGIBLE_OR_NO_BALANCE') {
         toast.error('商品券堂數不足', `第 ${result.occurrence_index ?? '—'} 堂無法使用指定商品券，系列尚未建立`)
+      } else if (result.error === 'INVALID_OVERRIDE_REASON') {
+        setOverrideReasonError('請輸入 1–500 字的特殊安排原因')
+      } else if (result.error === 'FORBIDDEN') {
+        toast.error('沒有特殊預約權限', '只有同店管理員可以覆寫店休或老師不可用時段')
       } else {
         toast.error('操作失敗', result.error ?? '未知錯誤')
       }
@@ -417,16 +448,30 @@ export default function NewBookingModal({
         ? `已建立 ${effectiveRepeatCount} 堂循環預約`
         : '預約已建立'
     toast.success(label, `${format(start, 'M/d HH:mm')} · ${selectedService?.name ?? ''}`)
+    setOverrideContext(null)
+    setOverrideReason('')
+    setOverrideReasonError('')
     onSaved()
   }
 
   function handleSave() {
     if (!validate()) { toast.warning('請填寫必要欄位'); return }
     if (storeClosures.length > 0) {
-      setOverrideConfirmOpen(true)
+      setOverrideContext('store_closure')
+      setOverrideReasonError('')
       return
     }
     void persistBooking()
+  }
+
+  function handleOverrideConfirm() {
+    const reason = overrideReason.trim()
+    if (!reason || reason.length > 500) {
+      setOverrideReasonError('請輸入 1–500 字的特殊安排原因')
+      return
+    }
+    setOverrideReasonError('')
+    void persistBooking(reason)
   }
 
   // 鎖定客戶（編輯模式 or 從客戶頁帶入）
@@ -779,9 +824,12 @@ export default function NewBookingModal({
         {/* 備註 */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">備注</label>
-          <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-            rows={2} placeholder="選填"
-            className={cn(inputCls, 'resize-none')} />
+          <Textarea
+            value={form.notes}
+            onChange={event => setForm(current => ({ ...current, notes: event.target.value }))}
+            rows={2}
+            placeholder="選填"
+          />
         </div>
 
         <div className="flex gap-3 pt-1">
@@ -789,18 +837,69 @@ export default function NewBookingModal({
           <Button className="flex-1" loading={saving} onClick={handleSave}>{submitLabel}</Button>
         </div>
 
-        <ConfirmModal
-          open={overrideConfirmOpen}
-          onClose={() => setOverrideConfirmOpen(false)}
-          onConfirm={() => {
-            setOverrideConfirmOpen(false)
-            void persistBooking()
+        <Modal
+          open={overrideContext !== null}
+          onClose={() => {
+            if (saving) return
+            setOverrideContext(null)
+            setOverrideReason('')
+            setOverrideReasonError('')
           }}
-          loading={saving}
-          title="確認建立店休日特殊預約"
-          description="客戶端不開放這個日期。確認後仍會建立預約，並留下管理員覆寫店休的稽核紀錄。"
-          confirmLabel="確認建立特殊預約"
-        />
+          title={overrideContext === 'store_closure' ? '確認店休日特殊預約' : '確認老師不可用時段特殊預約'}
+          size="sm"
+          footer={(
+            <div className="flex gap-3">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                disabled={saving}
+                onClick={() => {
+                  setOverrideContext(null)
+                  setOverrideReason('')
+                  setOverrideReasonError('')
+                }}
+              >
+                取消
+              </Button>
+              <Button className="flex-1" loading={saving} onClick={handleOverrideConfirm}>
+                確認特殊預約
+              </Button>
+            </div>
+          )}
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+              {overrideContext === 'store_closure'
+                ? '客戶端不開放這個店休日。確認後仍會建立預約。'
+                : '這個時間不在老師班表內，或與老師休假重疊。確認後仍會建立預約。'}
+              原因會保存在稽核紀錄中。
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="booking-override-reason">
+                特殊安排原因 *
+              </label>
+              <Textarea
+                id="booking-override-reason"
+                value={overrideReason}
+                onChange={event => {
+                  setOverrideReason(event.target.value)
+                  if (overrideReasonError) setOverrideReasonError('')
+                }}
+                rows={4}
+                maxLength={500}
+                error={Boolean(overrideReasonError)}
+                placeholder="例如：熟客臨時安排，已與老師確認"
+                autoFocus
+              />
+              <div className="mt-1.5 flex items-start justify-between gap-3 text-xs">
+                <span className={overrideReasonError ? 'text-red-600' : 'text-slate-500'}>
+                  {overrideReasonError || '僅同店管理員可執行，並會留下操作紀錄。'}
+                </span>
+                <span className="shrink-0 text-slate-400">{overrideReason.length}/500</span>
+              </div>
+            </div>
+          </div>
+        </Modal>
       </div>
     </Modal>
   )

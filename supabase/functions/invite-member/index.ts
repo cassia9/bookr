@@ -188,11 +188,16 @@ serve(async (req) => {
     })
 
     if (!mailResponse.ok) {
+      const mailError = await mailResponse.json().catch(() => null) as {
+        code?: string
+        reason?: string
+      } | null
       console.error("Invitation email request failed:", mailResponse.status)
       return jsonResponse({
         ok: true,
         warning: "Invitation created but email delivery may have failed",
         deliveryStatus: "failed",
+        deliveryError: mailError?.reason || mailError?.code || "EMAIL_DELIVERY_FAILED",
         invitation,
       })
     }
