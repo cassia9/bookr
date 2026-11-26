@@ -378,14 +378,6 @@ export default function CalendarPage({
     return teacherNames([...new Set(ids)])
   }
 
-  function offDutyNamesOnDate(date: Date) {
-    const weekday = date.getDay() === 0 ? 7 : date.getDay()
-    const ids = practitionerSchedules
-      .filter(schedule => schedule.weekday === weekday && !schedule.is_working)
-      .map(schedule => schedule.practitioner_id)
-    return teacherNames([...new Set(ids)])
-  }
-
   function zonedBookingParts(date: Date) {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: storeTimezone,
@@ -953,7 +945,6 @@ export default function CalendarPage({
                     const isPopoverOpen  = dayPopover?.date.toDateString() === date.toDateString()
                     const closure = closureOnDate(date)
                     const leaveNames = closure ? [] : leaveNamesOnDate(date)
-                    const offDutyNames = closure ? [] : offDutyNamesOnDate(date)
                     return (
                       <div
                         key={date.toISOString()}
@@ -1010,12 +1001,6 @@ export default function CalendarPage({
                             休假：{summarizeNames(leaveNames)}
                           </div>
                         )}
-                        {offDutyNames.length > 0 && (
-                          <div className="mb-1 hidden truncate rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 sm:block">
-                            未排班：{summarizeNames(offDutyNames)}
-                          </div>
-                        )}
-
                         {/* FR-A: 手機最多 2 筆、桌機最多 3 筆卡片 */}
                         <div className="space-y-0.5">
                           {activeBk.slice(0, 3).map((b, index) => (
@@ -1077,7 +1062,6 @@ export default function CalendarPage({
                   {datesForView.map(date => {
                     const closure = closureOnDate(date)
                     const leaveNames = closure ? [] : leaveNamesOnDate(date)
-                    const offDutyNames = closure ? [] : offDutyNamesOnDate(date)
                     return (
                       <div key={date.toISOString()} className={cn(
                         'text-center py-3 border-r border-slate-100',
@@ -1095,11 +1079,6 @@ export default function CalendarPage({
                         {leaveNames.length > 0 && (
                           <p className="mt-1 truncate px-1 text-[9px] font-semibold text-amber-600">
                             休假：{summarizeNames(leaveNames)}
-                          </p>
-                        )}
-                        {offDutyNames.length > 0 && (
-                          <p className="mt-0.5 truncate px-1 text-[9px] font-medium text-slate-400">
-                            未排班：{summarizeNames(offDutyNames)}
                           </p>
                         )}
                       </div>
@@ -1198,11 +1177,6 @@ export default function CalendarPage({
                   {!closureOnDate(currentDate) && leaveNamesOnDate(currentDate).length > 0 && (
                     <p className="ml-2 mt-1 inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
                       休假：{summarizeNames(leaveNamesOnDate(currentDate))}
-                    </p>
-                  )}
-                  {!closureOnDate(currentDate) && offDutyNamesOnDate(currentDate).length > 0 && (
-                    <p className="ml-2 mt-1 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
-                      未排班：{summarizeNames(offDutyNamesOnDate(currentDate))}
                     </p>
                   )}
                 </div>

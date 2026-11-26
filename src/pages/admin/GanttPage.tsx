@@ -333,27 +333,28 @@ export default function GanttPage({
 
   function availabilityFor(practitionerId: string) {
     if (storeClosure) {
-      return { fullLabel: `店休 · ${storeClosure.public_label}`, schedule: null }
+      return { fullLabel: `店休 · ${storeClosure.public_label}`, schedule: null, isOffDuty: false }
     }
     const block = practitionerBlocks.find(item => item.practitioner_id === practitionerId)
     if (block) {
-      return { fullLabel: `休假${block.reason ? ` · ${block.reason}` : ''}`, schedule: null }
+      return { fullLabel: `休假${block.reason ? ` · ${block.reason}` : ''}`, schedule: null, isOffDuty: false }
     }
     const weekday = selectedDate.getDay() === 0 ? 7 : selectedDate.getDay()
     const schedule = practitionerSchedules.find(item => (
       item.practitioner_id === practitionerId && item.weekday === weekday
     ))
-    if (schedule && !schedule.is_working) {
-      return { fullLabel: '非排班', schedule: null }
+    return {
+      fullLabel: null,
+      schedule: schedule?.is_working ? schedule : null,
+      isOffDuty: schedule ? !schedule.is_working : false,
     }
-    return { fullLabel: null, schedule: schedule?.is_working ? schedule : null }
   }
 
   function bookingConflictLabel(booking: Booking) {
     const availability = availabilityFor(booking.practitioner_id)
     if (availability.fullLabel?.startsWith('店休')) return '店休衝突'
     if (availability.fullLabel?.startsWith('休假')) return '休假衝突'
-    if (availability.fullLabel === '非排班') return '班表衝突'
+    if (availability.isOffDuty) return '班表衝突'
     if (availability.schedule) {
       const start = new Date(booking.start_time)
       const end = new Date(booking.end_time)
@@ -495,30 +496,6 @@ export default function GanttPage({
                             {availability.fullLabel}
                           </div>
                         )}
-
-                        {availability.schedule && (() => {
-                          const workStart = timeAsHour(availability.schedule.start_time)
-                          const workEnd = timeAsHour(availability.schedule.end_time)
-                          const beforeWidth = Math.max(0, Math.min(workStart, endHour) - startHour) * CELL_WIDTH
-                          const afterStart = Math.max(workEnd, startHour)
-                          const afterWidth = Math.max(0, endHour - afterStart) * CELL_WIDTH
-                          return (
-                            <>
-                              {beforeWidth > 0 && (
-                                <div
-                                  className="pointer-events-none absolute inset-y-0 left-0 z-[1] bg-slate-100/80 [background-image:repeating-linear-gradient(135deg,transparent,transparent_8px,rgba(100,116,139,0.08)_8px,rgba(100,116,139,0.08)_12px)]"
-                                  style={{ width: beforeWidth }}
-                                />
-                              )}
-                              {afterWidth > 0 && (
-                                <div
-                                  className="pointer-events-none absolute inset-y-0 z-[1] bg-slate-100/80 [background-image:repeating-linear-gradient(135deg,transparent,transparent_8px,rgba(100,116,139,0.08)_8px,rgba(100,116,139,0.08)_12px)]"
-                                  style={{ left: (afterStart - startHour) * CELL_WIDTH, width: afterWidth }}
-                                />
-                              )}
-                            </>
-                          )
-                        })()}
 
                         {/* 現在時間線 */}
                         {(() => {
