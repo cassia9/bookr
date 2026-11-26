@@ -118,7 +118,7 @@ export default function PractitionerManagement() {
 
           {/* 操作按鈕 */}
           <div className="flex items-center gap-3">
-            <Button onClick={handleAddPractitioner}>
+            <Button className="shrink-0 whitespace-nowrap" onClick={handleAddPractitioner}>
               <Plus size={16} strokeWidth={2} />
               新增老師
             </Button>
@@ -131,7 +131,7 @@ export default function PractitionerManagement() {
         {/* 統計卡片 */}
         <div className="px-6 py-8 bg-white shadow-md border-b border-slate-200/50">
           {isLoadingStats ? (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3 sm:gap-6">
               {[1, 2].map((i) => (
                 <div
                   key={i}
@@ -140,7 +140,7 @@ export default function PractitionerManagement() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3 sm:gap-6">
               <StatsCard
                 label="總數"
                 value={stats.total}

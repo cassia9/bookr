@@ -16,9 +16,11 @@ export async function callPractitionersAPI(
     throw new Error('未登入，請重新登入')
   }
 
-  const baseUrl = import.meta.env.VITE_SUPABASE_URL
+  const endpoint =
+    import.meta.env.VITE_PRACTITIONERS_FUNCTION_URL ||
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/practitioners-crud`
   const response = await fetch(
-    `${baseUrl}/functions/v1/practitioners-crud?action=${action}`,
+    `${endpoint}?action=${action}`,
     {
       method: action === 'delete' ? 'DELETE' : action === 'create' ? 'POST' : 'PUT',
       headers: {

@@ -235,7 +235,7 @@ export default function PractitionerTable({
     <div className="w-full h-full overflow-x-auto p-6">
       <div className="bg-white rounded-xl shadow-lg border-0">
         <div className="overflow-hidden">
-          <table className="w-full border-collapse">
+          <table className="w-full min-w-[760px] border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200/50">
             <th className="px-6 py-3 text-left text-xs font-semibold text-text-primary">
