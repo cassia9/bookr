@@ -108,8 +108,11 @@ export default function PractitionerForm({ practitionerId, onSuccess, onCancel }
     setLoading(true)
     try {
       if (practitionerId) {
-        await callPractitionersAPI('update_services', {
+        await callPractitionersAPI('update', {
           practitioner_id: practitionerId,
+          name: form.name.trim(),
+          color_hex: form.color_hex,
+          bio: form.bio.trim(),
           service_ids: form.service_ids,
         })
       } else {

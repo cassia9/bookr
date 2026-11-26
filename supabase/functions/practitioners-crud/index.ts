@@ -18,10 +18,12 @@ interface CreatePractitionerRequest {
 }
 
 interface UpdatePractitionerRequest {
+  practitioner_id: string
   name?: string
   color_hex?: string
   bio?: string
   photo_url?: string
+  service_ids?: string[]
 }
 
 interface UpdateServicesRequest {
@@ -51,6 +53,33 @@ function validateCreateRequest(data: any): CreatePractitionerRequest {
     name: data.name.trim(),
     color_hex: data.color_hex,
     bio: data.bio?.trim(),
+    photo_url: data.photo_url,
+    service_ids: data.service_ids,
+  }
+}
+
+function validateUpdateRequest(data: any): UpdatePractitionerRequest {
+  if (!data.practitioner_id || typeof data.practitioner_id !== "string") {
+    throw new Error("Practitioner ID is required")
+  }
+
+  if (data.name !== undefined && (typeof data.name !== "string" || data.name.trim() === "")) {
+    throw new Error("Name must be non-empty")
+  }
+
+  if (data.color_hex !== undefined && !isValidHexColor(data.color_hex)) {
+    throw new Error("Color must be a valid HEX value (#RRGGBB)")
+  }
+
+  if (data.service_ids !== undefined && (!Array.isArray(data.service_ids) || data.service_ids.length === 0)) {
+    throw new Error("At least one service must be assigned")
+  }
+
+  return {
+    practitioner_id: data.practitioner_id,
+    name: data.name?.trim(),
+    color_hex: data.color_hex,
+    bio: typeof data.bio === "string" ? data.bio.trim() : undefined,
     photo_url: data.photo_url,
     service_ids: data.service_ids,
   }
@@ -163,6 +192,96 @@ serve(async (req: Request) => {
           message: "Practitioner created successfully",
         }),
         { status: 201, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      )
+    }
+
+    // ============================================================
+    // 更新老師基本資料與課程指派
+    // ============================================================
+    if (req.method === "PUT" && action === "update") {
+      const validatedData = validateUpdateRequest(await req.json())
+
+      const { data: adminUserData, error: adminCheckError } = await supabase
+        .from("users")
+        .select("store_id, role")
+        .eq("id", userData.user.id)
+        .single()
+
+      if (adminCheckError || !adminUserData || adminUserData.role !== "admin") {
+        return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        })
+      }
+
+      const { data: practitioner } = await supabase
+        .from("practitioners")
+        .select("id, store_id")
+        .eq("id", validatedData.practitioner_id)
+        .single()
+
+      if (!practitioner || practitioner.store_id !== adminUserData.store_id) {
+        return new Response(JSON.stringify({ error: "Practitioner not found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        })
+      }
+
+      const practitionerUpdates: Record<string, string> = {}
+      if (validatedData.name !== undefined) practitionerUpdates.full_name = validatedData.name
+      if (validatedData.color_hex !== undefined) practitionerUpdates.color = validatedData.color_hex
+      if (validatedData.bio !== undefined) practitionerUpdates.bio = validatedData.bio
+      if (validatedData.photo_url !== undefined) practitionerUpdates.photo_url = validatedData.photo_url
+
+      if (Object.keys(practitionerUpdates).length > 0) {
+        const { error: practitionerError } = await supabase
+          .from("practitioners")
+          .update(practitionerUpdates)
+          .eq("id", validatedData.practitioner_id)
+          .eq("store_id", adminUserData.store_id)
+
+        if (practitionerError) {
+          return new Response(JSON.stringify({ error: practitionerError.message }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          })
+        }
+      }
+
+      if (validatedData.service_ids) {
+        const { error: deleteAssignmentsError } = await supabase
+          .from("practitioner_services")
+          .delete()
+          .eq("practitioner_id", validatedData.practitioner_id)
+
+        if (deleteAssignmentsError) {
+          return new Response(JSON.stringify({ error: deleteAssignmentsError.message }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          })
+        }
+
+        const { error: insertAssignmentsError } = await supabase
+          .from("practitioner_services")
+          .insert(validatedData.service_ids.map((serviceId) => ({
+            practitioner_id: validatedData.practitioner_id,
+            service_id: serviceId,
+          })))
+
+        if (insertAssignmentsError) {
+          return new Response(JSON.stringify({ error: insertAssignmentsError.message }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          })
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          message: "Practitioner updated successfully",
+          practitioner_id: validatedData.practitioner_id,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } },
       )
     }
 

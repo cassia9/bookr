@@ -2,11 +2,11 @@ import { supabase } from './supabase'
 
 /**
  * 調用 practitioners-crud API
- * @param action 'create' | 'update_services' | 'delete'
+ * @param action 'create' | 'update' | 'update_services' | 'delete'
  * @param body 請求體
  */
 export async function callPractitionersAPI(
-  action: 'create' | 'update_services' | 'delete',
+  action: 'create' | 'update' | 'update_services' | 'delete',
   body: any
 ) {
   const { data: sessionData } = await supabase.auth.getSession()
