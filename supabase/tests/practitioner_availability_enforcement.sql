@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT extensions.plan(11);
+SELECT extensions.plan(19);
 
 INSERT INTO public.stores (
   id,
@@ -237,6 +237,32 @@ SELECT extensions.throws_ok(
   '一般成員直接寫入也不可覆寫班表'
 );
 
+SELECT extensions.is(
+  public.upsert_booking_with_voucher_admin_override(
+    NULL,
+    'e2000000-0000-0000-0000-000000000001',
+    'e4000000-0000-0000-0000-000000000001',
+    'e3000000-0000-0000-0000-000000000001',
+    (
+      (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 2)::TEXT || ' 10:00')::TIMESTAMP
+        AT TIME ZONE 'Asia/Taipei'
+    ),
+    (
+      (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 2)::TEXT || ' 11:00')::TIMESTAMP
+        AT TIME ZONE 'Asia/Taipei'
+    ),
+    0,
+    NULL,
+    'e0000000-0000-0000-0000-000000000001',
+    1500,
+    'none',
+    NULL,
+    '一般成員不應通過'
+  ) ->> 'error',
+  'FORBIDDEN',
+  '一般成員不可呼叫管理員覆寫 RPC'
+);
+
 RESET ROLE;
 SELECT SET_CONFIG(
   'request.jwt.claims',
@@ -245,23 +271,57 @@ SELECT SET_CONFIG(
 );
 SET LOCAL ROLE authenticated;
 
-INSERT INTO public.bookings (
-  client_id, practitioner_id, service_id, start_time, end_time,
-  status, store_id
-) VALUES (
-  'e2000000-0000-0000-0000-000000000001',
-  'e4000000-0000-0000-0000-000000000001',
-  'e3000000-0000-0000-0000-000000000001',
+SELECT extensions.throws_ok(
+  $$
+    INSERT INTO public.bookings (
+      client_id, practitioner_id, service_id, start_time, end_time,
+      status, store_id
+    ) VALUES (
+      'e2000000-0000-0000-0000-000000000001',
+      'e4000000-0000-0000-0000-000000000001',
+      'e3000000-0000-0000-0000-000000000001',
+      (
+        (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 2)::TEXT || ' 12:00')::TIMESTAMP
+          AT TIME ZONE 'Asia/Taipei'
+      ),
+      (
+        (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 2)::TEXT || ' 13:00')::TIMESTAMP
+          AT TIME ZONE 'Asia/Taipei'
+      ),
+      'confirmed'::public.booking_status,
+      'e0000000-0000-0000-0000-000000000001'
+    )
+  $$,
+  'P0001',
+  'PRACTITIONER_UNAVAILABLE',
+  '管理員未帶原因直接寫入也不可靜默覆寫'
+);
+
+SELECT extensions.ok(
   (
-    (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 2)::TEXT || ' 12:00')::TIMESTAMP
-      AT TIME ZONE 'Asia/Taipei'
-  ),
-  (
-    (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 2)::TEXT || ' 13:00')::TIMESTAMP
-      AT TIME ZONE 'Asia/Taipei'
-  ),
-  'confirmed'::public.booking_status,
-  'e0000000-0000-0000-0000-000000000001'
+    public.upsert_booking_with_voucher_admin_override(
+      NULL,
+      'e2000000-0000-0000-0000-000000000001',
+      'e4000000-0000-0000-0000-000000000001',
+      'e3000000-0000-0000-0000-000000000001',
+      (
+        (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 2)::TEXT || ' 12:00')::TIMESTAMP
+          AT TIME ZONE 'Asia/Taipei'
+      ),
+      (
+        (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 2)::TEXT || ' 13:00')::TIMESTAMP
+          AT TIME ZONE 'Asia/Taipei'
+      ),
+      0,
+      NULL,
+      'e0000000-0000-0000-0000-000000000001',
+      1500,
+      'none',
+      NULL,
+      '熟客臨時特殊安排'
+    ) ->> 'ok'
+  )::BOOLEAN,
+  '同店管理員確認並填寫原因後可覆寫非排班時段'
 );
 
 SELECT extensions.is(
@@ -273,6 +333,104 @@ SELECT extensions.is(
   ),
   1::BIGINT,
   '管理員覆寫非排班時段會留下稽核紀錄'
+);
+
+SELECT extensions.is(
+  (
+    SELECT new_values ->> 'override_reason'
+    FROM public.audit_logs
+    WHERE store_id = 'e0000000-0000-0000-0000-000000000001'
+      AND action = 'booking_practitioner_availability_overridden'
+    ORDER BY created_at DESC
+    LIMIT 1
+  ),
+  '熟客臨時特殊安排',
+  '老師可用性覆寫會保存管理員原因'
+);
+
+-- pgTAP 全檔共用同一個交易；清掉 RPC 的交易區域設定，模擬下一次獨立 HTTP 請求。
+SELECT SET_CONFIG('app.booking_override_reason', '', TRUE);
+
+SELECT extensions.ok(
+  (
+    public.save_store_closure(
+      NULL,
+      (NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 3,
+      (NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 3,
+      'other',
+      '臨時店休',
+      '覆寫測試'
+    ) ->> 'ok'
+  )::BOOLEAN,
+  '管理員可建立覆寫測試用店休'
+);
+
+SELECT extensions.throws_ok(
+  $$
+    SELECT public.upsert_booking_with_voucher(
+      NULL,
+      'e2000000-0000-0000-0000-000000000001',
+      'e4000000-0000-0000-0000-000000000002',
+      'e3000000-0000-0000-0000-000000000001',
+      (
+        (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 3)::TEXT || ' 10:00')::TIMESTAMP
+          AT TIME ZONE 'Asia/Taipei'
+      ),
+      (
+        (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 3)::TEXT || ' 11:00')::TIMESTAMP
+          AT TIME ZONE 'Asia/Taipei'
+      ),
+      0,
+      NULL,
+      'e0000000-0000-0000-0000-000000000001',
+      1500,
+      'none',
+      NULL
+    )
+  $$,
+  'P0001',
+  'STORE_CLOSED',
+  '管理員未帶原因不可靜默建立店休特殊預約'
+);
+
+SELECT extensions.ok(
+  (
+    public.upsert_booking_with_voucher_admin_override(
+      NULL,
+      'e2000000-0000-0000-0000-000000000001',
+      'e4000000-0000-0000-0000-000000000002',
+      'e3000000-0000-0000-0000-000000000001',
+      (
+        (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 3)::TEXT || ' 10:00')::TIMESTAMP
+          AT TIME ZONE 'Asia/Taipei'
+      ),
+      (
+        (((NOW() AT TIME ZONE 'Asia/Taipei')::DATE + 3)::TEXT || ' 11:00')::TIMESTAMP
+          AT TIME ZONE 'Asia/Taipei'
+      ),
+      0,
+      NULL,
+      'e0000000-0000-0000-0000-000000000001',
+      1500,
+      'none',
+      NULL,
+      '店休仍需服務熟客'
+    ) ->> 'ok'
+  )::BOOLEAN,
+  '同店管理員確認並填寫原因後可建立店休特殊預約'
+);
+
+SELECT extensions.is(
+  (
+    SELECT new_values ->> 'override_reason'
+    FROM public.audit_logs
+    WHERE store_id = 'e0000000-0000-0000-0000-000000000001'
+      AND action = 'booking_store_closure_overridden'
+    ORDER BY created_at DESC
+    LIMIT 1
+  ),
+  '店休仍需服務熟客',
+  '店休覆寫會保存管理員原因'
 );
 
 RESET ROLE;
