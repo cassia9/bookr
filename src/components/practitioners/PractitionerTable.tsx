@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { MoreVertical, Trash2, Calendar, Eye, Edit2 } from 'lucide-react'
+import { MoreVertical, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/cn'
 import { callPractitionersAPI } from '@/lib/practitioner-api'
@@ -30,7 +30,6 @@ interface PractitionerTableProps {
   searchTerm: string
   filterStatus: 'all' | 'active' | 'inactive'
   onEdit: (id: string) => void
-  onManageLeaves: (id: string) => void
   onViewDetails: (practitioner: Practitioner) => void
   onRefresh: () => void
 }
@@ -39,7 +38,6 @@ export default function PractitionerTable({
   searchTerm,
   filterStatus,
   onEdit,
-  onManageLeaves,
   onViewDetails,
   onRefresh,
 }: PractitionerTableProps) {
@@ -48,7 +46,6 @@ export default function PractitionerTable({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [deleteConfirmPractitionerId, setDeleteConfirmPractitionerId] = useState<string | null>(null)
   const [deleteConfirmPractitioner, setDeleteConfirmPractitioner] = useState<Practitioner | null>(null)
-  const [menuPosition, setMenuPosition] = useState<'top' | 'bottom'>('bottom')
   const [menuCoords, setMenuCoords] = useState<{ x: number; y: number } | null>(null)
   const [userIsAdmin, setUserIsAdmin] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -351,14 +348,13 @@ export default function PractitionerTable({
                       const button = e.currentTarget
                       const rect = button.getBoundingClientRect()
                       // 計算菜單位置：右對齐到按鈕
-                      const menuWidth = 192 // w-48 = 192px
+                      const menuWidth = 128 // w-32 = 128px
                       const shouldShowAbove = rect.top > 250
                       const x = Math.max(8, rect.right - menuWidth) // 確保不會超過屏幕左邊，保留 8px 邊距
                       const y = shouldShowAbove ? rect.top - 8 : rect.bottom + 8
 
                       console.log('Menu clicked:', { rect: { top: rect.top, right: rect.right, bottom: rect.bottom }, x, y, shouldShowAbove })
 
-                      setMenuPosition(shouldShowAbove ? 'top' : 'bottom')
                       setMenuCoords({ x, y })
                       setOpenMenuId(
                         openMenuId === practitioner.id ? null : practitioner.id
@@ -372,23 +368,12 @@ export default function PractitionerTable({
                   {/* 菜單使用 Portal 渲染 */}
                   {openMenuId === practitioner.id && menuCoords && createPortal(
                     <div
-                      className="fixed w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-40"
+                      className="fixed w-32 bg-white border border-slate-200 rounded-lg shadow-xl z-40"
                       style={{
                         left: `${menuCoords.x}px`,
                         top: `${menuCoords.y}px`,
                       }}
                     >
-                      <button
-                        onClick={() => {
-                          onManageLeaves(practitioner.id)
-                          setOpenMenuId(null)
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary flex items-center gap-2"
-                      >
-                        <Calendar className="w-4 h-4" />
-                        排班與休假
-                      </button>
-                      <div className="border-t border-slate-200 my-1" />
                       <button
                         onClick={() => {
                           setDeleteConfirmPractitionerId(practitioner.id)

@@ -91,11 +91,6 @@ export default function PractitionerManagement() {
     setShowForm(true)
   }
 
-  const handleManageLeaves = (id: string) => {
-    setEditingPractitionerId(id)
-    setShowForm(true)
-  }
-
   const handleFormSuccess = () => {
     setShowForm(false)
     setEditingPractitionerId(null)
@@ -196,7 +191,6 @@ export default function PractitionerManagement() {
             searchTerm={searchTerm}
             filterStatus={filterStatus}
             onEdit={handleEditPractitioner}
-            onManageLeaves={handleManageLeaves}
             onViewDetails={(practitioner) => {
               setSelectedPractitioner({
                 id: practitioner.id,
