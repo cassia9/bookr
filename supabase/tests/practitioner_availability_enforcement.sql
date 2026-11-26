@@ -275,6 +275,8 @@ SELECT extensions.is(
   '管理員覆寫非排班時段會留下稽核紀錄'
 );
 
+RESET ROLE;
+
 INSERT INTO public.practitioner_blocks (
   practitioner_id, store_id, start_time, end_time, reason
 ) VALUES (
@@ -290,8 +292,6 @@ INSERT INTO public.practitioner_blocks (
   ),
   '整日休假'
 );
-
-RESET ROLE;
 
 SELECT extensions.is(
   (
