@@ -333,7 +333,7 @@ export default function PractitionerTable({
                         className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary flex items-center gap-2"
                       >
                         <Calendar className="w-4 h-4" />
-                        管理休假
+                        排班與休假
                       </button>
                       <div className="border-t border-slate-200 my-1" />
                       <button
