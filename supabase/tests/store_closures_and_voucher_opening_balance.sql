@@ -262,20 +262,23 @@ SET LOCAL ROLE authenticated;
 
 SELECT extensions.ok(
   (
-    public.upsert_booking(
-      NULL,
-      'a2000000-0000-0000-0000-000000000001',
-      'a4000000-0000-0000-0000-000000000001',
-      'a3000000-0000-0000-0000-000000000001',
-      ((CURRENT_DATE + 7)::TEXT || ' 10:00 Asia/Taipei')::TIMESTAMPTZ,
-      ((CURRENT_DATE + 7)::TEXT || ' 11:00 Asia/Taipei')::TIMESTAMPTZ,
-      0,
-      NULL,
-      'a0000000-0000-0000-0000-000000000001',
-      1200
+    public.upsert_booking_with_voucher_admin_override(
+      p_booking_id => NULL,
+      p_client_id => 'a2000000-0000-0000-0000-000000000001',
+      p_practitioner_id => 'a4000000-0000-0000-0000-000000000001',
+      p_service_id => 'a3000000-0000-0000-0000-000000000001',
+      p_start_time => ((CURRENT_DATE + 7)::TEXT || ' 10:00 Asia/Taipei')::TIMESTAMPTZ,
+      p_end_time => ((CURRENT_DATE + 7)::TEXT || ' 11:00 Asia/Taipei')::TIMESTAMPTZ,
+      p_buffer_minutes => 0,
+      p_notes => NULL,
+      p_store_id => 'a0000000-0000-0000-0000-000000000001',
+      p_price => 1200,
+      p_voucher_mode => 'none',
+      p_client_voucher_item_id => NULL,
+      p_override_reason => '店休期間特殊預約測試'
     ) ->> 'ok'
   )::BOOLEAN,
-  '管理員可覆寫店休建立特殊預約'
+  '管理員填寫原因後可覆寫店休建立特殊預約'
 );
 
 SELECT extensions.is(

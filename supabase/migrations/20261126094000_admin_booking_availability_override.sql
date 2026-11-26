@@ -156,6 +156,10 @@ DECLARE
     ''
   );
 BEGIN
+  IF (SELECT auth.uid()) IS NULL OR NOT (SELECT public.is_admin()) THEN
+    RETURN JSON_BUILD_OBJECT('ok', FALSE, 'error', 'FORBIDDEN');
+  END IF;
+
   IF v_caller_store_id IS NULL
     OR p_store_id IS DISTINCT FROM v_caller_store_id THEN
     RETURN JSON_BUILD_OBJECT('ok', FALSE, 'error', 'FORBIDDEN');

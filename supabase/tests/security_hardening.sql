@@ -64,8 +64,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  37::BIGINT,
-  'authenticated 只有三十七支必要 RPC／輔助函式'
+  44::BIGINT,
+  'authenticated 只有四十四支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -112,7 +112,14 @@ SELECT extensions.ok(
         'mark_in_app_notification_read',
         'mark_all_in_app_notifications_read',
         'save_line_rich_menu_draft',
-        'queue_line_rich_menu_publication'
+        'queue_line_rich_menu_publication',
+        'preview_practitioner_schedule_conflicts',
+        'save_practitioner_weekly_schedule',
+        'save_practitioner_leave',
+        'delete_practitioner_leave',
+        'preview_practitioner_leave_conflicts',
+        'upsert_booking_with_voucher_admin_override',
+        'create_recurring_bookings_with_voucher_admin_override'
       ])
   ),
   'authenticated RPC 全部位於白名單'
@@ -179,8 +186,8 @@ SELECT extensions.is(
       ])
       AND NOT p.prosecdef
   ),
-  3::BIGINT,
-  '三支後台資料 RPC 使用 SECURITY INVOKER'
+  2::BIGINT,
+  '兩支後台查詢 RPC 使用 SECURITY INVOKER，寫入 RPC 另做管理員檢查'
 );
 
 SELECT extensions.is(
@@ -622,9 +629,9 @@ SELECT extensions.is(
   '一般成員無法取得店家營運統計'
 );
 
-SELECT extensions.throws_ok(
-  $$
-    SELECT public.upsert_booking(
+SELECT extensions.is(
+  (
+    public.upsert_booking(
       NULL,
       '30000000-0000-0000-0000-000000000001',
       '20000000-0000-0000-0000-000000000001',
@@ -635,10 +642,9 @@ SELECT extensions.throws_ok(
       'member should not write',
       '00000000-0000-0000-0000-000000000001',
       1000
-    )
-  $$,
-  '42501',
-  'new row violates row-level security policy for table "bookings"',
+    ) ->> 'error'
+  ),
+  'FORBIDDEN',
   '一般成員不可透過 upsert_booking 寫入預約'
 );
 
