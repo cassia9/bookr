@@ -649,6 +649,16 @@ export interface Database {
         }
         Returns: Json
       }
+      preview_store_closure_window_conflicts: {
+        Args: {
+          p_start_date: string
+          p_start_time: string
+          p_end_date: string
+          p_end_time: string
+          p_all_day: boolean
+        }
+        Returns: Json
+      }
       archive_store_closure: {
         Args: { p_closure_id: string }
         Returns: Json
