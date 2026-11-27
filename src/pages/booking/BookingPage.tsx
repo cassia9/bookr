@@ -739,6 +739,11 @@ function Step3Date({ closures, onSelect, onBack }: {
   const canPrev = !(view.y === today.getFullYear() && view.m === today.getMonth())
   const canNext = new Date(view.y, view.m + 1, 1) <= addMonths(today, 2)
 
+  function closureTimeLabel(closure: PublicStoreClosure) {
+    if (closure.all_day) return '整日'
+    return `${format(new Date(closure.starts_at), 'HH:mm')}–${format(new Date(closure.ends_at), 'HH:mm')}`
+  }
+
   return (
     <div>
       <BackButton onClick={onBack} />
@@ -772,24 +777,30 @@ function Step3Date({ closures, onSelect, onBack }: {
             const d      = new Date(view.y, view.m, i + 1)
             const dStr   = format(d, 'yyyy-MM-dd')
             const isToday = isSameDay(d, today)
-            const closure = closures.find(item => item.start_date <= dStr && item.end_date >= dStr)
-            const disabled = (d < minDate && !isToday) || d > maxDate || Boolean(closure)
+            const dayClosures = closures.filter(item => item.start_date <= dStr && item.end_date >= dStr)
+            const fullDayClosure = dayClosures.find(item => item.all_day)
+            const partialClosure = dayClosures.find(item => !item.all_day)
+            const disabled = (d < minDate && !isToday) || d > maxDate || Boolean(fullDayClosure)
             return (
               <button
                 key={i}
                 disabled={disabled}
-                title={closure?.public_label}
+                title={fullDayClosure?.public_label ?? (partialClosure
+                  ? `${partialClosure.public_label} ${closureTimeLabel(partialClosure)}`
+                  : undefined)}
                 onClick={() => onSelect(dStr)}
                 className={cn(
                   'relative aspect-square flex items-center justify-center rounded-xl text-sm font-medium transition-all',
-                  closure ? 'bg-rose-50 text-rose-300 cursor-not-allowed' :
+                  fullDayClosure ? 'bg-rose-50 text-rose-300 cursor-not-allowed' :
                   disabled  ? 'text-slate-200 cursor-not-allowed' :
                   isToday   ? 'bg-indigo-50 text-indigo-600 font-bold hover:bg-indigo-100' :
                               'text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 active:scale-95',
                 )}
               >
                 {i + 1}
-                {closure && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-rose-300" />}
+                {(fullDayClosure || partialClosure) && (
+                  <span className="absolute bottom-1 h-1 w-1 rounded-full bg-rose-300" />
+                )}
               </button>
             )
           })}
@@ -805,8 +816,8 @@ function Step3Date({ closures, onSelect, onBack }: {
                 && item.end_date >= format(new Date(view.y, view.m, 1), 'yyyy-MM-dd')
               ))
               .map(item => (
-                <span key={`${item.start_date}-${item.end_date}`} className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-600">
-                  {item.public_label} · {item.start_date === item.end_date ? item.start_date.slice(5) : `${item.start_date.slice(5)}–${item.end_date.slice(5)}`}
+                <span key={item.id} className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-600">
+                  {item.public_label} · {item.start_date === item.end_date ? item.start_date.slice(5) : `${item.start_date.slice(5)}–${item.end_date.slice(5)}`} · {closureTimeLabel(item)}
                 </span>
               ))}
           </div>
