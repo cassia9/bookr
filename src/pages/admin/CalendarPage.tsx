@@ -356,6 +356,41 @@ export default function CalendarPage({
     )) ?? null
   }
 
+  function zonedDateTimeParts(value: Date) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: storeTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(value)
+    const part = (type: Intl.DateTimeFormatPartTypes) => (
+      parts.find(item => item.type === type)?.value ?? ''
+    )
+    return {
+      date: `${part('year')}-${part('month')}-${part('day')}`,
+      time: `${part('hour')}:${part('minute')}`,
+    }
+  }
+
+  function closureDisplayLabel(closure: PublicStoreClosure) {
+    if (closure.all_day) return `${closure.public_label} · 整日`
+    const start = zonedDateTimeParts(new Date(closure.starts_at))
+    const end = zonedDateTimeParts(new Date(closure.ends_at))
+    const time = closure.start_date === closure.end_date
+      ? `${start.time}–${end.time}`
+      : `${closure.start_date.slice(5)} ${start.time}–${closure.end_date.slice(5)} ${end.time}`
+    return `${closure.public_label} · ${time}`
+  }
+
+  function closureOverlaps(start: Date, end: Date) {
+    return storeClosures.find(closure => (
+      new Date(closure.starts_at) < end && new Date(closure.ends_at) > start
+    )) ?? null
+  }
+
   function teacherNames(ids: string[]) {
     return ids
       .map(id => practitioners.find(practitioner => practitioner.id === id)?.full_name)
@@ -367,15 +402,27 @@ export default function CalendarPage({
     return `${names.slice(0, 2).join('、')} +${names.length - 2}`
   }
 
-  function leaveNamesOnDate(date: Date) {
+  function leaveLabelsOnDate(date: Date) {
     const dayStart = new Date(date)
     dayStart.setHours(0, 0, 0, 0)
     const dayEnd = new Date(dayStart)
     dayEnd.setDate(dayEnd.getDate() + 1)
-    const ids = practitionerBlocks
+    const dateKey = format(date, 'yyyy-MM-dd')
+    const labels = practitionerBlocks
       .filter(block => new Date(block.start_time) < dayEnd && new Date(block.end_time) > dayStart)
-      .map(block => block.practitioner_id)
-    return teacherNames([...new Set(ids)])
+      .map(block => {
+        const name = teacherNames([block.practitioner_id])[0]
+        if (!name) return null
+        const start = zonedDateTimeParts(new Date(block.start_time))
+        const end = zonedDateTimeParts(new Date(block.end_time))
+        const isAllDay = start.time === '00:00' && end.time === '00:00'
+        if (isAllDay) return `${name} · 整日`
+        const startTime = start.date < dateKey ? '00:00' : start.time
+        const endTime = end.date > dateKey ? '24:00' : end.time
+        return `${name} ${startTime}–${endTime}`
+      })
+      .filter((label): label is string => Boolean(label))
+    return [...new Set(labels)]
   }
 
   function zonedBookingParts(date: Date) {
@@ -399,7 +446,7 @@ export default function CalendarPage({
   function bookingConflictLabel(booking: Booking) {
     const start = new Date(booking.start_time)
     const end = new Date(booking.end_time)
-    if (closureOnDate(start)) return '店休衝突'
+    if (closureOverlaps(start, end)) return '店休衝突'
     if (practitionerBlocks.some(block => (
       block.practitioner_id === booking.practitioner_id
       && new Date(block.start_time) < end
@@ -944,7 +991,7 @@ export default function CalendarPage({
                     const desktopOverflowCount = activeBk.length > 3 ? activeBk.length - 3 : 0
                     const isPopoverOpen  = dayPopover?.date.toDateString() === date.toDateString()
                     const closure = closureOnDate(date)
-                    const leaveNames = closure ? [] : leaveNamesOnDate(date)
+                    const leaveLabels = leaveLabelsOnDate(date)
                     return (
                       <div
                         key={date.toISOString()}
@@ -959,7 +1006,8 @@ export default function CalendarPage({
                             ? 'bg-white border-slate-100 hover:border-slate-200'
                             : 'bg-slate-50/50 border-slate-50',
                           isToday(date) && 'border-indigo-200 bg-indigo-50/30',
-                          closure && 'border-rose-200 bg-rose-50/40',
+                          closure && 'border-rose-200',
+                          closure?.all_day && 'bg-rose-50/40',
                           isPopoverOpen && 'border-indigo-300 ring-2 ring-indigo-100',
                         )}
                       >
@@ -992,13 +1040,13 @@ export default function CalendarPage({
 
                         {closure && (
                           <div className="mb-1 truncate rounded-[2px] bg-rose-100 px-1 py-0.5 text-[9px] font-semibold text-rose-700 sm:rounded-md sm:px-1.5 sm:text-[10px]">
-                            店休 · {closure.public_label}
+                            {closureDisplayLabel(closure)}
                           </div>
                         )}
 
-                        {leaveNames.length > 0 && (
+                        {leaveLabels.length > 0 && (
                           <div className="mb-1 truncate rounded-[2px] bg-amber-50 px-1 py-0.5 text-[9px] font-semibold text-amber-700 sm:rounded-md sm:px-1.5 sm:text-[10px]">
-                            休假：{summarizeNames(leaveNames)}
+                            休假：{summarizeNames(leaveLabels)}
                           </div>
                         )}
                         {/* FR-A: 手機最多 2 筆、桌機最多 3 筆卡片 */}
@@ -1061,12 +1109,12 @@ export default function CalendarPage({
                   <div className="border-r border-slate-100" />
                   {datesForView.map(date => {
                     const closure = closureOnDate(date)
-                    const leaveNames = closure ? [] : leaveNamesOnDate(date)
+                    const leaveLabels = leaveLabelsOnDate(date)
                     return (
                       <div key={date.toISOString()} className={cn(
                         'text-center py-3 border-r border-slate-100',
                         isToday(date) && 'bg-indigo-50/40',
-                        closure && 'bg-rose-50/70',
+                        closure?.all_day && 'bg-rose-50/70',
                       )}>
                         <div className="text-xs text-slate-400">{format(date, 'EEE', { locale: zhTW })}</div>
                         <div className={cn(
@@ -1075,10 +1123,10 @@ export default function CalendarPage({
                         )}>
                           {date.getDate()}
                         </div>
-                        {closure && <p className="mt-1 truncate px-1 text-[9px] font-semibold text-rose-600">{closure.public_label}</p>}
-                        {leaveNames.length > 0 && (
+                        {closure && <p className="mt-1 truncate px-1 text-[9px] font-semibold text-rose-600">{closureDisplayLabel(closure)}</p>}
+                        {leaveLabels.length > 0 && (
                           <p className="mt-1 truncate px-1 text-[9px] font-semibold text-amber-600">
-                            休假：{summarizeNames(leaveNames)}
+                            休假：{summarizeNames(leaveLabels)}
                           </p>
                         )}
                       </div>
@@ -1171,12 +1219,12 @@ export default function CalendarPage({
                   </h3>
                   {closureOnDate(currentDate) && (
                     <p className="mt-1 inline-flex rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">
-                      店休 · {closureOnDate(currentDate)?.public_label}
+                      {closureDisplayLabel(closureOnDate(currentDate)!)}
                     </p>
                   )}
-                  {!closureOnDate(currentDate) && leaveNamesOnDate(currentDate).length > 0 && (
+                  {leaveLabelsOnDate(currentDate).length > 0 && (
                     <p className="ml-2 mt-1 inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                      休假：{summarizeNames(leaveNamesOnDate(currentDate))}
+                      休假：{summarizeNames(leaveLabelsOnDate(currentDate))}
                     </p>
                   )}
                 </div>
