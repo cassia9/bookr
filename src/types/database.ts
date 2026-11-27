@@ -171,6 +171,9 @@ export interface Database {
           store_id: string
           start_date: string
           end_date: string
+          starts_at: string
+          ends_at: string
+          all_day: boolean
           category: StoreClosureCategory
           public_label: string
           internal_note: string | null
@@ -573,11 +576,32 @@ export interface Database {
         Args: { p_practitioner_id: string; p_start_date: string; p_end_date: string }
         Returns: Json
       }
+      preview_practitioner_leave_window_conflicts: {
+        Args: {
+          p_practitioner_id: string
+          p_start_date: string
+          p_start_time: string
+          p_end_date: string
+          p_end_time: string
+        }
+        Returns: Json
+      }
       save_practitioner_leave: {
         Args: {
           p_practitioner_id: string
           p_start_date: string
           p_end_date: string
+          p_reason?: string | null
+        }
+        Returns: Json
+      }
+      save_practitioner_leave_window: {
+        Args: {
+          p_practitioner_id: string
+          p_start_date: string
+          p_start_time: string
+          p_end_date: string
+          p_end_time: string
           p_reason?: string | null
         }
         Returns: Json
@@ -611,6 +635,20 @@ export interface Database {
         }
         Returns: Json
       }
+      save_store_closure_window: {
+        Args: {
+          p_closure_id: string | null
+          p_start_date: string
+          p_start_time: string
+          p_end_date: string
+          p_end_time: string
+          p_all_day: boolean
+          p_category: StoreClosureCategory
+          p_public_label?: string
+          p_internal_note?: string | null
+        }
+        Returns: Json
+      }
       archive_store_closure: {
         Args: { p_closure_id: string }
         Returns: Json
@@ -620,6 +658,18 @@ export interface Database {
         Returns: Array<{
           start_date: string
           end_date: string
+          public_label: string
+        }>
+      }
+      get_public_store_closure_windows: {
+        Args: { p_store_id: string; p_start_date: string; p_end_date: string }
+        Returns: Array<{
+          id: string
+          start_date: string
+          end_date: string
+          starts_at: string
+          ends_at: string
+          all_day: boolean
           public_label: string
         }>
       }
