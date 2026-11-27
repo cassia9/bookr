@@ -16,6 +16,8 @@ import Modal from '@/components/ui/Modal'
 import Select from '@/components/ui/Select'
 import Spinner from '@/components/ui/Spinner'
 import Textarea from '@/components/ui/Textarea'
+import TimePicker from '@/components/ui/TimePicker'
+import Toggle from '@/components/ui/Toggle'
 import { toast } from '@/components/ui/Snackbar'
 
 const categoryOptions: Array<{ value: StoreClosureCategory; label: string }> = [
@@ -32,7 +34,10 @@ const categoryLabel = Object.fromEntries(
 
 interface ClosureForm {
   startDate: string
+  startTime: string
   endDate: string
+  endTime: string
+  allDay: boolean
   category: StoreClosureCategory
   publicLabel: string
   internalNote: string
@@ -41,26 +46,47 @@ interface ClosureForm {
 interface ConflictBooking {
   id: string
   start_time: string
-  clients: { full_name: string } | null
-  practitioners: { full_name: string } | null
-  services: { name: string } | null
+  client_name: string
+  practitioner_name: string
+  service_name: string
+}
+
+interface ConflictPreviewResult {
+  ok?: boolean
+  error?: string
+  conflicts?: ConflictBooking[]
 }
 
 function blankForm(): ClosureForm {
   const date = new Date().toLocaleDateString('en-CA')
   return {
     startDate: date,
+    startTime: '09:00',
     endDate: date,
+    endTime: '18:00',
+    allDay: true,
     category: 'other',
     publicLabel: '店休',
     internalNote: '',
   }
 }
 
-function formFromClosure(closure: StoreClosure): ClosureForm {
+function timeInZone(value: string, timezone: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(value))
+}
+
+function formFromClosure(closure: StoreClosure, timezone: string): ClosureForm {
   return {
     startDate: closure.start_date,
+    startTime: closure.all_day ? '09:00' : timeInZone(closure.starts_at, timezone),
     endDate: closure.end_date,
+    endTime: closure.all_day ? '18:00' : timeInZone(closure.ends_at, timezone),
+    allDay: closure.all_day,
     category: closure.category,
     publicLabel: closure.public_label,
     internalNote: closure.internal_note ?? '',
@@ -75,9 +101,17 @@ function formatDate(date: string) {
   }).format(new Date(`${date}T12:00:00`))
 }
 
-function dateRangeLabel(closure: StoreClosure) {
-  if (closure.start_date === closure.end_date) return formatDate(closure.start_date)
-  return `${formatDate(closure.start_date)} — ${formatDate(closure.end_date)}`
+function dateRangeLabel(closure: StoreClosure, timezone: string) {
+  if (closure.all_day) {
+    if (closure.start_date === closure.end_date) return `${formatDate(closure.start_date)} · 整日`
+    return `${formatDate(closure.start_date)} — ${formatDate(closure.end_date)} · 整日`
+  }
+  const startTime = timeInZone(closure.starts_at, timezone)
+  const endTime = timeInZone(closure.ends_at, timezone)
+  if (closure.start_date === closure.end_date) {
+    return `${formatDate(closure.start_date)} · ${startTime}–${endTime}`
+  }
+  return `${formatDate(closure.start_date)} ${startTime} — ${formatDate(closure.end_date)} ${endTime}`
 }
 
 function operationError(error: unknown) {
@@ -87,6 +121,8 @@ function operationError(error: unknown) {
     INVALID_INPUT: '請確認日期、公開文字與備註格式',
     CLOSURE_NOT_FOUND: '找不到這筆店休，請重新整理',
     OVERLAPPING_CLOSURE: '這段日期已包含在另一筆店休中，請改用編輯原有店休',
+    INVALID_TIME_RANGE: '結束時間必須晚於開始時間',
+    STORE_NOT_FOUND: '找不到店家時區設定，請重新整理後再試',
   }
   return messages[raw] ?? raw
 }
@@ -105,6 +141,7 @@ export default function StoreClosuresSection() {
   const [conflicts, setConflicts] = useState<ConflictBooking[]>([])
   const [conflictConfirmOpen, setConflictConfirmOpen] = useState(false)
   const [checkingConflicts, setCheckingConflicts] = useState(false)
+  const [storeTimezone, setStoreTimezone] = useState('Asia/Taipei')
 
   const load = useCallback(async () => {
     try {
@@ -131,14 +168,29 @@ export default function StoreClosuresSection() {
     return () => { active = false }
   }, [])
 
+  useEffect(() => {
+    let active = true
+    void supabase
+      .from('stores')
+      .select('timezone')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (active && data?.timezone) setStoreTimezone(data.timezone)
+      })
+    return () => { active = false }
+  }, [])
+
   const upcomingClosures = useMemo(() => {
     const today = new Date().toLocaleDateString('en-CA')
-    return closures.filter(closure => closure.end_date >= today)
+    return closures.filter(closure => (
+      closure.end_date > today
+      || (closure.end_date === today && new Date(closure.ends_at) > new Date())
+    ))
   }, [closures])
 
   function openForm(closure: StoreClosure | null) {
     setEditing(closure)
-    setForm(closure ? formFromClosure(closure) : blankForm())
+    setForm(closure ? formFromClosure(closure, storeTimezone) : blankForm())
     setErrors({})
     setModalOpen(true)
   }
@@ -149,6 +201,12 @@ export default function StoreClosuresSection() {
     if (!form.endDate) next.endDate = '請選擇結束日期'
     if (form.startDate && form.endDate && form.endDate < form.startDate) {
       next.endDate = '結束日期不可早於開始日期'
+    }
+    if (!form.allDay && (!form.startTime || !form.endTime)) {
+      next.time = '請選擇完整的開始與結束時間'
+    } else if (!form.allDay
+      && `${form.endDate}T${form.endTime}` <= `${form.startDate}T${form.startTime}`) {
+      next.time = '結束時間必須晚於開始時間'
     }
     if (!form.publicLabel.trim()) next.publicLabel = '請填寫客戶看到的文字'
     if (form.publicLabel.trim().length > 100) next.publicLabel = '公開文字最多 100 字'
@@ -163,7 +221,10 @@ export default function StoreClosuresSection() {
       const result = await saveStoreClosure({
         id: editing?.id,
         startDate: form.startDate,
+        startTime: form.startTime,
         endDate: form.endDate,
+        endTime: form.endTime,
+        allDay: form.allDay,
         category: form.category,
         publicLabel: form.publicLabel,
         internalNote: form.internalNote,
@@ -173,7 +234,7 @@ export default function StoreClosuresSection() {
         editing ? '店休已更新' : '店休已新增',
         conflictCount
           ? `這段期間已有 ${conflictCount} 筆預約，請到預約管理逐筆確認。`
-          : '客戶端將停止開放這段日期的預約。',
+          : '客戶端將停止開放這段時段的預約。',
       )
       setModalOpen(false)
       await load()
@@ -188,25 +249,18 @@ export default function StoreClosuresSection() {
     if (!validate()) return
     setCheckingConflicts(true)
     try {
-      const rangeStart = new Date(`${form.startDate}T00:00:00`).toISOString()
-      const rangeEndExclusive = new Date(`${form.endDate}T00:00:00`)
-      rangeEndExclusive.setDate(rangeEndExclusive.getDate() + 1)
-
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
-          id, start_time,
-          clients (full_name),
-          practitioners (full_name),
-          services (name)
-        `)
-        .neq('status', 'cancelled')
-        .lt('start_time', rangeEndExclusive.toISOString())
-        .gt('end_time', rangeStart)
-        .order('start_time')
+      const { data, error } = await supabase.rpc('preview_store_closure_window_conflicts', {
+        p_start_date: form.startDate,
+        p_start_time: form.startTime,
+        p_end_date: form.endDate,
+        p_end_time: form.endTime,
+        p_all_day: form.allDay,
+      })
 
       if (error) throw error
-      const found = (data ?? []) as unknown as ConflictBooking[]
+      const result = data as ConflictPreviewResult
+      if (!result.ok) throw new Error(result.error ?? '操作失敗')
+      const found = result.conflicts ?? []
       if (found.length > 0) {
         setConflicts(found)
         setConflictConfirmOpen(true)
@@ -264,7 +318,7 @@ export default function StoreClosuresSection() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-mono text-sm font-semibold text-slate-900">{dateRangeLabel(closure)}</p>
+                    <p className="font-mono text-sm font-semibold text-slate-900">{dateRangeLabel(closure, storeTimezone)}</p>
                     <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-600">
                       {categoryLabel[closure.category]}
                     </span>
@@ -331,6 +385,48 @@ export default function StoreClosuresSection() {
             </FormField>
           </div>
 
+          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">整日店休</p>
+              <p className="mt-0.5 text-xs text-slate-400">關閉所選日期的全部預約時段</p>
+            </div>
+            <Toggle
+              checked={form.allDay}
+              ariaLabel="整日店休"
+              onChange={allDay => setForm(current => ({ ...current, allDay }))}
+            />
+          </div>
+
+          {!form.allDay && (
+            <div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="開始時間" required error={errors.time}>
+                  <TimePicker
+                    value={form.startTime}
+                    startHour={0}
+                    endHour={23}
+                    minuteStep={15}
+                    error={Boolean(errors.time)}
+                    onChange={startTime => setForm(current => ({ ...current, startTime }))}
+                  />
+                </FormField>
+                <FormField label="結束時間" required>
+                  <TimePicker
+                    value={form.endTime}
+                    startHour={0}
+                    endHour={23}
+                    minuteStep={15}
+                    error={Boolean(errors.time)}
+                    onChange={endTime => setForm(current => ({ ...current, endTime }))}
+                  />
+                </FormField>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-400">
+                跨日店休會從開始日期與時間，連續關閉到結束日期與時間。
+              </p>
+            </div>
+          )}
+
           <FormField label="原因分類" required>
             <Select
               value={form.category}
@@ -361,7 +457,7 @@ export default function StoreClosuresSection() {
           </FormField>
 
           <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-700">
-            儲存後會立即停止客戶在這段日期送出預約；若日期內已有預約，系統會提示筆數但不會自動取消。
+            儲存後會立即停止客戶在重疊時段送出預約；若時段內已有預約，系統會提示筆數但不會自動取消。
           </div>
         </div>
       </Modal>
@@ -394,7 +490,7 @@ export default function StoreClosuresSection() {
             {conflicts.map(booking => (
               <div key={booking.id} className="rounded-2xl border border-slate-200 px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-slate-800">{booking.clients?.full_name ?? '未知客戶'}</p>
+                  <p className="text-sm font-semibold text-slate-800">{booking.client_name || '未知客戶'}</p>
                   <p className="shrink-0 font-mono text-xs text-slate-500">
                     {new Intl.DateTimeFormat('zh-TW', {
                       month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
@@ -402,7 +498,7 @@ export default function StoreClosuresSection() {
                   </p>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">
-                  {booking.services?.name ?? '未知課程'} · {booking.practitioners?.full_name ?? '未指定人員'}
+                  {booking.service_name || '未知課程'} · {booking.practitioner_name || '未指定人員'}
                 </p>
               </div>
             ))}
