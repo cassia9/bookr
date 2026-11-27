@@ -4,15 +4,22 @@ import type { Json, StoreClosure, StoreClosureCategory } from '../types/database
 export interface SaveStoreClosureInput {
   id?: string
   startDate: string
+  startTime: string
   endDate: string
+  endTime: string
+  allDay: boolean
   category: StoreClosureCategory
   publicLabel: string
   internalNote?: string
 }
 
 export interface PublicStoreClosure {
+  id: string
   start_date: string
   end_date: string
+  starts_at: string
+  ends_at: string
+  all_day: boolean
   public_label: string
 }
 
@@ -48,10 +55,13 @@ export async function getStoreClosures(): Promise<StoreClosure[]> {
 }
 
 export async function saveStoreClosure(input: SaveStoreClosureInput): Promise<ClosureRpcResult> {
-  const { data, error } = await supabase.rpc('save_store_closure', {
+  const { data, error } = await supabase.rpc('save_store_closure_window', {
     p_closure_id: input.id ?? null,
     p_start_date: input.startDate,
+    p_start_time: input.startTime,
     p_end_date: input.endDate,
+    p_end_time: input.endTime,
+    p_all_day: input.allDay,
     p_category: input.category,
     p_public_label: input.publicLabel.trim(),
     p_internal_note: input.internalNote?.trim() || null,
@@ -75,7 +85,7 @@ export async function getPublicStoreClosures(
   startDate: string,
   endDate: string,
 ): Promise<PublicStoreClosure[]> {
-  const { data, error } = await supabase.rpc('get_public_store_closures', {
+  const { data, error } = await supabase.rpc('get_public_store_closure_windows', {
     p_store_id: storeId,
     p_start_date: startDate,
     p_end_date: endDate,

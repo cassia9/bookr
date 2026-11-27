@@ -210,6 +210,31 @@ export default function NewBookingModal({
     )
     : ''
   const closureRangeEnd = repeatLastDate ? repeatLastDate.replaceAll('/', '-') : form.date
+  const overlappingStoreClosures = useMemo(() => {
+    if (!form.date || !form.time || !selectedService) return []
+    const firstStart = new Date(`${form.date}T${form.time}`)
+    const occurrenceCount = repeatEnabled && mode === 'create' ? effectiveRepeatCount : 1
+    if (Number.isNaN(firstStart.getTime()) || occurrenceCount < 1) return []
+
+    return storeClosures.filter(closure => {
+      const closureStart = new Date(closure.starts_at)
+      const closureEnd = new Date(closure.ends_at)
+      return Array.from({ length: occurrenceCount }, (_, index) => {
+        const start = addWeeks(firstStart, repeatIntervalWeeks * index)
+        const end = new Date(start.getTime() + selectedService.duration_minutes * 60_000)
+        return closureStart < end && closureEnd > start
+      }).some(Boolean)
+    })
+  }, [
+    effectiveRepeatCount,
+    form.date,
+    form.time,
+    mode,
+    repeatEnabled,
+    repeatIntervalWeeks,
+    selectedService,
+    storeClosures,
+  ])
 
   useEffect(() => {
     let active = true
@@ -456,7 +481,7 @@ export default function NewBookingModal({
 
   function handleSave() {
     if (!validate()) { toast.warning('請填寫必要欄位'); return }
-    if (storeClosures.length > 0) {
+    if (overlappingStoreClosures.length > 0) {
       setOverrideContext('store_closure')
       setOverrideReasonError('')
       return
@@ -561,16 +586,16 @@ export default function NewBookingModal({
           </div>
         </div>
 
-        {storeClosures.length > 0 && (
+        {overlappingStoreClosures.length > 0 && (
           <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
             <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600" />
             <div>
               <p className="text-sm font-semibold">店休期間的特殊預約</p>
               <p className="mt-0.5 text-xs leading-5 text-amber-700">
-                {storeClosures.map(closure => (
-                  `${closure.public_label}（${closure.start_date}${closure.end_date === closure.start_date ? '' : `–${closure.end_date}`}）`
+                {overlappingStoreClosures.map(closure => (
+                  `${closure.public_label}（${closure.start_date}${closure.end_date === closure.start_date ? '' : `–${closure.end_date}`} · ${closure.all_day ? '整日' : `${format(new Date(closure.starts_at), 'HH:mm')}–${format(new Date(closure.ends_at), 'HH:mm')}`}）`
                 )).join('、')}
-                。客戶端不開放這些日期，但管理員仍可替熟客建立；送出後會留下稽核紀錄。
+                。管理員仍可建立特殊預約；送出後會留下稽核紀錄。
               </p>
             </div>
           </div>

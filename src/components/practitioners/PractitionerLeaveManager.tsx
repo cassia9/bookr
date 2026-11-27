@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { CalendarDays, CalendarOff, Clock3, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Modal from '@/components/ui/Modal'
@@ -45,6 +46,32 @@ interface Props {
   practitionerId: string
   practitionerName: string
   onClose: () => void
+  embedded?: boolean
+}
+
+interface ManagerShellProps {
+  embedded: boolean
+  onClose: () => void
+  title: string
+  footer?: ReactNode
+  children: ReactNode
+}
+
+function ManagerShell({ embedded, onClose, title, footer, children }: ManagerShellProps) {
+  if (embedded) {
+    return (
+      <div className="space-y-5">
+        {children}
+        {footer && <div className="border-t border-slate-100 pt-4">{footer}</div>}
+      </div>
+    )
+  }
+
+  return (
+    <Modal open onClose={onClose} title={title} size="lg" footer={footer}>
+      {children}
+    </Modal>
+  )
 }
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
@@ -64,6 +91,7 @@ function rpcErrorMessage(code?: string) {
     INVALID_SCHEDULE: '請至少保留一個上班日，並確認每個時段',
     PRACTITIONER_NOT_FOUND: '找不到這位老師，請重新整理後再試',
     OVERLAPPING_LEAVE: '這段日期已經有休假紀錄',
+    INVALID_TIME_RANGE: '結束時間必須晚於開始時間',
   }
   return messages[code ?? ''] ?? '操作未完成，請稍後再試'
 }
@@ -73,6 +101,7 @@ export default function PractitionerLeaveManager({
   practitionerId,
   practitionerName,
   onClose,
+  embedded = false,
 }: Props) {
   const [tab, setTab] = useState<'schedule' | 'leave'>('schedule')
   const [resolvedName, setResolvedName] = useState(practitionerName)
@@ -89,7 +118,13 @@ export default function PractitionerLeaveManager({
   const [leaveError, setLeaveError] = useState<string | null>(null)
   const [leaveConflicts, setLeaveConflicts] = useState<BookingConflict[]>([])
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [form, setForm] = useState({ start_date: today, end_date: today, reason: '' })
+  const [form, setForm] = useState({
+    start_date: today,
+    start_time: '09:00',
+    end_date: today,
+    end_time: '18:00',
+    reason: '',
+  })
 
   const workingCount = useMemo(
     () => schedule.filter(day => day.is_working).length,
@@ -251,12 +286,12 @@ export default function PractitionerLeaveManager({
 
   function validateLeave() {
     setLeaveError(null)
-    if (!form.start_date || !form.end_date) {
-      setLeaveError('請選擇完整的休假日期')
+    if (!form.start_date || !form.start_time || !form.end_date || !form.end_time) {
+      setLeaveError('請選擇完整的休假日期與時間')
       return false
     }
-    if (form.end_date < form.start_date) {
-      setLeaveError('結束日期不能早於開始日期')
+    if (`${form.end_date}T${form.end_time}` <= `${form.start_date}T${form.start_time}`) {
+      setLeaveError('結束時間必須晚於開始時間')
       return false
     }
     if (form.reason.trim().length > 500) {
@@ -269,10 +304,12 @@ export default function PractitionerLeaveManager({
   async function requestLeaveSave() {
     if (!validateLeave()) return
     setLeaveSaving(true)
-    const { data, error } = await supabase.rpc('preview_practitioner_leave_conflicts', {
+    const { data, error } = await supabase.rpc('preview_practitioner_leave_window_conflicts', {
       p_practitioner_id: practitionerId,
       p_start_date: form.start_date,
+      p_start_time: form.start_time,
       p_end_date: form.end_date,
+      p_end_time: form.end_time,
     })
     setLeaveSaving(false)
 
@@ -294,10 +331,12 @@ export default function PractitionerLeaveManager({
 
   async function persistLeave() {
     setLeaveSaving(true)
-    const { data, error } = await supabase.rpc('save_practitioner_leave', {
+    const { data, error } = await supabase.rpc('save_practitioner_leave_window', {
       p_practitioner_id: practitionerId,
       p_start_date: form.start_date,
+      p_start_time: form.start_time,
       p_end_date: form.end_date,
+      p_end_time: form.end_time,
       p_reason: form.reason.trim() || null,
     })
     setLeaveSaving(false)
@@ -313,7 +352,13 @@ export default function PractitionerLeaveManager({
       return
     }
     toast.success('休假已新增', '期間內將不再提供這位老師的預約時段')
-    setForm({ start_date: today, end_date: today, reason: '' })
+    setForm({
+      start_date: today,
+      start_time: '09:00',
+      end_date: today,
+      end_time: '18:00',
+      reason: '',
+    })
     await loadBlocks()
   }
 
@@ -345,10 +390,26 @@ export default function PractitionerLeaveManager({
 
   function formatRange(start: string, end: string) {
     const startDate = new Date(start)
-    const inclusiveEnd = new Date(new Date(end).getTime() - 1)
+    const endDate = new Date(end)
+    const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Taipei',
+    })
+    const startTime = timeFormatter.format(startDate)
+    const endTime = timeFormatter.format(endDate)
+    const isLegacyAllDay = startTime === '00:00' && endTime === '00:00'
+
+    if (isLegacyAllDay) {
+      const inclusiveEnd = new Date(endDate.getTime() - 1)
+      const first = formatDate(startDate)
+      const last = formatDate(inclusiveEnd)
+      return `${first === last ? first : `${first} 至 ${last}`} · 整日`
+    }
+
     const first = formatDate(startDate)
-    const last = formatDate(inclusiveEnd)
-    return first === last ? first : `${first} 至 ${last}`
+    const last = formatDate(endDate)
+    return first === last
+      ? `${first} · ${startTime}–${endTime}`
+      : `${first} ${startTime} 至 ${last} ${endTime}`
   }
 
   function conflictDescription(conflicts: BookingConflict[]) {
@@ -365,11 +426,10 @@ export default function PractitionerLeaveManager({
 
   return (
     <>
-      <Modal
-        open
+      <ManagerShell
+        embedded={embedded}
         onClose={onClose}
         title={`排班與休假${resolvedName ? ` · ${resolvedName}` : ''}`}
-        size="lg"
         footer={tab === 'schedule' ? (
           <Button className="w-full" loading={scheduleSaving} onClick={requestScheduleSave}>
             儲存固定班表
@@ -482,29 +542,56 @@ export default function PractitionerLeaveManager({
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">新增整日休假</p>
-                    <p className="text-xs text-slate-400 mt-0.5">儲存前會先檢查受影響的既有預約</p>
+                    <p className="text-sm font-semibold text-slate-800">新增臨時休假</p>
+                    <p className="text-xs text-slate-400 mt-0.5">可精確到時段；儲存前會先檢查受影響的既有預約</p>
                   </div>
                   <CalendarOff size={18} className="text-amber-500" />
                 </div>
                 {leaveError && (
                   <Alert variant="error" onClose={() => setLeaveError(null)}>{leaveError}</Alert>
                 )}
-                <div className="grid grid-cols-2 gap-2">
-                  <FormField label="開始日期" required>
-                    <Input
-                      type="date"
-                      value={form.start_date}
-                      onChange={event => setForm(value => ({ ...value, start_date: event.target.value }))}
-                    />
-                  </FormField>
-                  <FormField label="結束日期" required>
-                    <Input
-                      type="date"
-                      value={form.end_date}
-                      onChange={event => setForm(value => ({ ...value, end_date: event.target.value }))}
-                    />
-                  </FormField>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <FormField label="開始日期" required>
+                      <Input
+                        type="date"
+                        value={form.start_date}
+                        onChange={event => setForm(value => ({
+                          ...value,
+                          start_date: event.target.value,
+                          end_date: value.end_date < event.target.value ? event.target.value : value.end_date,
+                        }))}
+                      />
+                    </FormField>
+                    <FormField label="開始時間" required>
+                      <TimePicker
+                        value={form.start_time}
+                        startHour={0}
+                        endHour={23}
+                        minuteStep={15}
+                        onChange={start_time => setForm(value => ({ ...value, start_time }))}
+                      />
+                    </FormField>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FormField label="結束日期" required>
+                      <Input
+                        type="date"
+                        min={form.start_date}
+                        value={form.end_date}
+                        onChange={event => setForm(value => ({ ...value, end_date: event.target.value }))}
+                      />
+                    </FormField>
+                    <FormField label="結束時間" required>
+                      <TimePicker
+                        value={form.end_time}
+                        startHour={0}
+                        endHour={23}
+                        minuteStep={15}
+                        onChange={end_time => setForm(value => ({ ...value, end_time }))}
+                      />
+                    </FormField>
+                  </div>
                 </div>
                 <FormField label="原因" hint="選填，最多 500 字">
                   <Input
@@ -552,7 +639,7 @@ export default function PractitionerLeaveManager({
             </div>
           )}
         </div>
-      </Modal>
+      </ManagerShell>
 
       <ConfirmModal
         open={scheduleConflicts.length > 0}

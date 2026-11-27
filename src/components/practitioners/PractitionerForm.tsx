@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Check } from 'lucide-react'
+import { CalendarRange, Check, UserRound } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { callPractitionersAPI } from '@/lib/practitioner-api'
 import Modal from '@/components/ui/Modal'
@@ -9,6 +9,7 @@ import Textarea from '@/components/ui/Textarea'
 import FormField from '@/components/ui/FormField'
 import Alert from '@/components/ui/Alert'
 import Spinner from '@/components/ui/Spinner'
+import PractitionerLeaveManager from '@/components/practitioners/PractitionerLeaveManager'
 
 interface Service {
   id: string
@@ -18,6 +19,7 @@ interface Service {
 }
 
 interface PractitionerFormProps {
+  storeId: string
   practitionerId?: string
   onSuccess: () => void
   onCancel: () => void
@@ -34,7 +36,8 @@ const PRACTITIONER_COLORS = [
   { name: '靛色', hex: '#6366F1' },
 ]
 
-export default function PractitionerForm({ practitionerId, onSuccess, onCancel }: PractitionerFormProps) {
+export default function PractitionerForm({ storeId, practitionerId, onSuccess, onCancel }: PractitionerFormProps) {
+  const [section, setSection] = useState<'profile' | 'availability'>('profile')
   const [form, setForm] = useState({
     name: '',
     color_hex: '#9333EA',
@@ -138,9 +141,9 @@ export default function PractitionerForm({ practitionerId, onSuccess, onCancel }
     <Modal
       open
       onClose={onCancel}
-      title={isEdit ? '編輯老師' : '新增老師'}
-      size="md"
-      footer={
+      title={isEdit ? `管理老師${form.name ? ` · ${form.name}` : ''}` : '新增老師'}
+      size={isEdit ? 'lg' : 'md'}
+      footer={section === 'profile' ? (
         <div className="flex gap-2">
           <Button variant="secondary" className="flex-1" onClick={onCancel} disabled={loading}>
             取消
@@ -150,9 +153,31 @@ export default function PractitionerForm({ practitionerId, onSuccess, onCancel }
             {isEdit ? '更新老師' : '新增老師'}
           </Button>
         </div>
-      }
+      ) : undefined}
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      {isEdit && (
+        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 mb-5" aria-label="老師設定分類">
+          <Button
+            type="button"
+            variant={section === 'profile' ? 'primary' : 'ghost'}
+            className="shadow-none"
+            onClick={() => setSection('profile')}
+          >
+            <UserRound size={15} /> 基本資料
+          </Button>
+          <Button
+            type="button"
+            variant={section === 'availability' ? 'primary' : 'ghost'}
+            className="shadow-none"
+            onClick={() => setSection('availability')}
+          >
+            <CalendarRange size={15} /> 排班與休假
+          </Button>
+        </div>
+      )}
+
+      {section === 'profile' ? (
+        <form onSubmit={handleSubmit} className="space-y-5">
         {error && <Alert variant="error" onClose={() => setError(null)}>{error}</Alert>}
 
         {/* 名字 */}
@@ -242,7 +267,16 @@ export default function PractitionerForm({ practitionerId, onSuccess, onCancel }
             disabled={loading}
           />
         </FormField>
-      </form>
+        </form>
+      ) : practitionerId ? (
+        <PractitionerLeaveManager
+          embedded
+          storeId={storeId}
+          practitionerId={practitionerId}
+          practitionerName={form.name}
+          onClose={onCancel}
+        />
+      ) : null}
     </Modal>
   )
 }

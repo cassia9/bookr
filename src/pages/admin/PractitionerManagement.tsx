@@ -3,7 +3,6 @@ import { Plus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PractitionerTable from '@/components/practitioners/PractitionerTable'
 import PractitionerForm from '@/components/practitioners/PractitionerForm'
-import PractitionerLeaveManager from '@/components/practitioners/PractitionerLeaveManager'
 import PractitionerDrawer from '@/components/PractitionerDrawer'
 import StatsCard from '@/components/ui/StatsCard'
 import Button from '@/components/ui/Button'
@@ -27,8 +26,6 @@ export default function PractitionerManagement() {
   const storeId = profile?.store_id ?? ''
   const [showForm, setShowForm] = useState(false)
   const [editingPractitionerId, setEditingPractitionerId] = useState<string | null>(null)
-  const [showScheduleManager, setShowScheduleManager] = useState(false)
-  const [scheduleManagerPractitionerId, setScheduleManagerPractitionerId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [tableRefreshKey, setTableRefreshKey] = useState(0)
@@ -94,16 +91,18 @@ export default function PractitionerManagement() {
     setShowForm(true)
   }
 
-  const handleManageLeaves = (id: string) => {
-    setScheduleManagerPractitionerId(id)
-    setShowScheduleManager(true)
-  }
-
   const handleFormSuccess = () => {
     setShowForm(false)
     setEditingPractitionerId(null)
     setTableRefreshKey((current) => current + 1)
     loadStats() // 重新載入統計
+  }
+
+  const handleFormClose = () => {
+    setShowForm(false)
+    setEditingPractitionerId(null)
+    setTableRefreshKey((current) => current + 1)
+    void loadStats()
   }
 
   return (
@@ -199,7 +198,6 @@ export default function PractitionerManagement() {
             searchTerm={searchTerm}
             filterStatus={filterStatus}
             onEdit={handleEditPractitioner}
-            onManageLeaves={handleManageLeaves}
             onViewDetails={(practitioner) => {
               setSelectedPractitioner({
                 id: practitioner.id,
@@ -216,26 +214,10 @@ export default function PractitionerManagement() {
       {/* 新增/編輯表單 */}
       {showForm && (
         <PractitionerForm
+          storeId={storeId}
           practitionerId={editingPractitionerId || undefined}
           onSuccess={handleFormSuccess}
-          onCancel={() => {
-            setShowForm(false)
-            setEditingPractitionerId(null)
-          }}
-        />
-      )}
-
-      {/* 固定班表與休假管理 */}
-      {showScheduleManager && scheduleManagerPractitionerId && (
-        <PractitionerLeaveManager
-          storeId={storeId}
-          practitionerId={scheduleManagerPractitionerId}
-          practitionerName="" // 由組件內部載入
-          onClose={() => {
-            setShowScheduleManager(false)
-            setScheduleManagerPractitionerId(null)
-            void loadStats()
-          }}
+          onCancel={handleFormClose}
         />
       )}
 

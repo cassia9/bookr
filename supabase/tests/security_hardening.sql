@@ -32,8 +32,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('anon', p.oid, 'EXECUTE')
   ),
-  7::BIGINT,
-  'anon 只有七支公開 RPC'
+  8::BIGINT,
+  'anon 只有八支公開 RPC'
 );
 
 SELECT extensions.ok(
@@ -48,6 +48,7 @@ SELECT extensions.ok(
         'get_store_by_slug',
         'get_public_booking_catalog',
         'get_public_store_closures',
+        'get_public_store_closure_windows',
         'get_available_slots',
         'create_booking_public',
         'validate_invitation_token'
@@ -64,8 +65,8 @@ SELECT extensions.is(
     WHERE n.nspname = 'public'
       AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
   ),
-  44::BIGINT,
-  'authenticated 只有四十四支必要 RPC／輔助函式'
+  49::BIGINT,
+  'authenticated 只有四十九支必要 RPC／輔助函式'
 );
 
 SELECT extensions.ok(
@@ -80,6 +81,7 @@ SELECT extensions.ok(
         'get_store_by_slug',
         'get_public_booking_catalog',
         'get_public_store_closures',
+        'get_public_store_closure_windows',
         'get_available_slots',
         'create_booking_public',
         'validate_invitation_token',
@@ -95,6 +97,8 @@ SELECT extensions.ok(
         'get_service_stats',
         'get_daily_stats',
         'save_store_closure',
+        'save_store_closure_window',
+        'preview_store_closure_window_conflicts',
         'archive_store_closure',
         'manage_store_line_connection',
         'get_store_line_messaging_status',
@@ -116,8 +120,10 @@ SELECT extensions.ok(
         'preview_practitioner_schedule_conflicts',
         'save_practitioner_weekly_schedule',
         'save_practitioner_leave',
+        'save_practitioner_leave_window',
         'delete_practitioner_leave',
         'preview_practitioner_leave_conflicts',
+        'preview_practitioner_leave_window_conflicts',
         'upsert_booking_with_voucher_admin_override',
         'create_recurring_bookings_with_voucher_admin_override'
       ])
